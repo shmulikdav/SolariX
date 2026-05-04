@@ -1,3 +1,6 @@
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { dirname, extname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { HookEvent } from '@solix/shared';
@@ -16,6 +19,7 @@ import {
   readAdvisorAgentMd,
   setAdvisorEnabled,
 } from './state/advisors.js';
+import { buildContextEnvelope } from './state/context.js';
 import {
   getSkill,
   listSkills,
@@ -95,6 +99,18 @@ export function createHttpApp(opts: {
     return c.json({ ok: Boolean(s) });
   });
 
+  app.post('/api/sessions/:id/context', async (c) => {
+    const id = c.req.param('id');
+    const body = (await c.req.json().catch(() => ({}))) as {
+      pct?: number;
+    };
+    if (typeof body.pct !== 'number') {
+      return c.json({ error: 'pct (number) required' }, 400);
+    }
+    opts.router.setContextUsage(id, body.pct);
+    return c.json({ ok: true });
+  });
+
   app.get('/api/missions', (c) => {
     const sessionId = c.req.query('sessionId');
     const projectId = c.req.query('projectId');
@@ -137,17 +153,37 @@ export function createHttpApp(opts: {
     return c.json({ ok });
   });
 
+  app.get('/api/advisors/:id/preview', (c) => {
+    const id = c.req.param('id');
+    const targetSessionId = c.req.query('targetSessionId') ?? undefined;
+    const prompt = c.req.query('prompt') ?? undefined;
+    const env = buildContextEnvelope(opts.db, {
+      advisorId: id,
+      targetSessionId,
+      userPrompt: prompt,
+    });
+    if (!env) return c.json({ error: 'advisor not found' }, 404);
+    return c.json({
+      advisorId: env.advisorId,
+      role: env.advisorRole,
+      prompt: env.prompt,
+      recentMissionsCount: env.recentMissions.length,
+      targetSessionId: env.targetSession?.id ?? null,
+      contextUsagePct: env.targetSession?.contextUsagePct ?? null,
+    });
+  });
+
   app.post('/api/advisors/:id/invoke', async (c) => {
     const body = (await c.req.json().catch(() => ({}))) as {
       targetSessionId?: string;
       prompt?: string;
     };
-    const ok = opts.router.invokeAdvisor(
+    const result = opts.router.invokeAdvisor(
       c.req.param('id'),
       body.targetSessionId,
       body.prompt,
     );
-    return c.json({ ok });
+    return c.json(result);
   });
 
   app.get('/api/skills', (c) => c.json(listSkills(opts.db)));
@@ -227,6 +263,39 @@ export function createHttpApp(opts: {
 
   app.get('/api/galaxy/imports', (c) => c.json(listImportHistory(opts.db)));
 
+  // Serve the built web bundle as static when present so `solix start` is one
+  // process that gives you the API + WS + UI on a single URL.
+  const webDist = findWebDist();
+  if (webDist) {
+    app.get('*', (c) => {
+      const url = new URL(c.req.url);
+      // Skip API routes — they're handled above; this is the SPA catch-all.
+      if (
+        url.pathname.startsWith('/api/') ||
+        url.pathname.startsWith('/events') ||
+        url.pathname.startsWith('/ws')
+      ) {
+        return c.notFound();
+      }
+
+      const safe = url.pathname.replace(/\.\.+/g, '.');
+      const candidate = join(webDist, safe === '/' ? 'index.html' : safe);
+      let filePath = candidate;
+      try {
+        if (!existsSync(filePath) || statSync(filePath).isDirectory()) {
+          filePath = join(webDist, 'index.html');
+        }
+      } catch {
+        filePath = join(webDist, 'index.html');
+      }
+      if (!existsSync(filePath)) return c.notFound();
+      const data = readFileSync(filePath);
+      return new Response(data, {
+        headers: { 'Content-Type': mimeFor(filePath) },
+      });
+    });
+  }
+
   app.get('/api/galaxy/registry/status', (c) =>
     c.json({
       configured: registry.isConfigured(),
@@ -261,6 +330,8 @@ export function createHttpApp(opts: {
     }
   });
 
+  // (helpers defined at module bottom)
+
   app.post('/api/galaxy/publish', async (c) => {
     const body = (await c.req.json().catch(() => ({}))) as {
       slug?: string;
@@ -285,4 +356,44 @@ export function createHttpApp(opts: {
   });
 
   return app;
+}
+
+function findWebDist(): string | null {
+  if (process.env.SOLIX_WEB_DIST) {
+    return existsSync(process.env.SOLIX_WEB_DIST)
+      ? process.env.SOLIX_WEB_DIST
+      : null;
+  }
+  const here = dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    resolve(here, '..', '..', 'web', 'dist'),
+    resolve(here, '..', '..', '..', 'web', 'dist'),
+    resolve(here, '..', '..', '..', 'packages', 'web', 'dist'),
+    resolve(process.cwd(), 'packages', 'web', 'dist'),
+  ];
+  for (const c of candidates) {
+    if (existsSync(join(c, 'index.html'))) return c;
+  }
+  return null;
+}
+
+const MIME: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.ico': 'image/x-icon',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.map': 'application/json',
+};
+
+function mimeFor(filePath: string): string {
+  return MIME[extname(filePath).toLowerCase()] ?? 'application/octet-stream';
 }

@@ -23,6 +23,7 @@ import {
   getAdvisor,
   setAdvisorPinned,
 } from './state/advisors.js';
+import { buildContextEnvelope } from './state/context.js';
 import type { Launcher } from './launcher.js';
 
 interface PendingPermission {
@@ -328,23 +329,26 @@ export class EventRouter {
     advisorId: string,
     targetSessionId?: string,
     prompt?: string,
-  ): boolean {
+  ): { ok: boolean; envelope?: string } {
     const advisor = getAdvisor(this.db, advisorId);
-    if (!advisor) return false;
-    const target = targetSessionId
-      ? getSession(this.db, targetSessionId)
-      : null;
+    if (!advisor) return { ok: false };
+    const envelope = buildContextEnvelope(this.db, {
+      advisorId,
+      targetSessionId,
+      userPrompt: prompt,
+    });
+    if (!envelope) return { ok: false };
+
+    const target = envelope.targetSession;
     const targetLabel = target
-      ? `${target.name ?? target.id.slice(0, 8)} (${target.cwd})`
-      : 'no focused planet';
+      ? `${target.name ?? target.id.slice(0, 8)}`
+      : 'project level';
     this.broadcaster.broadcast({
       type: 'toast',
       level: 'info',
-      message: `Invoke ${advisor.codename} → ${targetLabel}${
-        prompt ? `: ${prompt.slice(0, 60)}` : ''
-      }`,
+      message: `Invoke ${advisor.codename} → ${targetLabel} · ${envelope.recentMissions.length} mission(s) in envelope`,
     });
-    return true;
+    return { ok: true, envelope: envelope.prompt };
   }
 
   pinAdvisor(advisorId: string, cwd: string = process.cwd()): boolean {

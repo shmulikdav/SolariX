@@ -7,6 +7,7 @@ import {
   pinAdvisorCmd,
   unpinAdvisorCmd,
 } from './advisors.js';
+import { demoCmd } from './demo.js';
 import { doctor } from './doctor.js';
 import {
   exportGalaxyCmd,
@@ -56,6 +57,16 @@ program
   .description('Run diagnostics')
   .action(async () => {
     await doctor();
+  });
+
+program
+  .command('demo')
+  .description(
+    'Seed the running server with fake planets, missions, and a pinned advisor (great for first-run)',
+  )
+  .option('-p, --port <port>', 'server port', (v) => parseInt(v, 10), 4242)
+  .action(async (opts: { port?: number }) => {
+    await demoCmd({ port: opts.port });
   });
 
 const advisors = program

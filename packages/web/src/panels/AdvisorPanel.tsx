@@ -1,5 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSolixStore } from '../store/index.js';
+
+interface EnvelopePreview {
+  prompt: string;
+  recentMissionsCount: number;
+  contextUsagePct: number | null;
+}
 
 export function AdvisorPanel(): JSX.Element | null {
   const advisorId = useSolixStore((s) => s.selectedAdvisorId);
@@ -15,6 +21,33 @@ export function AdvisorPanel(): JSX.Element | null {
   const unpinAdvisor = useSolixStore((s) => s.unpinAdvisor);
 
   const [prompt, setPrompt] = useState('');
+  const [preview, setPreview] = useState<EnvelopePreview | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
+
+  useEffect(() => {
+    if (!advisor) {
+      setPreview(null);
+      return;
+    }
+    let cancelled = false;
+    const params = new URLSearchParams();
+    if (targetSession) params.set('targetSessionId', targetSession.id);
+    if (prompt.trim()) params.set('prompt', prompt.trim());
+    const qs = params.toString();
+    fetch(
+      `/api/advisors/${encodeURIComponent(advisor.id)}/preview${qs ? `?${qs}` : ''}`,
+    )
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: EnvelopePreview | null) => {
+        if (!cancelled) setPreview(d);
+      })
+      .catch(() => {
+        if (!cancelled) setPreview(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [advisor?.id, targetSession?.id, prompt]);
 
   if (!advisor) return null;
 
@@ -98,6 +131,27 @@ export function AdvisorPanel(): JSX.Element | null {
           rows={4}
           className="w-full text-sm bg-black/40 border border-solix-border rounded p-2 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-solix-accent resize-none"
         />
+
+        {preview && (
+          <div className="rounded border border-solix-border bg-black/30">
+            <button
+              onClick={() => setShowPreview((v) => !v)}
+              className="w-full text-left px-2 py-1.5 text-xs flex items-center justify-between text-slate-400 hover:text-slate-100"
+            >
+              <span>
+                Context envelope · {preview.recentMissionsCount} mission(s)
+                {preview.contextUsagePct !== null &&
+                  ` · target at ${preview.contextUsagePct.toFixed(0)}%`}
+              </span>
+              <span>{showPreview ? '▾' : '▸'}</span>
+            </button>
+            {showPreview && (
+              <pre className="text-[10.5px] text-slate-300 whitespace-pre-wrap px-3 pb-3 max-h-72 overflow-auto leading-relaxed">
+                {preview.prompt}
+              </pre>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="px-4 py-3 border-t border-solix-border flex gap-2">

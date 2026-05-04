@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Scene } from './scene/Scene.js';
 import { TopBar } from './hud/TopBar.js';
 import { Toasts } from './hud/Toasts.js';
+import { Welcome } from './hud/Welcome.js';
 import { PermissionTray } from './hud/PermissionTray.js';
 import { SidePanel } from './panels/SidePanel.js';
 import { AdvisorPanel } from './panels/AdvisorPanel.js';
@@ -57,6 +58,7 @@ export default function App(): JSX.Element {
         open={galaxyOpen}
         onClose={() => setGalaxyOpen(false)}
       />
+      <Welcome onOpenGalaxy={() => setGalaxyOpen(true)} />
       <Toasts />
       <EmptyHint />
     </div>

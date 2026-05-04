@@ -17,11 +17,26 @@ terminals.
 
 ```sh
 pnpm install
+pnpm --filter @solix/web build              # build the UI bundle once
 pnpm --filter @shmulikdav/solix exec tsx src/index.ts install   # patches ~/.claude/settings.json
-pnpm --filter @shmulikdav/solix exec tsx src/index.ts start     # opens http://127.0.0.1:4242
+pnpm --filter @shmulikdav/solix exec tsx src/index.ts start     # serves API + WS + UI
 ```
 
-Then run `claude` in any terminal — a planet will appear within a second.
+Open **http://127.0.0.1:4242** — you'll get a Welcome modal walking you
+through five things you can do.
+
+**See it without running Claude Code yet?** In another terminal:
+
+```sh
+pnpm --filter @shmulikdav/solix exec tsx src/index.ts demo
+```
+
+Seeds three user planets, an active mission with comet streaks, a moon, a
+red permission flare, and pins Compass — so the empty galaxy lights up
+immediately.
+
+Then run `claude` in any terminal and a real planet will appear within a
+second.
 
 To verify the install:
 
@@ -152,6 +167,48 @@ solix galaxy install shmulik/dev
 record project hints. They never spawn pinned advisors, run shell commands,
 auto-install skills to the filesystem, or schedule tasks. You stay in
 control.
+
+## Context management
+
+Solix is opinionated about how context flows between agents.
+
+**Mission summaries are the handoff currency, not transcripts.** Every
+mission produces a `shortName` + (eventually) a `longSummary`. When you
+Invoke an advisor, Solix builds a **context envelope** — a small,
+structured prompt — by stitching together:
+
+- the advisor's role description (from its `.md` file),
+- the focused planet's `cwd`, model, status, and current context %,
+- the last 3 missions on that planet (summary + files touched + tool
+  counts),
+- a role-specific default ask if you didn't write a brief,
+- a budget warning if the target session is ≥80% (suggest /compact at
+  ≥90%).
+
+This is the cheapest possible handoff: an advisor gets enough to be
+useful without the cost of replaying full transcripts.
+
+You can preview the envelope before sending — it shows up as an
+expandable section in the AdvisorPanel, or via:
+
+```sh
+curl 'http://127.0.0.1:4242/api/advisors/compass/preview?targetSessionId=<id>'
+```
+
+**Visual context warnings:**
+
+| Context % | Visual |
+|---|---|
+| <80% | Planet at normal size |
+| 80–89% | Orange flare, slow pulse |
+| ≥90% | Red flare, faster pulse + planet visibly bloated |
+
+**Source of truth for `contextUsagePct`:** the field exists on every
+session and is wired through the WebSocket `context_update` message. The
+*populator* — a transcript-tail watcher on
+`~/.claude/projects/<project>/<session>.jsonl` — is the next chunk of
+work (PRD §5.5, M3). For now the field can be set via `setContextUsage()`
+in the router and is updated by the demo seeder.
 
 ## Development
 

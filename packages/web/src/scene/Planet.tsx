@@ -91,14 +91,30 @@ export function Planet({ session }: PlanetProps): JSX.Element {
     }
 
     if (flareRef.current) {
+      const ctxCritical = session.contextUsagePct >= 90;
+      const ctxWarn = session.contextUsagePct >= 80 && !ctxCritical;
       const showFlare =
         session.status === 'awaiting_permission' ||
-        session.status === 'awaiting_input';
+        session.status === 'awaiting_input' ||
+        ctxCritical ||
+        ctxWarn;
       if (showFlare) {
-        const freq = session.status === 'awaiting_permission' ? 1.5 : 0.8;
+        let freq = 0.8;
+        let color = '#f59e0b';
+        if (session.status === 'awaiting_permission') {
+          freq = 1.5;
+          color = '#ef4444';
+        } else if (session.status === 'awaiting_input') {
+          freq = 0.8;
+          color = '#f59e0b';
+        } else if (ctxCritical) {
+          freq = 1.2;
+          color = '#dc2626';
+        } else if (ctxWarn) {
+          freq = 0.6;
+          color = '#fb923c';
+        }
         const pulse = 0.5 + 0.5 * Math.sin(t * Math.PI * 2 * freq);
-        const color =
-          session.status === 'awaiting_permission' ? '#ef4444' : '#f59e0b';
         const mat = flareRef.current.material as MeshStandardMaterial;
         mat.color.set(color);
         mat.opacity = 0.25 + pulse * 0.5;
