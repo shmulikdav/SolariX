@@ -1,13 +1,16 @@
 import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import type { Mesh } from 'three';
+import { useSolixStore } from '../store/index.js';
 
 export function Sun(): JSX.Element {
   const ref = useRef<Mesh>(null);
   const haloRef = useRef<Mesh>(null);
 
   useFrame((_, delta) => {
-    if (ref.current) ref.current.rotation.y += delta * 0.05;
+    const motionEnabled = useSolixStore.getState().motionEnabled;
+    if (ref.current && motionEnabled) ref.current.rotation.y += delta * 0.05;
+    // Halo breath stays alive — it's ambient, not orbital.
     if (haloRef.current) {
       const t = performance.now() * 0.001;
       const s = 1 + Math.sin(t * 1.3) * 0.04;

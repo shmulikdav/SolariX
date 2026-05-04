@@ -4,6 +4,7 @@ import { Color, Group, MathUtils, Mesh, MeshStandardMaterial } from 'three';
 import type { Session } from '@solix/shared';
 import { modelColor, statusEmissive } from './colors.js';
 import { moonOrbitRadius } from './orbits.js';
+import { useSolixStore } from '../store/index.js';
 
 interface MoonProps {
   session: Session;
@@ -22,9 +23,12 @@ export function Moon({ session, index, speed }: MoonProps): JSX.Element {
     [session.model],
   );
 
-  useFrame((state, delta) => {
-    const t = state.clock.getElapsedTime();
-    const angle = phase + t * speed;
+  const angleRef = useRef(phase);
+
+  useFrame((_state, delta) => {
+    const motionEnabled = useSolixStore.getState().motionEnabled;
+    if (motionEnabled) angleRef.current += delta * speed;
+    const angle = angleRef.current;
     if (groupRef.current) {
       groupRef.current.position.set(
         Math.cos(angle) * radius,
@@ -32,7 +36,7 @@ export function Moon({ session, index, speed }: MoonProps): JSX.Element {
         Math.sin(angle) * radius,
       );
     }
-    if (meshRef.current) {
+    if (meshRef.current && motionEnabled) {
       meshRef.current.rotation.y += delta * 0.6;
     }
     if (materialRef.current) {

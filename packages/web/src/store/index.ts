@@ -41,6 +41,7 @@ interface SolixState {
   selectedSessionId: string | null;
   selectedAdvisorId: string | null;
   selectedSkillId: string | null;
+  motionEnabled: boolean;
   toasts: { id: string; level: 'info' | 'warn' | 'error'; message: string }[];
 
   setConnected: (c: boolean) => void;
@@ -55,12 +56,33 @@ interface SolixState {
   unpinAdvisor: (advisorId: string) => void;
   sendPromptTo: (sessionId: string, text: string) => void;
   launchTask: (cwd: string, model: string, initialPrompt?: string) => void;
+  setMotionEnabled: (b: boolean) => void;
+  toggleMotion: () => void;
 
   send: (msg: ClientMessage) => void;
   attachSocket: (send: (msg: ClientMessage) => void) => void;
 }
 
 const TOOL_CALL_TTL_MS = 2000;
+
+const MOTION_KEY = 'solix.motion.v1';
+
+function readMotionPref(): boolean {
+  try {
+    const v = localStorage.getItem(MOTION_KEY);
+    return v === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeMotionPref(b: boolean): void {
+  try {
+    localStorage.setItem(MOTION_KEY, b ? '1' : '0');
+  } catch {
+    /* ignore */
+  }
+}
 
 export const useSolixStore = create<SolixState>((set, get) => ({
   connected: false,
@@ -75,6 +97,7 @@ export const useSolixStore = create<SolixState>((set, get) => ({
   selectedSessionId: null,
   selectedAdvisorId: null,
   selectedSkillId: null,
+  motionEnabled: readMotionPref(),
   toasts: [],
 
   setConnected: (connected) => set({ connected }),
@@ -305,6 +328,16 @@ export const useSolixStore = create<SolixState>((set, get) => ({
       model,
       initialPrompt,
     });
+  },
+
+  setMotionEnabled: (b) => {
+    writeMotionPref(b);
+    set({ motionEnabled: b });
+  },
+  toggleMotion: () => {
+    const next = !get().motionEnabled;
+    writeMotionPref(next);
+    set({ motionEnabled: next });
   },
 
   send: () => {

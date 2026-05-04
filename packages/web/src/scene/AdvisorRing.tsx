@@ -43,10 +43,12 @@ function AdvisorPlanet({
     (s) => s.selectedAdvisorId === advisor.id,
   );
 
+  const angleRef = useRef(phase);
+
   useFrame((state, delta) => {
-    const t = state.clock.getElapsedTime();
-    // Slow shared rotation around the sun, plus per-advisor offset.
-    const angle = phase + t * 0.18;
+    const motionEnabled = useSolixStore.getState().motionEnabled;
+    if (motionEnabled) angleRef.current += delta * 0.18;
+    const angle = angleRef.current;
     if (groupRef.current) {
       groupRef.current.position.set(
         Math.cos(angle) * RING_RADIUS,
@@ -54,9 +56,12 @@ function AdvisorPlanet({
         Math.sin(angle) * RING_RADIUS,
       );
     }
-    if (meshRef.current) {
+    if (meshRef.current && motionEnabled) {
       meshRef.current.rotation.y += delta * 0.4;
     }
+    // Status-feedback timing for halo pulse — keeps animating even when
+    // orbital motion is paused, so selection feedback stays alive.
+    const t = state.clock.getElapsedTime();
     if (materialRef.current) {
       const target = advisor.pinned ? 0.6 : 0.22;
       materialRef.current.emissiveIntensity = MathUtils.lerp(

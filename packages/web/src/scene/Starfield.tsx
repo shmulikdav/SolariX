@@ -1,6 +1,7 @@
 import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { BufferGeometry, BufferAttribute, type Points } from 'three';
+import { useSolixStore } from '../store/index.js';
 
 export function Starfield({ count = 800 }: { count?: number }): JSX.Element {
   const ref = useRef<Points>(null);
@@ -24,6 +25,7 @@ export function Starfield({ count = 800 }: { count?: number }): JSX.Element {
   }, [count]);
 
   useFrame((_, delta) => {
+    if (!useSolixStore.getState().motionEnabled) return;
     if (ref.current) {
       ref.current.rotation.y += delta * 0.005;
       ref.current.rotation.x += delta * 0.002;

@@ -4,6 +4,16 @@ import { TopBar } from './hud/TopBar.js';
 import { Toasts } from './hud/Toasts.js';
 import { Welcome } from './hud/Welcome.js';
 import { PermissionTray } from './hud/PermissionTray.js';
+import { SceneControls } from './hud/SceneControls.js';
+import {
+  panDown,
+  panLeft,
+  panRight,
+  panUp,
+  reset as cameraReset,
+  zoomIn as cameraZoomIn,
+  zoomOut as cameraZoomOut,
+} from './scene/cameraControls.js';
 import { SidePanel } from './panels/SidePanel.js';
 import { AdvisorPanel } from './panels/AdvisorPanel.js';
 import { SkillPanel } from './panels/SkillPanel.js';
@@ -41,6 +51,23 @@ export default function App(): JSX.Element {
         setGalaxyOpen((v) => !v);
       } else if (!isTextField && (e.key === 'l' || e.key === 'L')) {
         setNewTaskOpen(true);
+      } else if (!isTextField && (e.key === '+' || e.key === '=')) {
+        cameraZoomIn();
+      } else if (!isTextField && e.key === '-') {
+        cameraZoomOut();
+      } else if (!isTextField && e.key === '0') {
+        cameraReset();
+      } else if (!isTextField && e.key === 'ArrowLeft') {
+        panLeft();
+      } else if (!isTextField && e.key === 'ArrowRight') {
+        panRight();
+      } else if (!isTextField && e.key === 'ArrowUp') {
+        panUp();
+      } else if (!isTextField && e.key === 'ArrowDown') {
+        panDown();
+      } else if (!isTextField && e.key === ' ') {
+        e.preventDefault();
+        state.toggleMotion();
       } else if (!isTextField && top && (e.key === 'y' || e.key === 'Y')) {
         state.resolvePermission(top.requestId, true);
       } else if (!isTextField && top && (e.key === 'n' || e.key === 'N')) {
@@ -70,6 +97,7 @@ export default function App(): JSX.Element {
         open={newTaskOpen}
         onClose={() => setNewTaskOpen(false)}
       />
+      <SceneControls />
       <Welcome onOpenGalaxy={() => setGalaxyOpen(true)} />
       <Toasts />
       <EmptyHint />

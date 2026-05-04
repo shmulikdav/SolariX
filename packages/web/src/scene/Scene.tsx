@@ -1,4 +1,5 @@
-import { Canvas } from '@react-three/fiber';
+import { useEffect, useRef, type ComponentRef } from 'react';
+import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, Stars } from '@react-three/drei';
 import {
   selectAdvisorPlanets,
@@ -11,6 +12,7 @@ import { Planet, PlanetOrbitRing } from './Planet.js';
 import { CometLayer } from './Comets.js';
 import { AdvisorRing } from './AdvisorRing.js';
 import { AsteroidBelt } from './AsteroidBelt.js';
+import { attachControls, detachControls } from './cameraControls.js';
 
 export function Scene(): JSX.Element {
   const planets = useSolixStore(selectPlanets);
@@ -37,14 +39,6 @@ export function Scene(): JSX.Element {
       <color attach="background" args={['#05060c']} />
       <fog attach="fog" args={['#080a14', 60, 280]} />
       <ambientLight intensity={0.12} />
-      {/*
-        Procedural deep-space starfield. drei's <Stars> renders a
-        layered field with depth + parallax + a subtle twinkle. No
-        asset fetch; no offline failure mode; full control over
-        density and saturation. Replaces the earlier HDRI sky which
-        ended up showing the GROUND of an outdoor night-photo HDR
-        instead of an actual deep-space view.
-      */}
       <Stars
         radius={180}
         depth={80}
@@ -65,15 +59,38 @@ export function Scene(): JSX.Element {
         <Planet key={p.id} session={p} />
       ))}
       <CometLayer />
-      <OrbitControls
-        makeDefault
-        enablePan
-        enableZoom
-        enableRotate
-        minDistance={6}
-        maxDistance={140}
-        target={[0, 0, 0]}
-      />
+      <ControlsBridge />
     </Canvas>
+  );
+}
+
+/**
+ * Renders <OrbitControls> and exposes its imperative ref + the camera to the
+ * cameraControls module so the on-screen HUD buttons can pan/zoom/reset.
+ * Lives inside <Canvas> because that's where useThree() works.
+ */
+function ControlsBridge(): JSX.Element {
+  const ref = useRef<ComponentRef<typeof OrbitControls>>(null);
+  const { camera } = useThree();
+
+  useEffect(() => {
+    attachControls(
+      ref.current as unknown as Parameters<typeof attachControls>[0],
+      camera as unknown as Parameters<typeof attachControls>[1],
+    );
+    return () => detachControls();
+  }, [camera]);
+
+  return (
+    <OrbitControls
+      ref={ref}
+      makeDefault
+      enablePan
+      enableZoom
+      enableRotate
+      minDistance={6}
+      maxDistance={140}
+      target={[0, 0, 0]}
+    />
   );
 }

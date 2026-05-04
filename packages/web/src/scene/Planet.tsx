@@ -56,14 +56,15 @@ export function Planet({ session }: PlanetProps): JSX.Element {
     [isAdvisor, advisorForRole, session.model],
   );
 
-  useFrame((state, delta) => {
-    const speed = planetOrbitSpeed(session.status === 'active', session.orbitSlot);
-    if (groupRef.current) {
-      groupRef.current.rotation.y += delta * speed * 0.5;
-    }
+  const angleRef = useRef(phase);
 
-    const t = state.clock.getElapsedTime();
-    const angle = phase + t * speed * 0.3;
+  useFrame((state, delta) => {
+    const motionEnabled = useSolixStore.getState().motionEnabled;
+    const speed = planetOrbitSpeed(session.status === 'active', session.orbitSlot);
+    if (motionEnabled) {
+      angleRef.current += delta * speed * 0.3;
+    }
+    const angle = angleRef.current;
     const x = Math.cos(angle) * radius;
     const z = Math.sin(angle) * radius;
     const tilt = Math.sin(angle * 0.5) * 0.4;
@@ -71,8 +72,14 @@ export function Planet({ session }: PlanetProps): JSX.Element {
       groupRef.current.position.set(x, tilt, z);
     }
 
+    // Status-feedback timing — keeps pulsing regardless of motion mode so
+    // attention-grabbing flares (permission, context) still animate.
+    const t = state.clock.getElapsedTime();
+
     if (planetRef.current) {
-      planetRef.current.rotation.y += delta * 0.4;
+      if (motionEnabled) {
+        planetRef.current.rotation.y += delta * 0.4;
+      }
       const targetScale = 0.55 + (session.contextUsagePct / 100) * 0.5;
       const cur = planetRef.current.scale.x;
       const next = MathUtils.lerp(cur, targetScale, 0.04);

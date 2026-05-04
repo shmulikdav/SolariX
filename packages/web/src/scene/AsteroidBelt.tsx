@@ -68,10 +68,18 @@ export function AsteroidBelt(): JSX.Element | null {
     });
   }, [skills]);
 
-  useFrame((state, delta) => {
+  const driftRef = useRef(0);
+  const spinRef = useRef(0);
+
+  useFrame((_state, delta) => {
     if (!meshRef.current || !layout.length) return;
-    const t = state.clock.getElapsedTime();
-    const drift = t * 0.04;
+    const motionEnabled = useSolixStore.getState().motionEnabled;
+    if (motionEnabled) {
+      driftRef.current += delta * 0.04;
+      spinRef.current += delta * 0.8;
+    }
+    const drift = driftRef.current;
+    const spin = spinRef.current;
     for (let i = 0; i < layout.length; i++) {
       const item = layout[i]!;
       const angle = item.angle + drift;
@@ -81,7 +89,7 @@ export function AsteroidBelt(): JSX.Element | null {
         Math.sin(angle) * item.radius,
       );
       TMP_OBJ.quaternion.copy(item.rot);
-      TMP_OBJ.rotateY(t * 0.8 + i);
+      TMP_OBJ.rotateY(spin + i);
       const isSelected = selectedSkillId === item.skill.id;
       const scale = isSelected ? item.size * 1.6 : item.size;
       TMP_OBJ.scale.set(scale, scale, scale);
@@ -93,7 +101,6 @@ export function AsteroidBelt(): JSX.Element | null {
     if (meshRef.current.instanceColor) {
       meshRef.current.instanceColor.needsUpdate = true;
     }
-    void delta;
   });
 
   if (!layout.length) return null;
