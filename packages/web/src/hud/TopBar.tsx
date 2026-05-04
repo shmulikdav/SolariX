@@ -1,6 +1,10 @@
 import { useSolixStore, selectPlanets } from '../store/index.js';
 
-export function TopBar(): JSX.Element {
+interface TopBarProps {
+  onOpenGalaxy?: () => void;
+}
+
+export function TopBar({ onOpenGalaxy }: TopBarProps = {}): JSX.Element {
   const connected = useSolixStore((s) => s.connected);
   const planets = useSolixStore(selectPlanets);
 
@@ -43,6 +47,15 @@ export function TopBar(): JSX.Element {
         <Stat label="active" value={counts.active} color="text-solix-ok" />
         <Stat label="attention" value={counts.attention} color="text-solix-warn" />
         <Stat label="idle" value={counts.idle} color="text-slate-400" />
+        {onOpenGalaxy && (
+          <button
+            onClick={onOpenGalaxy}
+            className="px-2 py-1 rounded bg-solix-accent/15 border border-solix-accent/40 text-solix-accent hover:bg-solix-accent/25"
+            title="Galaxy: export and import (G)"
+          >
+            ⌬ Galaxy
+          </button>
+        )}
       </div>
     </div>
   );

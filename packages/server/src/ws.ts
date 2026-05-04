@@ -8,6 +8,8 @@ import type { EventRouter } from './router.js';
 import { listProjects } from './state/projects.js';
 import { listActiveSessions } from './state/sessions.js';
 import { listMissions } from './state/missions.js';
+import { listAdvisors } from './state/advisors.js';
+import { listSkills } from './state/skills.js';
 
 export interface WsContext {
   db: DB;
@@ -40,6 +42,8 @@ export function attachWs(server: HttpServer, ctx: WsContext): WebSocketServer {
       projects: listProjects(ctx.db),
       sessions: listActiveSessions(ctx.db),
       missions: listMissions(ctx.db, { limit: 100 }),
+      advisors: listAdvisors(ctx.db),
+      skills: listSkills(ctx.db),
     };
     ctx.broadcaster.send(ws, snapshot);
 
@@ -83,6 +87,19 @@ function handleClientMessage(
       break;
     case 'launch_session':
       // M3.5.
+      break;
+    case 'invoke_advisor':
+      ctx.router.invokeAdvisor(
+        msg.advisorId,
+        msg.targetSessionId,
+        msg.prompt,
+      );
+      break;
+    case 'pin_advisor':
+      ctx.router.pinAdvisor(msg.advisorId);
+      break;
+    case 'unpin_advisor':
+      ctx.router.unpinAdvisor(msg.advisorId);
       break;
     default:
       break;

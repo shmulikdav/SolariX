@@ -12,6 +12,8 @@ export type Model = 'opus' | 'sonnet' | 'haiku' | 'default' | string;
 
 export type SessionOrigin = 'external' | 'internal';
 
+export type SessionKind = 'user' | 'advisor';
+
 export interface Session {
   id: string;
   pid: number;
@@ -22,6 +24,8 @@ export interface Session {
   status: SessionStatus;
   model: Model;
   origin: SessionOrigin;
+  kind: SessionKind;
+  advisorRole?: string;
   parentSessionId?: string;
   contextUsagePct: number;
   currentMissionId?: string;
@@ -99,4 +103,65 @@ export interface ChatDelta {
   content: string;
   ts: number;
   done: boolean;
+}
+
+export interface Advisor {
+  id: string;
+  role: string;
+  codename: string;
+  name: string;
+  description: string;
+  glyph: string;
+  color: string;
+  defaultModel: Model;
+  agentMdPath: string;
+  enabled: boolean;
+  pinned: boolean;
+  pinnedSessionId?: string;
+  requiredSkills: string[];
+}
+
+export type SkillSource = 'anthropic' | 'solix' | 'user';
+
+export interface Skill {
+  id: string;
+  name: string;
+  description: string;
+  source: SkillSource;
+  manifestPath: string;
+  installedInProjects: string[];
+}
+
+export interface GalaxyManifestAdvisor {
+  role: string;
+  pinned: boolean;
+  model?: Model;
+}
+
+export interface GalaxyManifestSkill {
+  id: string;
+  source: SkillSource;
+}
+
+export interface GalaxyManifestProject {
+  name: string;
+  cwd?: string;
+  remoteHint?: string;
+}
+
+export interface GalaxyManifestScheduledTask {
+  prompt: string;
+  cron: string;
+}
+
+export interface GalaxyManifest {
+  version: 1;
+  name: string;
+  author?: string;
+  description?: string;
+  advisors: GalaxyManifestAdvisor[];
+  skills: GalaxyManifestSkill[];
+  projects: GalaxyManifestProject[];
+  scheduledTasks?: GalaxyManifestScheduledTask[];
+  theme?: { sunColor?: string; bgColor?: string };
 }

@@ -1,10 +1,12 @@
 import { create } from 'zustand';
 import type {
+  Advisor,
   ClientMessage,
   Mission,
   Project,
   ServerMessage,
   Session,
+  Skill,
   ToolCall,
 } from '@solix/shared';
 
@@ -25,16 +27,25 @@ interface SolixState {
   projects: Record<string, Project>;
   sessions: Record<string, Session>;
   missions: Record<string, Mission>;
+  advisors: Record<string, Advisor>;
+  skills: Record<string, Skill>;
   recentToolCalls: RecentToolCall[];
   pendingPermissions: Record<string, PendingPermission>;
   selectedSessionId: string | null;
+  selectedAdvisorId: string | null;
+  selectedSkillId: string | null;
   toasts: { id: string; level: 'info' | 'warn' | 'error'; message: string }[];
 
   setConnected: (c: boolean) => void;
   applyMessage: (msg: ServerMessage) => void;
   selectSession: (id: string | null) => void;
+  selectAdvisor: (id: string | null) => void;
+  selectSkill: (id: string | null) => void;
   dismissToast: (id: string) => void;
   resolvePermission: (requestId: string, approved: boolean) => void;
+  invokeAdvisor: (advisorId: string, prompt?: string) => void;
+  pinAdvisor: (advisorId: string) => void;
+  unpinAdvisor: (advisorId: string) => void;
 
   send: (msg: ClientMessage) => void;
   attachSocket: (send: (msg: ClientMessage) => void) => void;
@@ -47,9 +58,13 @@ export const useSolixStore = create<SolixState>((set, get) => ({
   projects: {},
   sessions: {},
   missions: {},
+  advisors: {},
+  skills: {},
   recentToolCalls: [],
   pendingPermissions: {},
   selectedSessionId: null,
+  selectedAdvisorId: null,
+  selectedSkillId: null,
   toasts: [],
 
   setConnected: (connected) => set({ connected }),
@@ -63,7 +78,39 @@ export const useSolixStore = create<SolixState>((set, get) => ({
         for (const s of msg.sessions) sessions[s.id] = s;
         const missions: Record<string, Mission> = {};
         for (const m of msg.missions) missions[m.id] = m;
-        set({ projects, sessions, missions });
+        const advisors: Record<string, Advisor> = {};
+        for (const a of msg.advisors) advisors[a.id] = a;
+        const skills: Record<string, Skill> = {};
+        for (const sk of msg.skills) skills[sk.id] = sk;
+        set({ projects, sessions, missions, advisors, skills });
+        break;
+      }
+      case 'advisor_upsert': {
+        set((s) => ({
+          advisors: { ...s.advisors, [msg.advisor.id]: msg.advisor },
+        }));
+        break;
+      }
+      case 'skill_upsert': {
+        set((s) => ({
+          skills: { ...s.skills, [msg.skill.id]: msg.skill },
+        }));
+        break;
+      }
+      case 'galaxy_imported': {
+        // Snapshot will follow; no-op for now beyond toast.
+        const id = `${Date.now()}-galaxy`;
+        set((s) => ({
+          toasts: [
+            ...s.toasts,
+            {
+              id,
+              level: 'info' as const,
+              message: `Imported galaxy: ${msg.manifest.name}`,
+            },
+          ].slice(-6),
+        }));
+        setTimeout(() => get().dismissToast(id), 5000);
         break;
       }
       case 'session_upsert': {
@@ -152,7 +199,26 @@ export const useSolixStore = create<SolixState>((set, get) => ({
     }
   },
 
-  selectSession: (id) => set({ selectedSessionId: id }),
+  selectSession: (id) =>
+    set({
+      selectedSessionId: id,
+      selectedAdvisorId: id ? null : get().selectedAdvisorId,
+      selectedSkillId: id ? null : get().selectedSkillId,
+    }),
+
+  selectAdvisor: (id) =>
+    set({
+      selectedAdvisorId: id,
+      selectedSessionId: id ? null : get().selectedSessionId,
+      selectedSkillId: id ? null : get().selectedSkillId,
+    }),
+
+  selectSkill: (id) =>
+    set({
+      selectedSkillId: id,
+      selectedSessionId: id ? null : get().selectedSessionId,
+      selectedAdvisorId: id ? null : get().selectedAdvisorId,
+    }),
 
   dismissToast: (id) =>
     set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
@@ -167,6 +233,20 @@ export const useSolixStore = create<SolixState>((set, get) => ({
     });
   },
 
+  invokeAdvisor: (advisorId, prompt) => {
+    const send = get().send;
+    const targetSessionId = get().selectedSessionId ?? undefined;
+    send({ type: 'invoke_advisor', advisorId, targetSessionId, prompt });
+  },
+
+  pinAdvisor: (advisorId) => {
+    get().send({ type: 'pin_advisor', advisorId });
+  },
+
+  unpinAdvisor: (advisorId) => {
+    get().send({ type: 'unpin_advisor', advisorId });
+  },
+
   send: () => {
     /* replaced when socket attaches */
   },
@@ -174,11 +254,27 @@ export const useSolixStore = create<SolixState>((set, get) => ({
 }));
 
 export function selectPlanets(state: SolixState): Session[] {
-  return Object.values(state.sessions).filter((s) => !s.parentSessionId);
+  return Object.values(state.sessions).filter(
+    (s) => !s.parentSessionId && s.kind !== 'advisor',
+  );
+}
+
+export function selectAdvisorPlanets(state: SolixState): Session[] {
+  return Object.values(state.sessions).filter(
+    (s) => !s.parentSessionId && s.kind === 'advisor',
+  );
 }
 
 export function selectMoons(state: SolixState, planetId: string): Session[] {
   return Object.values(state.sessions).filter(
     (s) => s.parentSessionId === planetId,
   );
+}
+
+export function selectEnabledAdvisors(state: SolixState): Advisor[] {
+  return Object.values(state.advisors).filter((a) => a.enabled);
+}
+
+export function selectSkillsArray(state: SolixState): Skill[] {
+  return Object.values(state.skills);
 }

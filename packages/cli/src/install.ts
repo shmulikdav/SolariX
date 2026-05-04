@@ -1,20 +1,27 @@
 import {
   copyFileSync,
+  cpSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
+  statSync,
   writeFileSync,
   chmodSync,
 } from 'node:fs';
 import { join } from 'node:path';
 import {
+  CLAUDE_AGENTS_DIR,
   CLAUDE_BACKUP,
   CLAUDE_DIR,
   CLAUDE_SETTINGS,
   HOOK_NAMES,
   HOOKS_DIR,
   SOLIX_HOME,
+  SOLIX_SKILLS_DIR,
+  packagedAgentsDir,
   packagedHooksDir,
+  packagedSkillsDir,
 } from './paths.js';
 
 interface HookEntry {
@@ -103,6 +110,55 @@ function installHookScripts(): void {
   }
 }
 
+interface ManifestAdvisor {
+  id: string;
+  agentMd: string;
+}
+
+function installAdvisorAgents(): number {
+  const src = packagedAgentsDir();
+  if (!existsSync(src)) {
+    console.warn(`[solix] no advisors/ directory at ${src}; skipping`);
+    return 0;
+  }
+  const manifestPath = join(src, 'manifest.json');
+  if (!existsSync(manifestPath)) return 0;
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
+    advisors: ManifestAdvisor[];
+  };
+  mkdirSync(CLAUDE_AGENTS_DIR, { recursive: true });
+  let copied = 0;
+  for (const a of manifest.advisors) {
+    const from = join(src, a.agentMd);
+    const to = join(CLAUDE_AGENTS_DIR, a.agentMd);
+    if (!existsSync(from)) continue;
+    copyFileSync(from, to);
+    copied += 1;
+  }
+  return copied;
+}
+
+function installSolixSkills(): number {
+  const src = packagedSkillsDir();
+  if (!existsSync(src)) return 0;
+  mkdirSync(SOLIX_SKILLS_DIR, { recursive: true });
+  let copied = 0;
+  for (const entry of readdirSync(src)) {
+    const fromDir = join(src, entry);
+    let isDir = false;
+    try {
+      isDir = statSync(fromDir).isDirectory();
+    } catch {
+      continue;
+    }
+    if (!isDir) continue;
+    const toDir = join(SOLIX_SKILLS_DIR, entry);
+    cpSync(fromDir, toDir, { recursive: true });
+    copied += 1;
+  }
+  return copied;
+}
+
 export interface InstallOptions {
   force?: boolean;
 }
@@ -121,6 +177,20 @@ export function install(opts: InstallOptions = {}): void {
 
   installHookScripts();
   console.log(`[solix] installed hook scripts in ${HOOKS_DIR}`);
+
+  const advisorsCopied = installAdvisorAgents();
+  if (advisorsCopied > 0) {
+    console.log(
+      `[solix] installed ${advisorsCopied} advisor agents in ${CLAUDE_AGENTS_DIR}`,
+    );
+  }
+
+  const skillsCopied = installSolixSkills();
+  if (skillsCopied > 0) {
+    console.log(
+      `[solix] installed ${skillsCopied} Solix skills in ${SOLIX_SKILLS_DIR}`,
+    );
+  }
 
   const merged = mergeHooks(existing.hooks, buildSolixHooks());
   const next: ClaudeSettings = { ...existing, hooks: merged };

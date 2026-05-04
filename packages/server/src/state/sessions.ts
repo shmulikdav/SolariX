@@ -1,6 +1,7 @@
 import type {
   Model,
   Session,
+  SessionKind,
   SessionOrigin,
   SessionStatus,
 } from '@solix/shared';
@@ -19,6 +20,8 @@ interface SessionRow {
   orbit_slot: number;
   cwd: string;
   name: string | null;
+  kind: SessionKind | null;
+  advisor_role: string | null;
   current_mission_id: string | null;
   last_completed_mission_id: string | null;
   created_at: number;
@@ -37,6 +40,8 @@ function rowToSession(row: SessionRow): Session {
     status: row.status,
     model: (row.model ?? 'default') as Model,
     origin: row.origin,
+    kind: row.kind ?? 'user',
+    advisorRole: row.advisor_role ?? undefined,
     parentSessionId: row.parent_session_id ?? undefined,
     contextUsagePct: row.context_usage_pct,
     currentMissionId: row.current_mission_id ?? undefined,
@@ -66,6 +71,8 @@ export interface CreateSessionInput {
   origin: SessionOrigin;
   model?: Model;
   parentSessionId?: string;
+  kind?: SessionKind;
+  advisorRole?: string;
 }
 
 export function upsertSession(db: DB, input: CreateSessionInput): Session {
@@ -92,13 +99,15 @@ export function upsertSession(db: DB, input: CreateSessionInput): Session {
     ? 0
     : nextOrbitSlot(db, input.projectId);
   const status: SessionStatus = 'idle';
+  const kind: SessionKind = input.kind ?? 'user';
 
   db.prepare(
     `INSERT INTO sessions (
        id, pid, project_id, parent_session_id, origin, model, status,
-       context_usage_pct, orbit_slot, cwd, name, created_at, updated_at
+       context_usage_pct, orbit_slot, cwd, name, kind, advisor_role,
+       created_at, updated_at
      )
-     VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, NULL, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, NULL, ?, ?, ?, ?)`,
   ).run(
     input.id,
     input.pid,
@@ -109,6 +118,8 @@ export function upsertSession(db: DB, input: CreateSessionInput): Session {
     status,
     orbitSlot,
     input.cwd,
+    kind,
+    input.advisorRole ?? null,
     ts,
     ts,
   );
@@ -123,6 +134,8 @@ export function upsertSession(db: DB, input: CreateSessionInput): Session {
     status,
     model: input.model ?? 'default',
     origin: input.origin,
+    kind,
+    advisorRole: input.advisorRole,
     parentSessionId: input.parentSessionId,
     contextUsagePct: 0,
     orbitSlot,

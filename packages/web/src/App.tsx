@@ -1,13 +1,18 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Scene } from './scene/Scene.js';
 import { TopBar } from './hud/TopBar.js';
 import { Toasts } from './hud/Toasts.js';
 import { PermissionTray } from './hud/PermissionTray.js';
 import { SidePanel } from './panels/SidePanel.js';
+import { AdvisorPanel } from './panels/AdvisorPanel.js';
+import { SkillPanel } from './panels/SkillPanel.js';
+import { GalaxyPanel } from './panels/GalaxyPanel.js';
 import { useSolixStore } from './store/index.js';
 import { startWsClient } from './ws/client.js';
 
 export default function App(): JSX.Element {
+  const [galaxyOpen, setGalaxyOpen] = useState(false);
+
   useEffect(() => {
     startWsClient();
   }, []);
@@ -15,14 +20,24 @@ export default function App(): JSX.Element {
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       const state = useSolixStore.getState();
+      const target = e.target as HTMLElement | null;
+      const isTextField =
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'TEXTAREA' ||
+        target?.isContentEditable === true;
       const pending = Object.values(state.pendingPermissions);
       const top = pending[0];
 
       if (e.key === 'Escape') {
         state.selectSession(null);
-      } else if (top && (e.key === 'y' || e.key === 'Y')) {
+        state.selectAdvisor(null);
+        state.selectSkill(null);
+        setGalaxyOpen(false);
+      } else if (!isTextField && (e.key === 'g' || e.key === 'G')) {
+        setGalaxyOpen((v) => !v);
+      } else if (!isTextField && top && (e.key === 'y' || e.key === 'Y')) {
         state.resolvePermission(top.requestId, true);
-      } else if (top && (e.key === 'n' || e.key === 'N')) {
+      } else if (!isTextField && top && (e.key === 'n' || e.key === 'N')) {
         state.resolvePermission(top.requestId, false);
       }
     };
@@ -33,9 +48,15 @@ export default function App(): JSX.Element {
   return (
     <div className="relative h-full w-full">
       <Scene />
-      <TopBar />
+      <TopBar onOpenGalaxy={() => setGalaxyOpen(true)} />
       <PermissionTray />
       <SidePanel />
+      <AdvisorPanel />
+      <SkillPanel />
+      <GalaxyPanel
+        open={galaxyOpen}
+        onClose={() => setGalaxyOpen(false)}
+      />
       <Toasts />
       <EmptyHint />
     </div>

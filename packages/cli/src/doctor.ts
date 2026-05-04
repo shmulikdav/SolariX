@@ -1,11 +1,13 @@
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  CLAUDE_AGENTS_DIR,
   CLAUDE_BACKUP,
   CLAUDE_SETTINGS,
   HOOKS_DIR,
   HOOK_NAMES,
   SOLIX_HOME,
+  SOLIX_SKILLS_DIR,
 } from './paths.js';
 
 interface CheckResult {
@@ -85,6 +87,46 @@ export async function doctor(): Promise<void> {
     ok: existsSync(CLAUDE_BACKUP),
     label: 'Backup of settings.json',
     detail: existsSync(CLAUDE_BACKUP) ? CLAUDE_BACKUP : 'not yet created',
+  });
+
+  let advisorCount = 0;
+  if (existsSync(CLAUDE_AGENTS_DIR)) {
+    try {
+      advisorCount = readdirSync(CLAUDE_AGENTS_DIR).filter((f) =>
+        f.endsWith('.md'),
+      ).length;
+    } catch {
+      advisorCount = 0;
+    }
+  }
+  checks.push({
+    ok: advisorCount > 0,
+    label: 'Advisor agents installed',
+    detail:
+      advisorCount > 0
+        ? `${advisorCount} agents in ${CLAUDE_AGENTS_DIR}`
+        : 'none yet — run `solix install`',
+  });
+
+  let skillCount = 0;
+  if (existsSync(SOLIX_SKILLS_DIR)) {
+    try {
+      skillCount = readdirSync(SOLIX_SKILLS_DIR).filter((entry) => {
+        try {
+          return statSync(join(SOLIX_SKILLS_DIR, entry)).isDirectory();
+        } catch {
+          return false;
+        }
+      }).length;
+    } catch {
+      skillCount = 0;
+    }
+  }
+  checks.push({
+    ok: skillCount >= 0,
+    label: 'Solix skill pack',
+    detail:
+      skillCount > 0 ? `${skillCount} skills in ${SOLIX_SKILLS_DIR}` : 'none',
   });
 
   checks.push(await probeHealth(port));

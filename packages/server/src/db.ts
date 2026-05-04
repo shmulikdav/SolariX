@@ -22,6 +22,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   orbit_slot INTEGER NOT NULL,
   cwd TEXT NOT NULL,
   name TEXT,
+  kind TEXT NOT NULL DEFAULT 'user',
+  advisor_role TEXT,
   current_mission_id TEXT,
   last_completed_mission_id TEXT,
   created_at INTEGER NOT NULL,
@@ -30,6 +32,41 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
+CREATE INDEX IF NOT EXISTS idx_sessions_kind ON sessions(kind);
+
+CREATE TABLE IF NOT EXISTS advisors (
+  id TEXT PRIMARY KEY,
+  role TEXT NOT NULL,
+  codename TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL,
+  glyph TEXT,
+  color TEXT,
+  default_model TEXT,
+  agent_md_path TEXT NOT NULL,
+  required_skills_json TEXT DEFAULT '[]',
+  enabled INTEGER NOT NULL DEFAULT 0,
+  pinned INTEGER NOT NULL DEFAULT 0,
+  pinned_session_id TEXT,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS skills (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  source TEXT NOT NULL CHECK (source IN ('anthropic','solix','user')),
+  manifest_path TEXT NOT NULL,
+  installed_in_projects_json TEXT DEFAULT '[]',
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS galaxy_imports (
+  id TEXT PRIMARY KEY,
+  source_url TEXT,
+  manifest_json TEXT NOT NULL,
+  imported_at INTEGER NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS missions (
   id TEXT PRIMARY KEY,
@@ -77,6 +114,24 @@ export type DB = Database.Database;
 
 let _db: DB | null = null;
 
+interface PragmaColumn {
+  name: string;
+}
+
+function ensureColumn(
+  db: DB,
+  table: string,
+  column: string,
+  ddl: string,
+): void {
+  const cols = db
+    .prepare(`PRAGMA table_info(${table})`)
+    .all() as PragmaColumn[];
+  if (!cols.some((c) => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+  }
+}
+
 export function getDb(): DB {
   if (_db) return _db;
   ensureSolixHome();
@@ -84,6 +139,9 @@ export function getDb(): DB {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.exec(SCHEMA);
+  // Idempotent column adds for repos upgrading from M0+M1.
+  ensureColumn(db, 'sessions', 'kind', "kind TEXT NOT NULL DEFAULT 'user'");
+  ensureColumn(db, 'sessions', 'advisor_role', 'advisor_role TEXT');
   _db = db;
   return db;
 }

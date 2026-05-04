@@ -1,5 +1,5 @@
 import { nanoid } from 'nanoid';
-import type { HookEvent, Model } from '@solix/shared';
+import type { GalaxyManifest, HookEvent, Model } from '@solix/shared';
 import type { DB } from './db.js';
 import type { Broadcaster } from './broadcaster.js';
 import { ensureProject } from './state/projects.js';
@@ -19,6 +19,11 @@ import {
   startMission,
 } from './state/missions.js';
 import { recordToolCall } from './state/toolcalls.js';
+import {
+  getAdvisor,
+  setAdvisorPinned,
+} from './state/advisors.js';
+import type { Launcher } from './launcher.js';
 
 interface PendingPermission {
   requestId: string;
@@ -34,7 +39,12 @@ export class EventRouter {
   constructor(
     private db: DB,
     private broadcaster: Broadcaster,
+    private launcher?: Launcher,
   ) {}
+
+  setLauncher(launcher: Launcher): void {
+    this.launcher = launcher;
+  }
 
   handleHookEvent(event: HookEvent): void {
     try {
@@ -98,6 +108,7 @@ export class EventRouter {
   private onSessionStart(event: HookEvent): void {
     const project = ensureProject(this.db, event.cwd);
     const sessionId = this.extractSessionId(event);
+    const advisorRole = this.launcher?.advisorRoleForPid(event.pid);
     const session = upsertSession(this.db, {
       id: sessionId,
       pid: event.pid,
@@ -106,9 +117,13 @@ export class EventRouter {
       origin:
         (event.payload as Record<string, unknown>).origin === 'internal'
           ? 'internal'
-          : 'external',
+          : advisorRole
+            ? 'internal'
+            : 'external',
       model: this.extractModel(event),
       parentSessionId: this.extractParentSessionId(event),
+      kind: advisorRole ? 'advisor' : 'user',
+      advisorRole,
     });
     this.broadcaster.broadcast({ type: 'session_upsert', session });
   }
@@ -309,6 +324,56 @@ export class EventRouter {
     });
   }
 
+  invokeAdvisor(
+    advisorId: string,
+    targetSessionId?: string,
+    prompt?: string,
+  ): boolean {
+    const advisor = getAdvisor(this.db, advisorId);
+    if (!advisor) return false;
+    const target = targetSessionId
+      ? getSession(this.db, targetSessionId)
+      : null;
+    const targetLabel = target
+      ? `${target.name ?? target.id.slice(0, 8)} (${target.cwd})`
+      : 'no focused planet';
+    this.broadcaster.broadcast({
+      type: 'toast',
+      level: 'info',
+      message: `Invoke ${advisor.codename} → ${targetLabel}${
+        prompt ? `: ${prompt.slice(0, 60)}` : ''
+      }`,
+    });
+    return true;
+  }
+
+  pinAdvisor(advisorId: string, cwd: string = process.cwd()): boolean {
+    if (!this.launcher) {
+      // No launcher available — flip DB state but don't spawn anything.
+      const advisor = setAdvisorPinned(this.db, advisorId, true);
+      if (!advisor) return false;
+      this.broadcaster.broadcast({ type: 'advisor_upsert', advisor });
+      return true;
+    }
+    const ok = this.launcher.pin(advisorId, cwd);
+    const advisor = getAdvisor(this.db, advisorId);
+    if (advisor)
+      this.broadcaster.broadcast({ type: 'advisor_upsert', advisor });
+    return ok;
+  }
+
+  unpinAdvisor(advisorId: string): boolean {
+    if (this.launcher) {
+      this.launcher.unpin(advisorId);
+    } else {
+      setAdvisorPinned(this.db, advisorId, false);
+    }
+    const advisor = getAdvisor(this.db, advisorId);
+    if (advisor)
+      this.broadcaster.broadcast({ type: 'advisor_upsert', advisor });
+    return true;
+  }
+
   resolvePermission(requestId: string, approved: boolean): boolean {
     const pending = this.permissions.get(requestId);
     if (!pending) return false;
@@ -318,6 +383,15 @@ export class EventRouter {
     if (session)
       this.broadcaster.broadcast({ type: 'session_upsert', session });
     return true;
+  }
+
+  broadcastGalaxyImported(manifest: GalaxyManifest): void {
+    this.broadcaster.broadcast({ type: 'galaxy_imported', manifest });
+    this.broadcaster.broadcast({
+      type: 'toast',
+      level: 'info',
+      message: `Galaxy "${manifest.name}" imported`,
+    });
   }
 
   setContextUsage(sessionId: string, pct: number): void {

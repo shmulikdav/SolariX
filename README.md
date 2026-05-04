@@ -7,8 +7,10 @@ sun. You see all your agents at once, click any planet to inspect its mission
 log, and react to permission requests without context-switching between
 terminals.
 
-> **Status:** M0+M1 foundation. Full hook pipeline → SQLite → WebSocket → 3D
-> scene works end-to-end. M2+ visual richness, M3 side-panel chat, and M3.5
+> **Status:** M0–M1 foundation + a built-in crew of 10 advisor agents
+> (Compass · Forge · Lumen · Argus · Sentinel + 5 opt-in), a real skills
+> asteroid belt, and shareable galaxies (local file or opt-in cloud
+> registry). M2 visual polish, M3 transcript-tail mission log, and M3.5
 > internal-session launcher are next.
 
 ## Quick start
@@ -63,6 +65,9 @@ Hook scripts have three load-bearing properties:
 | Project / workspace | Solar system |
 | Claude Code session | Planet |
 | Subagent (Task tool) | Moon orbiting its planet |
+| **Built-in advisor (PM, Builder, UX, …)** | **Inner crew ring planet near the sun** |
+| **Pinned advisor (always-on)** | **Outer planet with gold accent ring** |
+| **Skill (Anthropic + Solix pack)** | **Asteroid in the outer belt** |
 | Active session | Bright emissive, faster orbit |
 | `awaiting_permission` | Red pulsing flare |
 | `awaiting_input` | Yellow flare |
@@ -70,6 +75,83 @@ Hook scripts have three load-bearing properties:
 | Tool call | Comet streak |
 | Context usage | Planet size (0.55 → 1.05) |
 | Model | Surface color (opus=purple, sonnet=blue, haiku=cyan) |
+
+## Advisors — the built-in crew
+
+Solix ships 10 advisor agents installed into `~/.claude/agents/`:
+
+| # | Codename | Role | Default |
+|---|---|---|---|
+| 1 | Compass | Product Manager | enabled |
+| 2 | Forge | Builder | enabled |
+| 3 | Lumen | UX/UI Designer | enabled |
+| 4 | Argus | Code Reviewer | enabled |
+| 5 | Sentinel | Security Auditor | enabled |
+| 6 | Mira | Test Engineer / QA | opt-in |
+| 7 | Echo | Devrel / Docs | opt-in |
+| 8 | Helios | Performance Engineer | opt-in |
+| 9 | Vale | Release Engineer | opt-in |
+| 10 | Atlas | Skill Curator | opt-in |
+
+```sh
+solix advisors list
+solix advisors enable mira
+solix advisors pin compass     # always-on planet (uses real claude binary;
+                               # set SOLIX_FAKE_CLAUDE=1 for synthetic dev mode)
+solix advisors unpin compass
+```
+
+In the browser, click an advisor in the inner ring to open its panel: read
+its system prompt, hand it a brief, and Invoke it on the focused planet.
+
+## Skills — the asteroid belt
+
+Solix discovers SKILL.md manifests from two sources:
+
+- `~/.claude/skills/` — the upstream Anthropic catalog
+- `~/.solix/skills/` — Solix's bundled pack (4 skills:
+  `mission-summary`, `permission-explainer`, `galaxy-publish`,
+  `advisor-prompt`)
+
+```sh
+solix skills list
+solix skills install solix:mission-summary --project <projectId>
+```
+
+Click any asteroid in the browser to read the manifest and see which
+advisors require it.
+
+## Galaxies — share your space
+
+A galaxy is a portable JSON manifest of your enabled advisors, discovered
+skills, and known projects. Each user runs Solix locally; galaxies move
+between users.
+
+**Local file (no servers):**
+
+```sh
+solix galaxy export ./my-setup.galaxy.json --name "Indie Hacker"
+solix galaxy import ./my-setup.galaxy.json
+solix galaxy import https://gist.githubusercontent.com/.../my.galaxy.json
+```
+
+**Opt-in cloud registry:** point Solix at any HTTP registry that speaks
+`PUT /v1/galaxies/:slug` and `GET /v1/galaxies/:slug`:
+
+```sh
+export SOLIX_REGISTRY_URL=https://registry.example.com
+export SOLIX_REGISTRY_KEY=...
+solix start
+
+# anywhere, anytime
+solix galaxy publish shmulik/dev --name "Shmulik Dev"
+solix galaxy install shmulik/dev
+```
+
+**Safety property of imports:** they only flip advisor `enabled` flags and
+record project hints. They never spawn pinned advisors, run shell commands,
+auto-install skills to the filesystem, or schedule tasks. You stay in
+control.
 
 ## Development
 
@@ -106,9 +188,11 @@ curl -s -X POST http://127.0.0.1:4242/events \
 solix/
 ├── packages/
 │   ├── shared/   # types + protocol shared across server/web/cli
-│   ├── server/   # Hono + WebSocket + SQLite + event router
-│   ├── web/      # React + react-three-fiber solar system
-│   └── cli/      # commander entrypoint + hook scripts
+│   ├── server/   # Hono + WebSocket + SQLite + event router + launcher + cloud
+│   ├── web/      # React + react-three-fiber solar system + advisor ring + asteroid belt
+│   ├── cli/      # commander entrypoint + hook scripts
+│   ├── agents/   # canonical .md files for 10 advisor agents (+ manifest.json)
+│   └── skills/   # the bundled Solix skill pack (4 SKILL.md manifests)
 ├── pnpm-workspace.yaml
 └── tsconfig.base.json
 ```

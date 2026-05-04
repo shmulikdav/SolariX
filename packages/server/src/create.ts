@@ -2,8 +2,11 @@ import { serve } from '@hono/node-server';
 import { Broadcaster } from './broadcaster.js';
 import { getDb } from './db.js';
 import { createHttpApp } from './http.js';
+import { Launcher } from './launcher.js';
 import { EventRouter } from './router.js';
 import { attachWs } from './ws.js';
+import { seedAdvisors } from './state/advisors.js';
+import { discoverSkills } from './state/skills.js';
 
 export interface SolixServerOptions {
   port?: number;
@@ -23,8 +26,11 @@ export async function createSolixServer(
   const hostname = opts.hostname ?? '127.0.0.1';
 
   const db = getDb();
+  seedAdvisors(db);
+  discoverSkills(db);
   const broadcaster = new Broadcaster();
-  const router = new EventRouter(db, broadcaster);
+  const launcher = new Launcher(db, broadcaster);
+  const router = new EventRouter(db, broadcaster, launcher);
   const app = createHttpApp({ db, router });
 
   const server = serve({
@@ -44,6 +50,7 @@ export async function createSolixServer(
     hostname,
     close: () =>
       new Promise<void>((resolve) => {
+        launcher.shutdownAll();
         server.close(() => resolve());
       }),
   };

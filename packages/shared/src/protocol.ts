@@ -1,9 +1,12 @@
 import type {
+  Advisor,
   ChatDelta,
+  GalaxyManifest,
   Mission,
   Model,
   Project,
   Session,
+  Skill,
   ToolCall,
 } from './types.js';
 
@@ -13,6 +16,8 @@ export type ServerMessage =
       projects: Project[];
       sessions: Session[];
       missions: Mission[];
+      advisors: Advisor[];
+      skills: Skill[];
     }
   | { type: 'session_upsert'; session: Session }
   | { type: 'session_remove'; sessionId: string }
@@ -28,6 +33,9 @@ export type ServerMessage =
   | { type: 'plan_proposed'; sessionId: string; plan: string }
   | { type: 'chat_delta'; sessionId: string; delta: ChatDelta }
   | { type: 'context_update'; sessionId: string; usagePct: number }
+  | { type: 'advisor_upsert'; advisor: Advisor }
+  | { type: 'skill_upsert'; skill: Skill }
+  | { type: 'galaxy_imported'; manifest: GalaxyManifest }
   | {
       type: 'toast';
       level: 'info' | 'warn' | 'error';
@@ -50,4 +58,7 @@ export type ClientMessage =
       model?: Model;
       initialPrompt?: string;
     }
-  | { type: 'terminate_session'; sessionId: string };
+  | { type: 'terminate_session'; sessionId: string }
+  | { type: 'invoke_advisor'; advisorId: string; targetSessionId?: string; prompt?: string }
+  | { type: 'pin_advisor'; advisorId: string }
+  | { type: 'unpin_advisor'; advisorId: string };

@@ -35,12 +35,25 @@ export function Planet({ session }: PlanetProps): JSX.Element {
 
   const moons = useSolixStore((s) => selectMoons(s, session.id));
   const selectSession = useSolixStore((s) => s.selectSession);
+  const selectAdvisor = useSolixStore((s) => s.selectAdvisor);
+  const advisorForRole = useSolixStore((s) => {
+    if (!session.advisorRole) return null;
+    return (
+      Object.values(s.advisors).find((a) => a.id === session.advisorRole) ?? null
+    );
+  });
   const selectedSessionId = useSolixStore((s) => s.selectedSessionId);
   const isSelected = selectedSessionId === session.id;
+  const isAdvisor = session.kind === 'advisor';
 
   const baseColor = useMemo(
-    () => new Color(modelColor(session.model)),
-    [session.model],
+    () =>
+      new Color(
+        isAdvisor && advisorForRole
+          ? advisorForRole.color
+          : modelColor(session.model),
+      ),
+    [isAdvisor, advisorForRole, session.model],
   );
 
   useFrame((state, delta) => {
@@ -106,6 +119,9 @@ export function Planet({ session }: PlanetProps): JSX.Element {
   const onClick = (e: ThreeEvent<MouseEvent>): void => {
     e.stopPropagation();
     selectSession(session.id);
+    if (isAdvisor && advisorForRole) {
+      selectAdvisor(advisorForRole.id);
+    }
   };
 
   const planetSize = 0.55;
@@ -134,6 +150,13 @@ export function Planet({ session }: PlanetProps): JSX.Element {
         <meshBasicMaterial color="#a78bfa" transparent opacity={0.5} side={2} />
       </mesh>
 
+      {isAdvisor && (
+        <mesh rotation={[Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[planetSize * 1.25, planetSize * 1.35, 64]} />
+          <meshBasicMaterial color="#fbbf24" transparent opacity={0.7} side={2} />
+        </mesh>
+      )}
+
       {moons.map((moon, i) => (
         <Moon key={moon.id} session={moon} index={i} speed={moonOrbitSpeed()} />
       ))}
@@ -148,11 +171,23 @@ export function Planet({ session }: PlanetProps): JSX.Element {
           className={`px-2 py-1 rounded text-[10px] whitespace-nowrap border ${
             isSelected
               ? 'bg-solix-accent/20 border-solix-accent text-white'
-              : 'bg-black/50 border-white/10 text-slate-200'
+              : isAdvisor
+                ? 'bg-amber-500/10 border-amber-300/50 text-amber-100'
+                : 'bg-black/50 border-white/10 text-slate-200'
           }`}
         >
-          <div className="font-semibold">
-            {session.name ?? session.id.slice(0, 8)}
+          <div className="font-semibold flex items-center gap-1">
+            {isAdvisor && advisorForRole && (
+              <span style={{ color: advisorForRole.color }}>
+                {advisorForRole.glyph}
+              </span>
+            )}
+            <span>
+              {session.name ??
+                (isAdvisor && advisorForRole
+                  ? `${advisorForRole.codename} (pinned)`
+                  : session.id.slice(0, 8))}
+            </span>
           </div>
           <div className="opacity-70">
             {String(session.model)} · {statusLabel(session.status)}
