@@ -1,0 +1,151 @@
+import { existsSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import {
+  CLAUDE_AGENTS_DIR,
+  CLAUDE_BACKUP,
+  CLAUDE_SETTINGS,
+  HOOKS_DIR,
+  HOOK_NAMES,
+  SOLIX_HOME,
+  SOLIX_SKILLS_DIR,
+} from './paths.js';
+
+interface CheckResult {
+  ok: boolean;
+  label: string;
+  detail?: string;
+}
+
+async function probeHealth(port: number): Promise<CheckResult> {
+  const url = `http://127.0.0.1:${port}/api/health`;
+  try {
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(800),
+    });
+    if (!res.ok) {
+      return { ok: false, label: 'Server reachable', detail: `HTTP ${res.status}` };
+    }
+    return { ok: true, label: 'Server reachable', detail: url };
+  } catch (err) {
+    return {
+      ok: false,
+      label: 'Server reachable',
+      detail: `not running on ${url}`,
+    };
+  }
+}
+
+export async function doctor(): Promise<void> {
+  const port = Number(process.env.SOLIX_PORT ?? 4242);
+  const checks: CheckResult[] = [];
+
+  const nodeVersion = process.versions.node;
+  const major = Number(nodeVersion.split('.')[0]);
+  checks.push({
+    ok: major >= 20,
+    label: 'Node.js >= 20',
+    detail: `v${nodeVersion}`,
+  });
+
+  checks.push({
+    ok: existsSync(SOLIX_HOME),
+    label: 'Solix home directory',
+    detail: SOLIX_HOME,
+  });
+
+  let allHooksPresent = true;
+  const missing: string[] = [];
+  for (const name of HOOK_NAMES) {
+    const p = join(HOOKS_DIR, `${name}.sh`);
+    if (!existsSync(p)) {
+      allHooksPresent = false;
+      missing.push(name);
+      continue;
+    }
+    try {
+      statSync(p);
+    } catch {
+      allHooksPresent = false;
+      missing.push(name);
+    }
+  }
+  checks.push({
+    ok: allHooksPresent,
+    label: 'Hook scripts installed',
+    detail: allHooksPresent
+      ? `${HOOK_NAMES.length} scripts in ${HOOKS_DIR}`
+      : `missing: ${missing.join(', ')}`,
+  });
+
+  checks.push({
+    ok: existsSync(CLAUDE_SETTINGS),
+    label: 'Claude settings.json present',
+    detail: CLAUDE_SETTINGS,
+  });
+
+  checks.push({
+    ok: existsSync(CLAUDE_BACKUP),
+    label: 'Backup of settings.json',
+    detail: existsSync(CLAUDE_BACKUP) ? CLAUDE_BACKUP : 'not yet created',
+  });
+
+  let advisorCount = 0;
+  if (existsSync(CLAUDE_AGENTS_DIR)) {
+    try {
+      advisorCount = readdirSync(CLAUDE_AGENTS_DIR).filter((f) =>
+        f.endsWith('.md'),
+      ).length;
+    } catch {
+      advisorCount = 0;
+    }
+  }
+  checks.push({
+    ok: advisorCount > 0,
+    label: 'Advisor agents installed',
+    detail:
+      advisorCount > 0
+        ? `${advisorCount} agents in ${CLAUDE_AGENTS_DIR}`
+        : 'none yet — run `solix install`',
+  });
+
+  let skillCount = 0;
+  if (existsSync(SOLIX_SKILLS_DIR)) {
+    try {
+      skillCount = readdirSync(SOLIX_SKILLS_DIR).filter((entry) => {
+        try {
+          return statSync(join(SOLIX_SKILLS_DIR, entry)).isDirectory();
+        } catch {
+          return false;
+        }
+      }).length;
+    } catch {
+      skillCount = 0;
+    }
+  }
+  checks.push({
+    ok: skillCount >= 0,
+    label: 'Solix skill pack',
+    detail:
+      skillCount > 0 ? `${skillCount} skills in ${SOLIX_SKILLS_DIR}` : 'none',
+  });
+
+  checks.push(await probeHealth(port));
+
+  console.log('\nSolix Diagnostics\n');
+  let allOk = true;
+  for (const c of checks) {
+    const icon = c.ok ? '\x1b[32m✓\x1b[0m' : '\x1b[31m✗\x1b[0m';
+    const detail = c.detail ? `  \x1b[2m${c.detail}\x1b[0m` : '';
+    console.log(`${icon} ${c.label}${detail}`);
+    if (!c.ok) allOk = false;
+  }
+  console.log('');
+  if (allOk) {
+    console.log('All checks passed. Solix is healthy.\n');
+  } else {
+    console.log(
+      'Some checks failed. Run `solix install` and `solix start` to fix common issues.\n',
+    );
+    process.exitCode = 1;
+  }
+}

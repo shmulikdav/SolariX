@@ -1,0 +1,3 @@
+# Fetched on demand via `pnpm --filter @solix/web prepare-assets`.
+# Binary; not worth versioning.
+public/hdri/*.hdr
