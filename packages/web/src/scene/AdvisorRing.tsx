@@ -14,8 +14,8 @@ import {
   useSolixStore,
 } from '../store/index.js';
 
-const RING_RADIUS = 3.6;
-const PLANET_SIZE = 0.32;
+const RING_RADIUS = 3.3;
+const PLANET_SIZE = 0.28;
 
 interface AdvisorPlanetProps {
   advisor: Advisor;
@@ -58,7 +58,7 @@ function AdvisorPlanet({
       meshRef.current.rotation.y += delta * 0.4;
     }
     if (materialRef.current) {
-      const target = advisor.pinned ? 0.9 : 0.35;
+      const target = advisor.pinned ? 0.6 : 0.22;
       materialRef.current.emissiveIntensity = MathUtils.lerp(
         materialRef.current.emissiveIntensity,
         target,
@@ -69,10 +69,10 @@ function AdvisorPlanet({
       const pulse = isSelected
         ? 1.0
         : 0.5 + 0.5 * Math.sin(t * 1.1 + index);
-      const s = 1.6 + pulse * 0.2;
+      const s = 1.0 + pulse * 0.15;
       haloRef.current.scale.set(s, s, s);
       const mat = haloRef.current.material as MeshStandardMaterial;
-      mat.opacity = isSelected ? 0.45 : 0.18 + pulse * 0.1;
+      mat.opacity = isSelected ? 0.3 : 0.1 + pulse * 0.06;
     }
   });
 
@@ -89,18 +89,18 @@ function AdvisorPlanet({
           ref={materialRef}
           color={baseColor}
           emissive={baseColor}
-          emissiveIntensity={0.35}
+          emissiveIntensity={0.22}
           roughness={0.55}
           metalness={0.4}
         />
       </mesh>
       <mesh ref={haloRef}>
-        <sphereGeometry args={[PLANET_SIZE * 1.5, 16, 16]} />
+        <sphereGeometry args={[PLANET_SIZE * 1.15, 16, 16]} />
         <meshStandardMaterial
           color={baseColor}
           emissive={baseColor}
           transparent
-          opacity={0.2}
+          opacity={0.12}
           roughness={1}
         />
       </mesh>

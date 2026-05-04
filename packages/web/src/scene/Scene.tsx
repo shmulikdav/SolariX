@@ -1,5 +1,5 @@
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls } from '@react-three/drei';
+import { OrbitControls, Stars } from '@react-three/drei';
 import {
   selectAdvisorPlanets,
   selectPlanets,
@@ -35,8 +35,25 @@ export function Scene(): JSX.Element {
       }}
     >
       <color attach="background" args={['#05060c']} />
-      <fog attach="fog" args={['#05060c', 30, 220]} />
-      <ambientLight intensity={0.15} />
+      <fog attach="fog" args={['#080a14', 60, 280]} />
+      <ambientLight intensity={0.12} />
+      {/*
+        Procedural deep-space starfield. drei's <Stars> renders a
+        layered field with depth + parallax + a subtle twinkle. No
+        asset fetch; no offline failure mode; full control over
+        density and saturation. Replaces the earlier HDRI sky which
+        ended up showing the GROUND of an outdoor night-photo HDR
+        instead of an actual deep-space view.
+      */}
+      <Stars
+        radius={180}
+        depth={80}
+        count={6000}
+        factor={4}
+        saturation={0.4}
+        fade
+        speed={0.6}
+      />
       <Starfield />
       <Sun />
       <AdvisorRing />

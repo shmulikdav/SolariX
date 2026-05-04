@@ -22,6 +22,11 @@ pnpm --filter @shmulikdav/solix exec tsx src/index.ts install   # patches ~/.cla
 pnpm --filter @shmulikdav/solix exec tsx src/index.ts start     # serves API + WS + UI
 ```
 
+The starfield is procedural (drei's `<Stars>`) — no asset fetch,
+nothing to download, runs offline. If you'd rather drop a real
+equirectangular space JPG/HDR in as a custom skybox, see the
+"Custom sky" note further down.
+
 Open **http://127.0.0.1:4242** — you'll get a Welcome modal walking you
 through five things you can do.
 
@@ -167,6 +172,22 @@ solix galaxy install shmulik/dev
 record project hints. They never spawn pinned advisors, run shell commands,
 auto-install skills to the filesystem, or schedule tasks. You stay in
 control.
+
+## Custom sky (optional)
+
+Solix's default sky is a procedural starfield from drei's `<Stars>` —
+no asset fetch, runs offline, scales to any density. If you want a
+real equirectangular Milky Way image instead (e.g. from
+[solarsystemscope.com/textures](https://www.solarsystemscope.com/textures/)
+or any CC-licensed NASA/ESO panorama), drop a `.hdr` or 4K JPG at
+`packages/web/public/hdri/milky_way_2k.hdr` and swap the `<Stars>` line
+in `Scene.tsx` for an `<Environment background files="..." />` block.
+
+A Polyhaven HDRI fetch script is included for convenience:
+`pnpm --filter @solix/web prepare-assets`. Note that most Polyhaven
+HDRIs are *outdoor night photos* with ground in the lower hemisphere —
+useful as ambient lighting, not as a deep-space backdrop. Pure-space
+panoramas (NASA/ESO) work better as skyboxes.
 
 ## Context management
 

@@ -2,7 +2,7 @@ import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { BufferGeometry, BufferAttribute, type Points } from 'three';
 
-export function Starfield({ count = 4000 }: { count?: number }): JSX.Element {
+export function Starfield({ count = 800 }: { count?: number }): JSX.Element {
   const ref = useRef<Points>(null);
 
   const geometry = useMemo(() => {
@@ -34,10 +34,10 @@ export function Starfield({ count = 4000 }: { count?: number }): JSX.Element {
     <points ref={ref} geometry={geometry}>
       <pointsMaterial
         color="#cbd5e1"
-        size={0.6}
+        size={0.4}
         sizeAttenuation
         transparent
-        opacity={0.85}
+        opacity={0.35}
       />
     </points>
   );

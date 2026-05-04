@@ -6,7 +6,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepare-assets": "node scripts/fetch-hdri.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^9.105.0",
