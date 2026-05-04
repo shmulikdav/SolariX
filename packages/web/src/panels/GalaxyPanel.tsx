@@ -23,6 +23,13 @@ export function GalaxyPanel({
   const [importUrl, setImportUrl] = useState('');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  const sessionsCount = useSolixStore(
+    (s) => Object.keys(s.sessions).length,
+  );
+  const advisorsEnabledCount = useSolixStore(
+    (s) => Object.values(s.advisors).filter((a) => a.enabled).length,
+  );
+  const skillsCount = useSolixStore((s) => Object.keys(s.skills).length);
 
   if (!open) return null;
 
@@ -84,14 +91,6 @@ export function GalaxyPanel({
   const onImportUrl = (): void => {
     void submitImport(JSON.stringify({ url: importUrl }));
   };
-
-  const sessionsCount = useSolixStore(
-    (s) => Object.keys(s.sessions).length,
-  );
-  const advisorsEnabledCount = useSolixStore(
-    (s) => Object.values(s.advisors).filter((a) => a.enabled).length,
-  );
-  const skillsCount = useSolixStore((s) => Object.keys(s.skills).length);
 
   return (
     <div className="absolute top-0 right-0 h-full w-[480px] bg-solix-panel border-l border-solix-border backdrop-blur-md flex flex-col z-30">
