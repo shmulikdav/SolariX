@@ -2,9 +2,13 @@ import { useSolixStore, selectPlanets } from '../store/index.js';
 
 interface TopBarProps {
   onOpenGalaxy?: () => void;
+  onNewTask?: () => void;
 }
 
-export function TopBar({ onOpenGalaxy }: TopBarProps = {}): JSX.Element {
+export function TopBar({
+  onOpenGalaxy,
+  onNewTask,
+}: TopBarProps = {}): JSX.Element {
   const connected = useSolixStore((s) => s.connected);
   const planets = useSolixStore(selectPlanets);
 
@@ -47,6 +51,15 @@ export function TopBar({ onOpenGalaxy }: TopBarProps = {}): JSX.Element {
         <Stat label="active" value={counts.active} color="text-solix-ok" />
         <Stat label="attention" value={counts.attention} color="text-solix-warn" />
         <Stat label="idle" value={counts.idle} color="text-slate-400" />
+        {onNewTask && (
+          <button
+            onClick={onNewTask}
+            className="px-2 py-1 rounded bg-solix-ok/15 border border-solix-ok/40 text-solix-ok hover:bg-solix-ok/25"
+            title="Launch a new Claude Code task (L)"
+          >
+            + Task
+          </button>
+        )}
         {onOpenGalaxy && (
           <button
             onClick={onOpenGalaxy}

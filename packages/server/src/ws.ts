@@ -83,10 +83,14 @@ function handleClientMessage(
       // M3.5: hand off to launcher; for M0 we just mark terminated.
       break;
     case 'send_prompt':
-      // M3.5: hand to launcher's stdin write.
+      ctx.router.sendPromptToSession(msg.sessionId, msg.text);
       break;
     case 'launch_session':
-      // M3.5.
+      ctx.router.launchInternalSession({
+        cwd: msg.cwd,
+        model: msg.model,
+        initialPrompt: msg.initialPrompt,
+      });
       break;
     case 'invoke_advisor':
       ctx.router.invokeAdvisor(

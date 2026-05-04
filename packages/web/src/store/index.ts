@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type {
   Advisor,
+  ChatDelta,
   ClientMessage,
   Mission,
   Project,
@@ -22,6 +23,10 @@ export interface RecentToolCall extends ToolCall {
   receivedAt: number;
 }
 
+export interface ChatEntry extends ChatDelta {
+  receivedAt: number;
+}
+
 interface SolixState {
   connected: boolean;
   projects: Record<string, Project>;
@@ -31,6 +36,8 @@ interface SolixState {
   skills: Record<string, Skill>;
   recentToolCalls: RecentToolCall[];
   pendingPermissions: Record<string, PendingPermission>;
+  // Per-session chat log, in arrival order. Capped at 200 entries per session.
+  chatBySessionId: Record<string, ChatEntry[]>;
   selectedSessionId: string | null;
   selectedAdvisorId: string | null;
   selectedSkillId: string | null;
@@ -46,6 +53,8 @@ interface SolixState {
   invokeAdvisor: (advisorId: string, prompt?: string) => void;
   pinAdvisor: (advisorId: string) => void;
   unpinAdvisor: (advisorId: string) => void;
+  sendPromptTo: (sessionId: string, text: string) => void;
+  launchTask: (cwd: string, model: string, initialPrompt?: string) => void;
 
   send: (msg: ClientMessage) => void;
   attachSocket: (send: (msg: ClientMessage) => void) => void;
@@ -60,6 +69,7 @@ export const useSolixStore = create<SolixState>((set, get) => ({
   missions: {},
   advisors: {},
   skills: {},
+  chatBySessionId: {},
   recentToolCalls: [],
   pendingPermissions: {},
   selectedSessionId: null,
@@ -183,6 +193,24 @@ export const useSolixStore = create<SolixState>((set, get) => ({
         });
         break;
       }
+      case 'chat_delta': {
+        const entry: ChatEntry = { ...msg.delta, receivedAt: Date.now() };
+        set((s) => {
+          const existing = s.chatBySessionId[msg.sessionId] ?? [];
+          // De-dupe by messageId so retries from the watcher don't double up.
+          const deduped = existing.filter(
+            (e) => e.messageId !== entry.messageId,
+          );
+          const next = [...deduped, entry].slice(-200);
+          return {
+            chatBySessionId: {
+              ...s.chatBySessionId,
+              [msg.sessionId]: next,
+            },
+          };
+        });
+        break;
+      }
       case 'toast': {
         const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         set((s) => ({
@@ -245,6 +273,38 @@ export const useSolixStore = create<SolixState>((set, get) => ({
 
   unpinAdvisor: (advisorId) => {
     get().send({ type: 'unpin_advisor', advisorId });
+  },
+
+  sendPromptTo: (sessionId, text) => {
+    if (!text.trim()) return;
+    get().send({ type: 'send_prompt', sessionId, text });
+    // Optimistically render the user's prompt — the watcher will replace it
+    // with the canonical entry from the transcript a second later.
+    const optimistic: ChatEntry = {
+      messageId: `pending-${Date.now()}`,
+      role: 'user',
+      content: text,
+      ts: Date.now(),
+      done: true,
+      receivedAt: Date.now(),
+    };
+    set((s) => ({
+      chatBySessionId: {
+        ...s.chatBySessionId,
+        [sessionId]: [...(s.chatBySessionId[sessionId] ?? []), optimistic].slice(
+          -200,
+        ),
+      },
+    }));
+  },
+
+  launchTask: (cwd, model, initialPrompt) => {
+    get().send({
+      type: 'launch_session',
+      cwd,
+      model,
+      initialPrompt,
+    });
   },
 
   send: () => {

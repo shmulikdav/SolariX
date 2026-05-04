@@ -8,11 +8,13 @@ import { SidePanel } from './panels/SidePanel.js';
 import { AdvisorPanel } from './panels/AdvisorPanel.js';
 import { SkillPanel } from './panels/SkillPanel.js';
 import { GalaxyPanel } from './panels/GalaxyPanel.js';
+import { NewTaskModal } from './panels/NewTaskModal.js';
 import { useSolixStore } from './store/index.js';
 import { startWsClient } from './ws/client.js';
 
 export default function App(): JSX.Element {
   const [galaxyOpen, setGalaxyOpen] = useState(false);
+  const [newTaskOpen, setNewTaskOpen] = useState(false);
 
   useEffect(() => {
     startWsClient();
@@ -34,8 +36,11 @@ export default function App(): JSX.Element {
         state.selectAdvisor(null);
         state.selectSkill(null);
         setGalaxyOpen(false);
+        setNewTaskOpen(false);
       } else if (!isTextField && (e.key === 'g' || e.key === 'G')) {
         setGalaxyOpen((v) => !v);
+      } else if (!isTextField && (e.key === 'l' || e.key === 'L')) {
+        setNewTaskOpen(true);
       } else if (!isTextField && top && (e.key === 'y' || e.key === 'Y')) {
         state.resolvePermission(top.requestId, true);
       } else if (!isTextField && top && (e.key === 'n' || e.key === 'N')) {
@@ -49,7 +54,10 @@ export default function App(): JSX.Element {
   return (
     <div className="relative h-full w-full">
       <Scene />
-      <TopBar onOpenGalaxy={() => setGalaxyOpen(true)} />
+      <TopBar
+        onOpenGalaxy={() => setGalaxyOpen(true)}
+        onNewTask={() => setNewTaskOpen(true)}
+      />
       <PermissionTray />
       <SidePanel />
       <AdvisorPanel />
@@ -57,6 +65,10 @@ export default function App(): JSX.Element {
       <GalaxyPanel
         open={galaxyOpen}
         onClose={() => setGalaxyOpen(false)}
+      />
+      <NewTaskModal
+        open={newTaskOpen}
+        onClose={() => setNewTaskOpen(false)}
       />
       <Welcome onOpenGalaxy={() => setGalaxyOpen(true)} />
       <Toasts />

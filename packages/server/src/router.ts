@@ -25,6 +25,7 @@ import {
 } from './state/advisors.js';
 import { buildContextEnvelope } from './state/context.js';
 import type { Launcher } from './launcher.js';
+import type { TranscriptWatcherManager } from './state/transcript.js';
 
 interface PendingPermission {
   requestId: string;
@@ -41,6 +42,7 @@ export class EventRouter {
     private db: DB,
     private broadcaster: Broadcaster,
     private launcher?: Launcher,
+    private transcripts?: TranscriptWatcherManager,
   ) {}
 
   setLauncher(launcher: Launcher): void {
@@ -127,6 +129,11 @@ export class EventRouter {
       advisorRole,
     });
     this.broadcaster.broadcast({ type: 'session_upsert', session });
+    // Start tailing the session's transcript so the Chat tab streams in real
+    // time. Skipped for moons (subagents) — they share the parent's transcript.
+    if (!session.parentSessionId) {
+      this.transcripts?.startWatching(sessionId, event.cwd);
+    }
   }
 
   private onUserPromptSubmit(event: HookEvent): void {
@@ -387,6 +394,32 @@ export class EventRouter {
     if (session)
       this.broadcaster.broadcast({ type: 'session_upsert', session });
     return true;
+  }
+
+  launchInternalSession(opts: {
+    cwd: string;
+    model?: Model;
+    initialPrompt?: string;
+  }): { ok: boolean; sessionId?: string } {
+    if (!this.launcher) return { ok: false };
+    if (!opts.initialPrompt?.trim()) {
+      this.broadcaster.broadcast({
+        type: 'toast',
+        level: 'warn',
+        message: 'Launch needs an initial prompt',
+      });
+      return { ok: false };
+    }
+    return this.launcher.launch({
+      cwd: opts.cwd,
+      model: opts.model,
+      initialPrompt: opts.initialPrompt,
+    });
+  }
+
+  sendPromptToSession(sessionId: string, text: string): boolean {
+    if (!this.launcher) return false;
+    return this.launcher.sendPromptToInternal(sessionId, text);
   }
 
   broadcastGalaxyImported(manifest: GalaxyManifest): void {

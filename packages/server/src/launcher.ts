@@ -1,5 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { nanoid } from 'nanoid';
+import type { Model } from '@solix/shared';
 import type { DB } from './db.js';
 import type { Broadcaster } from './broadcaster.js';
 import { ensureProject } from './state/projects.js';
@@ -16,11 +18,22 @@ interface PinnedProcess {
   syntheticSessionId?: string;
 }
 
+interface InternalTaskRecord {
+  cwd: string;
+  // Last sessionId returned by claude --print on this cwd, if any. Used to
+  // pass --resume on follow-up prompts so multi-turn works.
+  lastClaudeSessionId?: string;
+}
+
 const FAKE_CLAUDE = process.env.SOLIX_FAKE_CLAUDE === '1';
 
 export class Launcher {
   private byPid = new Map<number, PinnedProcess>();
   private byAdvisor = new Map<string, PinnedProcess>();
+  // Sessions that were spawned by the UI's "+ Task" button. Keyed by the
+  // sessionId we synthesize at launch (not Claude's session_id, which arrives
+  // via the SessionStart hook later).
+  private internalTasks = new Map<string, InternalTaskRecord>();
 
   constructor(
     private db: DB,
@@ -176,5 +189,217 @@ export class Launcher {
     for (const advisorId of [...this.byAdvisor.keys()]) {
       this.unpin(advisorId);
     }
+  }
+
+  /**
+   * Spawn a fresh `claude --print` task in the given cwd. Hooks fire as
+   * usual so the planet appears and animates; when the process exits, the
+   * captured stdout becomes a final assistant message in the chat.
+   *
+   * In FAKE_CLAUDE dev mode the task is synthesized so the visuals work
+   * without a real claude binary on PATH.
+   */
+  launch(opts: {
+    cwd: string;
+    model?: Model;
+    initialPrompt: string;
+  }): { ok: boolean; sessionId?: string } {
+    if (!opts.initialPrompt.trim()) return { ok: false };
+    if (FAKE_CLAUDE) {
+      return this.launchSynthetic(opts);
+    }
+    if (!existsSync(opts.cwd)) {
+      this.broadcaster.broadcast({
+        type: 'toast',
+        level: 'error',
+        message: `Launch failed: cwd does not exist (${opts.cwd})`,
+      });
+      return { ok: false };
+    }
+
+    const args: string[] = ['--print'];
+    if (opts.model) args.push('--model', String(opts.model));
+    args.push(opts.initialPrompt);
+
+    const sessionId = `task-${nanoid(8)}`;
+    return this.spawnPrint({
+      sessionId,
+      cwd: opts.cwd,
+      args,
+      isFollowUp: false,
+    });
+  }
+
+  sendPromptToInternal(sessionId: string, text: string): boolean {
+    if (!text.trim()) return false;
+    const session = this.db
+      .prepare(
+        'SELECT cwd, origin FROM sessions WHERE id = ? LIMIT 1',
+      )
+      .get(sessionId) as { cwd?: string; origin?: string } | undefined;
+    if (!session?.cwd) {
+      this.broadcaster.broadcast({
+        type: 'toast',
+        level: 'warn',
+        message: `Cannot send prompt: session not found`,
+      });
+      return false;
+    }
+    if (session.origin !== 'internal') {
+      this.broadcaster.broadcast({
+        type: 'toast',
+        level: 'warn',
+        message: `Cannot send prompt: external session — type in your terminal`,
+      });
+      return false;
+    }
+    if (FAKE_CLAUDE) {
+      this.broadcaster.broadcast({
+        type: 'chat_delta',
+        sessionId,
+        delta: {
+          messageId: `fake-a-${Date.now()}`,
+          role: 'assistant',
+          content: `(SOLIX_FAKE_CLAUDE=1) Pretending to run: ${text.slice(0, 200)}`,
+          ts: Date.now(),
+          done: true,
+        },
+      });
+      return true;
+    }
+    const args: string[] = ['--print', '--continue', text];
+    return this.spawnPrint({
+      sessionId,
+      cwd: session.cwd,
+      args,
+      isFollowUp: true,
+    }).ok;
+  }
+
+  private spawnPrint(opts: {
+    sessionId: string;
+    cwd: string;
+    args: string[];
+    isFollowUp: boolean;
+  }): { ok: boolean; sessionId?: string } {
+    let child: ChildProcess;
+    try {
+      child = spawn('claude', opts.args, {
+        cwd: opts.cwd,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        detached: false,
+      });
+    } catch (err) {
+      this.broadcaster.broadcast({
+        type: 'toast',
+        level: 'error',
+        message: `claude binary not found — is Claude Code installed?`,
+      });
+      console.warn('[launcher] spawn failed', err);
+      return { ok: false };
+    }
+
+    const pid = child.pid ?? 0;
+    if (!opts.isFollowUp) {
+      this.internalTasks.set(opts.sessionId, { cwd: opts.cwd });
+    }
+
+    let stdout = '';
+    let stderr = '';
+    child.stdout?.setEncoding('utf8').on('data', (c: string) => (stdout += c));
+    child.stderr?.setEncoding('utf8').on('data', (c: string) => (stderr += c));
+
+    this.broadcaster.broadcast({
+      type: 'toast',
+      level: 'info',
+      message: `Launched task in ${opts.cwd} (pid ${pid})`,
+    });
+
+    child.on('exit', (code) => {
+      const text = stdout.trim();
+      if (text) {
+        // The hook stream already produced session/mission/tool events. This
+        // final delta delivers the model's text response into the Chat tab.
+        // We use the synthetic sessionId for the FIRST run; for follow-ups
+        // we route to the existing sessionId.
+        this.broadcaster.broadcast({
+          type: 'chat_delta',
+          sessionId: opts.sessionId,
+          delta: {
+            messageId: `task-${opts.sessionId}-${Date.now()}`,
+            role: 'assistant',
+            content: text,
+            ts: Date.now(),
+            done: true,
+          },
+        });
+      }
+      if (code !== 0) {
+        this.broadcaster.broadcast({
+          type: 'toast',
+          level: 'warn',
+          message: `Task exited ${code}${stderr ? `: ${stderr.slice(0, 120)}` : ''}`,
+        });
+      }
+    });
+
+    child.on('error', (err) => {
+      this.broadcaster.broadcast({
+        type: 'toast',
+        level: 'error',
+        message: `Task error: ${err.message}`,
+      });
+    });
+
+    return { ok: true, sessionId: opts.sessionId };
+  }
+
+  private launchSynthetic(opts: {
+    cwd: string;
+    model?: Model;
+    initialPrompt: string;
+  }): { ok: boolean; sessionId: string } {
+    const project = ensureProject(this.db, opts.cwd);
+    const sessionId = `task-${nanoid(8)}`;
+    const fakePid = 200000 + Math.floor(Math.random() * 100000);
+    upsertSession(this.db, {
+      id: sessionId,
+      pid: fakePid,
+      projectId: project.id,
+      cwd: opts.cwd,
+      origin: 'internal',
+      model: opts.model ?? 'sonnet',
+    });
+    const active = setSessionStatus(this.db, sessionId, 'active');
+    if (active)
+      this.broadcaster.broadcast({ type: 'session_upsert', session: active });
+    this.broadcaster.broadcast({
+      type: 'chat_delta',
+      sessionId,
+      delta: {
+        messageId: `u-${sessionId}`,
+        role: 'user',
+        content: opts.initialPrompt,
+        ts: Date.now(),
+        done: true,
+      },
+    });
+    setTimeout(() => {
+      this.broadcaster.broadcast({
+        type: 'chat_delta',
+        sessionId,
+        delta: {
+          messageId: `a-${sessionId}`,
+          role: 'assistant',
+          content: `(SOLIX_FAKE_CLAUDE=1) Synthetic task complete. In real mode, Solix would have spawned \`claude --print\` at ${opts.cwd}.`,
+          ts: Date.now(),
+          done: true,
+        },
+      });
+      const idle = setSessionStatus(this.db, sessionId, 'idle');
+      if (idle)
+        this.broadcaster.broadcast({ type: 'session_upsert', session: idle });
+    }, 600);
+    return { ok: true, sessionId };
   }
 }

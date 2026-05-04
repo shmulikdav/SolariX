@@ -7,6 +7,7 @@ import { EventRouter } from './router.js';
 import { attachWs } from './ws.js';
 import { seedAdvisors } from './state/advisors.js';
 import { discoverSkills } from './state/skills.js';
+import { TranscriptWatcherManager } from './state/transcript.js';
 
 export interface SolixServerOptions {
   port?: number;
@@ -30,7 +31,8 @@ export async function createSolixServer(
   discoverSkills(db);
   const broadcaster = new Broadcaster();
   const launcher = new Launcher(db, broadcaster);
-  const router = new EventRouter(db, broadcaster, launcher);
+  const transcripts = new TranscriptWatcherManager(db, broadcaster);
+  const router = new EventRouter(db, broadcaster, launcher, transcripts);
   const app = createHttpApp({ db, router });
 
   const server = serve({
@@ -50,6 +52,7 @@ export async function createSolixServer(
     hostname,
     close: () =>
       new Promise<void>((resolve) => {
+        transcripts.shutdownAll();
         launcher.shutdownAll();
         server.close(() => resolve());
       }),
