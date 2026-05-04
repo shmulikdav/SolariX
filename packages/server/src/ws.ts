@@ -1,0 +1,90 @@
+import type { IncomingMessage, Server as HttpServer } from 'node:http';
+import type { Socket } from 'node:net';
+import { WebSocketServer, type WebSocket } from 'ws';
+import type { ClientMessage, ServerMessage } from '@solix/shared';
+import type { Broadcaster } from './broadcaster.js';
+import type { DB } from './db.js';
+import type { EventRouter } from './router.js';
+import { listProjects } from './state/projects.js';
+import { listActiveSessions } from './state/sessions.js';
+import { listMissions } from './state/missions.js';
+
+export interface WsContext {
+  db: DB;
+  router: EventRouter;
+  broadcaster: Broadcaster;
+}
+
+export function attachWs(server: HttpServer, ctx: WsContext): WebSocketServer {
+  const wss = new WebSocketServer({ noServer: true });
+
+  server.on(
+    'upgrade',
+    (req: IncomingMessage, socket: Socket, head: Buffer) => {
+      const url = req.url ?? '';
+      if (!url.startsWith('/ws')) {
+        socket.destroy();
+        return;
+      }
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        wss.emit('connection', ws, req);
+      });
+    },
+  );
+
+  wss.on('connection', (ws: WebSocket) => {
+    ctx.broadcaster.add(ws);
+
+    const snapshot: ServerMessage = {
+      type: 'snapshot',
+      projects: listProjects(ctx.db),
+      sessions: listActiveSessions(ctx.db),
+      missions: listMissions(ctx.db, { limit: 100 }),
+    };
+    ctx.broadcaster.send(ws, snapshot);
+
+    ws.on('message', (raw) => {
+      let msg: ClientMessage | null = null;
+      try {
+        msg = JSON.parse(String(raw)) as ClientMessage;
+      } catch {
+        return;
+      }
+      if (!msg) return;
+      handleClientMessage(ctx, ws, msg);
+    });
+
+    ws.on('close', () => {
+      ctx.broadcaster.remove(ws);
+    });
+
+    ws.on('error', () => {
+      ctx.broadcaster.remove(ws);
+    });
+  });
+
+  return wss;
+}
+
+function handleClientMessage(
+  ctx: WsContext,
+  _ws: WebSocket,
+  msg: ClientMessage,
+): void {
+  switch (msg.type) {
+    case 'permission_response':
+      ctx.router.resolvePermission(msg.requestId, msg.approved);
+      break;
+    case 'terminate_session':
+      // M3.5: hand off to launcher; for M0 we just mark terminated.
+      break;
+    case 'send_prompt':
+      // M3.5: hand to launcher's stdin write.
+      break;
+    case 'launch_session':
+      // M3.5.
+      break;
+    default:
+      break;
+  }
+}

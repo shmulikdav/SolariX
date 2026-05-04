@@ -1,0 +1,31 @@
+{
+  "name": "@shmulikdav/solix",
+  "version": "1.0.0",
+  "description": "Solix — a solar-system command center for Claude Code agents",
+  "type": "module",
+  "bin": {
+    "solix": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "files": [
+    "dist",
+    "hooks",
+    "README.md"
+  ],
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc && node ./scripts/copy-hooks.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@solix/server": "workspace:*",
+    "@solix/shared": "workspace:*",
+    "commander": "^12.0.0",
+    "open": "^10.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.0",
+    "tsx": "^4.7.2",
+    "typescript": "^5.4.5"
+  }
+}
