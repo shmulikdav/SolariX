@@ -58,9 +58,27 @@ export function Planet({ session }: PlanetProps): JSX.Element {
   );
 
   const angleRef = useRef(phase);
+  // Lerped focus-dim factor: 1.0 = full bright, 0.25 = dimmed because some
+  // OTHER planet is selected. Cached on the group via scale-channel-z so we
+  // don't re-allocate every frame.
+  const dimRef = useRef(1.0);
 
   useFrame((state, delta) => {
-    const motionEnabled = useSolixStore.getState().motionEnabled;
+    const storeState = useSolixStore.getState();
+    const motionEnabled = storeState.motionEnabled;
+    const focusActive = Boolean(
+      storeState.selectedSessionId ||
+        storeState.selectedAdvisorId ||
+        storeState.selectedSkillId,
+    );
+    const isThisFocused =
+      storeState.selectedSessionId === session.id ||
+      (isAdvisor &&
+        storeState.selectedAdvisorId === session.advisorRole);
+    const dimTarget = focusActive && !isThisFocused ? 0.25 : 1.0;
+    dimRef.current = MathUtils.lerp(dimRef.current, dimTarget, 0.08);
+    const dim = dimRef.current;
+
     const speed = planetOrbitSpeed(session.status === 'active', session.orbitSlot);
     if (motionEnabled) {
       angleRef.current += delta * speed * 0.3;
@@ -91,11 +109,15 @@ export function Planet({ session }: PlanetProps): JSX.Element {
       const target = statusEmissive(session.status);
       const targetColor = new Color(target.color);
       materialRef.current.emissive.lerp(targetColor, 0.08);
+      // Multiply emissive by dim so unfocused planets visibly recede
+      // without changing the base color (still readable for glance scanning).
       materialRef.current.emissiveIntensity = MathUtils.lerp(
         materialRef.current.emissiveIntensity,
-        target.intensity,
+        target.intensity * dim,
         0.06,
       );
+      materialRef.current.opacity = dim;
+      materialRef.current.transparent = dim < 0.99;
     }
 
     if (flareRef.current) {
@@ -125,7 +147,7 @@ export function Planet({ session }: PlanetProps): JSX.Element {
         const pulse = 0.5 + 0.5 * Math.sin(t * Math.PI * 2 * freq);
         const mat = flareRef.current.material as MeshStandardMaterial;
         mat.color.set(color);
-        mat.opacity = 0.25 + pulse * 0.5;
+        mat.opacity = (0.25 + pulse * 0.5) * dim;
         flareRef.current.visible = true;
         const s = 1.4 + pulse * 0.5;
         flareRef.current.scale.set(s, s, s);

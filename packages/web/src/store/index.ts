@@ -10,6 +10,7 @@ import type {
   Skill,
   ToolCall,
 } from '@solix/shared';
+import { chime, notify } from '../notifications.js';
 
 export interface PendingPermission {
   requestId: string;
@@ -198,6 +199,25 @@ export const useSolixStore = create<SolixState>((set, get) => ({
             [msg.requestId]: p,
           },
         }));
+        // Background notification + chime so the user catches this when
+        // the tab isn't focused. Both are no-ops when permissions / prefs
+        // aren't granted.
+        const session = get().sessions[msg.sessionId];
+        const name = session?.name ?? msg.sessionId.slice(0, 8);
+        const argSummary = (() => {
+          const k = Object.keys(msg.args)[0];
+          if (!k) return '';
+          const v = msg.args[k];
+          const s = typeof v === 'string' ? v : JSON.stringify(v);
+          return `: ${s.length > 60 ? s.slice(0, 60) + '…' : s}`;
+        })();
+        void notify({
+          title: `${name} needs you`,
+          body: `${msg.tool}${argSummary}`,
+          tag: `solix-perm-${msg.sessionId}`,
+          whenHidden: true,
+        });
+        chime();
         break;
       }
       case 'context_update': {
@@ -370,4 +390,39 @@ export function selectEnabledAdvisors(state: SolixState): Advisor[] {
 
 export function selectSkillsArray(state: SolixState): Skill[] {
   return Object.values(state.skills);
+}
+
+/**
+ * Focus mode — true when *anything* is selected (a session, an advisor, or
+ * a skill). When focus is active, planets that aren't the focused one dim
+ * to ~25% opacity so the eye lands on the selection.
+ */
+export function selectFocusActive(state: SolixState): boolean {
+  return Boolean(
+    state.selectedSessionId ||
+      state.selectedAdvisorId ||
+      state.selectedSkillId,
+  );
+}
+
+/**
+ * Returns true when this session is the currently-focused one (or its
+ * parent / pinned advisor session is). Used to leave the focused planet
+ * (and its moons) at full brightness while dimming the rest.
+ */
+export function isSessionFocused(
+  state: SolixState,
+  session: Session,
+): boolean {
+  if (state.selectedSessionId === session.id) return true;
+  if (
+    session.parentSessionId &&
+    state.selectedSessionId === session.parentSessionId
+  ) {
+    return true;
+  }
+  if (state.selectedAdvisorId && session.advisorRole) {
+    return state.selectedAdvisorId === session.advisorRole;
+  }
+  return false;
 }

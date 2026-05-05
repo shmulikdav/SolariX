@@ -422,6 +422,12 @@ export class EventRouter {
     return this.launcher.sendPromptToInternal(sessionId, text);
   }
 
+  /** Pending permission requests, used by the WS snapshot so a fresh
+   * client connection sees what's already waiting on the server. */
+  pendingPermissions(): PendingPermission[] {
+    return [...this.permissions.values()];
+  }
+
   broadcastGalaxyImported(manifest: GalaxyManifest): void {
     this.broadcaster.broadcast({ type: 'galaxy_imported', manifest });
     this.broadcaster.broadcast({

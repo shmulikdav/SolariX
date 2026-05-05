@@ -3,7 +3,7 @@ import { Scene } from './scene/Scene.js';
 import { TopBar } from './hud/TopBar.js';
 import { Toasts } from './hud/Toasts.js';
 import { Welcome } from './hud/Welcome.js';
-import { PermissionTray } from './hud/PermissionTray.js';
+import { DecisionQueue } from './hud/DecisionQueue.js';
 import { SceneControls } from './hud/SceneControls.js';
 import {
   panDown,
@@ -85,7 +85,7 @@ export default function App(): JSX.Element {
         onOpenGalaxy={() => setGalaxyOpen(true)}
         onNewTask={() => setNewTaskOpen(true)}
       />
-      <PermissionTray />
+      <DecisionQueue />
       <SidePanel />
       <AdvisorPanel />
       <SkillPanel />

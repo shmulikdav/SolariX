@@ -81,8 +81,9 @@ function AdvisorPlanet({
   const angleRef = useRef(phase);
 
   useFrame((_state, delta) => {
-    const motionEnabled = useSolixStore.getState().motionEnabled;
-    if (motionEnabled) angleRef.current += delta * 0.18;
+    if (useSolixStore.getState().motionEnabled) {
+      angleRef.current += delta * 0.18;
+    }
     const angle = angleRef.current;
     if (groupRef.current) {
       groupRef.current.position.set(
@@ -91,6 +92,24 @@ function AdvisorPlanet({
         Math.sin(angle) * RING_RADIUS,
       );
     }
+  });
+
+  // Lerped per-advisor dim factor — read by both Procedural and Textured
+  // body via a closure so each material can apply it without a parent ref.
+  const dimRef = useRef(1.0);
+  useFrame(() => {
+    const storeState = useSolixStore.getState();
+    const focusActive = Boolean(
+      storeState.selectedSessionId ||
+        storeState.selectedAdvisorId ||
+        storeState.selectedSkillId,
+    );
+    const isThisFocused =
+      storeState.selectedAdvisorId === advisor.id ||
+      (advisor.pinnedSessionId &&
+        storeState.selectedSessionId === advisor.pinnedSessionId);
+    const target = focusActive && !isThisFocused ? 0.25 : 1.0;
+    dimRef.current = MathUtils.lerp(dimRef.current, target, 0.08);
   });
 
   const onClick = (e: ThreeEvent<MouseEvent>): void => {
@@ -105,11 +124,11 @@ function AdvisorPlanet({
   return (
     <group ref={groupRef}>
       {pack ? (
-        <Suspense fallback={<ProceduralBody advisor={advisor} onClick={onClick} />}>
-          <TexturedBody advisor={advisor} pack={pack} onClick={onClick} />
+        <Suspense fallback={<ProceduralBody advisor={advisor} onClick={onClick} dimRef={dimRef} />}>
+          <TexturedBody advisor={advisor} pack={pack} onClick={onClick} dimRef={dimRef} />
         </Suspense>
       ) : (
-        <ProceduralBody advisor={advisor} onClick={onClick} />
+        <ProceduralBody advisor={advisor} onClick={onClick} dimRef={dimRef} />
       )}
 
       <AtmosphereRim
@@ -147,12 +166,21 @@ interface TexturedBodyProps {
   advisor: Advisor;
   pack: TexturePackSpec;
   onClick: (e: ThreeEvent<MouseEvent>) => void;
+  dimRef: React.MutableRefObject<number>;
 }
 
-function TexturedBody({ advisor, pack, onClick }: TexturedBodyProps): JSX.Element {
+function TexturedBody({
+  advisor,
+  pack,
+  onClick,
+  dimRef,
+}: TexturedBodyProps): JSX.Element {
   const bodyRef = useRef<Mesh>(null);
   const cloudRef = useRef<Mesh>(null);
   const ringRef = useRef<Mesh>(null);
+  const bodyMatRef = useRef<MeshStandardMaterial>(null);
+  const cloudMatRef = useRef<MeshStandardMaterial>(null);
+  const ringMatRef = useRef<MeshStandardMaterial>(null);
 
   const bodyTex = useLoader(TextureLoader, pack.body);
   const cloudTex = useLoader(
@@ -169,10 +197,22 @@ function TexturedBody({ advisor, pack, onClick }: TexturedBodyProps): JSX.Elemen
 
   useFrame((_, delta) => {
     const motion = useSolixStore.getState().motionEnabled;
-    if (!motion) return;
-    if (bodyRef.current) bodyRef.current.rotation.y += delta * 0.18;
-    if (cloudRef.current) cloudRef.current.rotation.y += delta * 0.25;
-    if (ringRef.current) ringRef.current.rotation.z += delta * 0.05;
+    if (motion) {
+      if (bodyRef.current) bodyRef.current.rotation.y += delta * 0.18;
+      if (cloudRef.current) cloudRef.current.rotation.y += delta * 0.25;
+      if (ringRef.current) ringRef.current.rotation.z += delta * 0.05;
+    }
+    const dim = dimRef.current;
+    if (bodyMatRef.current) {
+      bodyMatRef.current.opacity = dim;
+      bodyMatRef.current.transparent = dim < 0.99;
+    }
+    if (cloudMatRef.current) {
+      cloudMatRef.current.opacity = 0.55 * dim;
+    }
+    if (ringMatRef.current) {
+      ringMatRef.current.opacity = 0.85 * dim;
+    }
   });
 
   const tilt = pack.axialTilt ?? 0;
@@ -184,11 +224,14 @@ function TexturedBody({ advisor, pack, onClick }: TexturedBodyProps): JSX.Elemen
       <mesh ref={bodyRef} onClick={onClick}>
         <sphereGeometry args={[PLANET_SIZE, 48, 48]} />
         <meshStandardMaterial
+          ref={bodyMatRef}
           map={bodyTex}
           roughness={0.85}
           metalness={0.05}
           emissive={new Color(advisor.color)}
           emissiveIntensity={advisor.pinned ? 0.25 : 0.1}
+          transparent
+          opacity={1}
         />
       </mesh>
 
@@ -196,6 +239,7 @@ function TexturedBody({ advisor, pack, onClick }: TexturedBodyProps): JSX.Elemen
         <mesh ref={cloudRef}>
           <sphereGeometry args={[PLANET_SIZE * 1.02, 48, 48]} />
           <meshStandardMaterial
+            ref={cloudMatRef}
             map={cloudTex}
             transparent
             opacity={0.55}
@@ -209,6 +253,7 @@ function TexturedBody({ advisor, pack, onClick }: TexturedBodyProps): JSX.Elemen
         <mesh ref={ringRef} rotation={[Math.PI / 2, 0, 0]}>
           <ringGeometry args={[ringInner, ringOuter, 96]} />
           <meshStandardMaterial
+            ref={ringMatRef}
             map={ringTex}
             transparent
             opacity={0.85}
@@ -225,10 +270,15 @@ function TexturedBody({ advisor, pack, onClick }: TexturedBodyProps): JSX.Elemen
 interface ProceduralBodyProps {
   advisor: Advisor;
   onClick: (e: ThreeEvent<MouseEvent>) => void;
+  dimRef: React.MutableRefObject<number>;
 }
 
 /** Fallback / opt-out body — solid color sphere with a subtle emissive lerp. */
-function ProceduralBody({ advisor, onClick }: ProceduralBodyProps): JSX.Element {
+function ProceduralBody({
+  advisor,
+  onClick,
+  dimRef,
+}: ProceduralBodyProps): JSX.Element {
   const meshRef = useRef<Mesh>(null);
   const matRef = useRef<MeshStandardMaterial>(null);
   const baseColor = useMemo(() => new Color(advisor.color), [advisor.color]);
@@ -237,12 +287,15 @@ function ProceduralBody({ advisor, onClick }: ProceduralBodyProps): JSX.Element 
     const motion = useSolixStore.getState().motionEnabled;
     if (motion && meshRef.current) meshRef.current.rotation.y += delta * 0.4;
     if (matRef.current) {
+      const dim = dimRef.current;
       const target = advisor.pinned ? 0.6 : 0.22;
       matRef.current.emissiveIntensity = MathUtils.lerp(
         matRef.current.emissiveIntensity,
-        target,
+        target * dim,
         0.05,
       );
+      matRef.current.opacity = dim;
+      matRef.current.transparent = dim < 0.99;
     }
   });
 
@@ -256,6 +309,8 @@ function ProceduralBody({ advisor, onClick }: ProceduralBodyProps): JSX.Element 
         emissiveIntensity={0.22}
         roughness={0.55}
         metalness={0.4}
+        transparent
+        opacity={1}
       />
     </mesh>
   );
