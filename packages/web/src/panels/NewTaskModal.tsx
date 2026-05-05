@@ -30,6 +30,27 @@ export function NewTaskModal({
   const [model, setModel] = useState<string>('default');
   const [advisorId, setAdvisorId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
+  const [preflight, setPreflight] = useState<
+    { claudeAvailable: boolean; version?: string } | null
+  >(null);
+
+  // Check whether `claude` is on the server's PATH so we can warn before
+  // the user fills out the form. Cached server-side; safe to refetch.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    fetch('/api/system/preflight')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled) setPreflight(d);
+      })
+      .catch(() => {
+        /* offline; ignore */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   // When the modal opens (or when projects first arrive), default cwd to the
   // most recently active project so the user doesn't have to type a path.
@@ -75,6 +96,18 @@ export function NewTaskModal({
               Solix will spawn <code>claude --print</code> in this folder. A
               new planet appears the moment it starts.
             </div>
+            {preflight && !preflight.claudeAvailable && (
+              <div className="mt-2 text-[11px] text-solix-danger border border-solix-danger/40 bg-solix-danger/10 rounded px-2 py-1">
+                <span className="font-semibold">claude</span> not found on the
+                server's PATH. Install Claude Code, then restart the Solix
+                server.
+              </div>
+            )}
+            {preflight?.claudeAvailable && preflight.version && (
+              <div className="mt-1 text-[10px] text-slate-500 font-mono">
+                claude detected · {preflight.version}
+              </div>
+            )}
           </div>
           <button
             onClick={onClose}
@@ -208,7 +241,11 @@ export function NewTaskModal({
           </span>
           <button
             onClick={onLaunch}
-            disabled={!cwd.trim() || !prompt.trim()}
+            disabled={
+              !cwd.trim() ||
+              !prompt.trim() ||
+              preflight?.claudeAvailable === false
+            }
             className="px-4 py-1.5 rounded bg-solix-accent/20 border border-solix-accent text-solix-accent text-sm hover:bg-solix-accent/30 disabled:opacity-40"
           >
             Launch

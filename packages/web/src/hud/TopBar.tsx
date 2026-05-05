@@ -4,12 +4,14 @@ interface TopBarProps {
   onOpenGalaxy?: () => void;
   onNewTask?: () => void;
   onOpenTimeline?: () => void;
+  onOpenHelp?: () => void;
 }
 
 export function TopBar({
   onOpenGalaxy,
   onNewTask,
   onOpenTimeline,
+  onOpenHelp,
 }: TopBarProps = {}): JSX.Element {
   const connected = useSolixStore((s) => s.connected);
   const planets = useSolixStore(selectPlanets);
@@ -86,6 +88,16 @@ export function TopBar({
             title="Galaxy: export and import (G)"
           >
             ⌬ Galaxy
+          </button>
+        )}
+        {onOpenHelp && (
+          <button
+            onClick={onOpenHelp}
+            className="w-7 h-7 rounded-full bg-solix-panel border border-solix-border text-slate-300 hover:text-white hover:bg-solix-border/30 text-sm"
+            title="Help (?)"
+            aria-label="Help"
+          >
+            ?
           </button>
         )}
       </div>

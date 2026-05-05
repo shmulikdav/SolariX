@@ -38,6 +38,21 @@ export function DecisionQueue(): JSX.Element {
     setCollapsed(true);
   };
 
+  // When the queue is empty, collapse to a single quiet strip — no need
+  // for a separate "All clear" panel taking real estate when nothing's
+  // waiting on the user.
+  if (count === 0) {
+    return (
+      <div className="absolute top-20 right-4 z-30 pointer-events-none">
+        <div className="pointer-events-auto rounded-full border border-solix-border bg-solix-panel/60 backdrop-blur px-3 py-1 text-[10px] text-slate-500 flex items-center gap-2">
+          <span className="uppercase tracking-widest">decisions</span>
+          <span className="font-bold">0</span>
+          <span className="italic opacity-80">— all clear</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="absolute top-20 right-4 z-30 w-80 flex flex-col gap-2 pointer-events-none">
       <div className="pointer-events-auto rounded border border-solix-border bg-solix-panel/85 backdrop-blur px-3 py-2 flex items-center justify-between">
@@ -45,29 +60,15 @@ export function DecisionQueue(): JSX.Element {
           <span className="text-[10px] uppercase tracking-widest text-slate-400">
             Decisions
           </span>
-          <span
-            className={`text-xs font-bold ${
-              count > 0 ? 'text-solix-danger' : 'text-slate-500'
-            }`}
-          >
-            {count}
-          </span>
+          <span className="text-xs font-bold text-solix-danger">{count}</span>
         </div>
-        {count > 0 && (
-          <button
-            onClick={() => setCollapsed((v) => !v)}
-            className="text-[10px] text-slate-400 hover:text-slate-100"
-          >
-            {collapsed ? 'show' : 'hide'}
-          </button>
-        )}
+        <button
+          onClick={() => setCollapsed((v) => !v)}
+          className="text-[10px] text-slate-400 hover:text-slate-100"
+        >
+          {collapsed ? 'show' : 'hide'}
+        </button>
       </div>
-
-      {count === 0 && (
-        <div className="pointer-events-auto rounded border border-solix-border bg-solix-panel/60 backdrop-blur px-3 py-2 text-xs text-slate-500 italic">
-          All clear. Nothing waiting.
-        </div>
-      )}
 
       {!collapsed &&
         items.map((p) => {

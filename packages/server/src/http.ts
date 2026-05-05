@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { HookEvent } from '@solix/shared';
@@ -332,6 +333,32 @@ export function createHttpApp(opts: {
   });
 
   app.get('/api/galaxy/imports', (c) => c.json(listImportHistory(opts.db)));
+
+  // Preflight check used by the NewTaskModal to warn before the user
+  // clicks Launch. Cached for the process lifetime — installing claude
+  // requires a server restart anyway.
+  let preflightCache: { claudeAvailable: boolean; version?: string } | null =
+    null;
+  app.get('/api/system/preflight', (c) => {
+    if (preflightCache) return c.json(preflightCache);
+    try {
+      const res = spawnSync('claude', ['--version'], {
+        timeout: 2000,
+        encoding: 'utf8',
+      });
+      if (res.status === 0) {
+        preflightCache = {
+          claudeAvailable: true,
+          version: (res.stdout ?? '').trim() || undefined,
+        };
+      } else {
+        preflightCache = { claudeAvailable: false };
+      }
+    } catch {
+      preflightCache = { claudeAvailable: false };
+    }
+    return c.json(preflightCache);
+  });
 
   // Serve the built web bundle as static when present so `solix start` is one
   // process that gives you the API + WS + UI on a single URL.

@@ -5,13 +5,20 @@ const STORAGE_KEY = 'solix.welcome.dismissed.v1';
 
 interface WelcomeProps {
   onOpenGalaxy: () => void;
+  /** When true, render the modal even if previously dismissed or sessions exist. */
+  forceOpen?: boolean;
+  /** Called when the user closes the modal (forceOpen path); the persistent
+   * "dismissed" flag is also written so the auto-show no longer fires. */
+  onClose?: () => void;
 }
 
-export function Welcome({ onOpenGalaxy }: WelcomeProps): JSX.Element | null {
+export function Welcome({
+  onOpenGalaxy,
+  forceOpen = false,
+  onClose,
+}: WelcomeProps): JSX.Element | null {
   const [dismissed, setDismissed] = useState(false);
-  const advisorCount = useSolixStore(
-    (s) => Object.keys(s.advisors).length,
-  );
+  const advisorsMap = useSolixStore((s) => s.advisors);
   const skillCount = useSolixStore((s) => Object.keys(s.skills).length);
   const sessionCount = useSolixStore(
     (s) => Object.keys(s.sessions).length,
@@ -26,9 +33,12 @@ export function Welcome({ onOpenGalaxy }: WelcomeProps): JSX.Element | null {
   }, []);
 
   // Auto-hide once the user has any session (real or demo) — they've moved past
-  // the "empty galaxy" moment.
-  if (dismissed) return null;
-  if (sessionCount > 0) return null;
+  // the "empty galaxy" moment. forceOpen overrides both gates so the (?) help
+  // button can always re-open it.
+  if (!forceOpen) {
+    if (dismissed) return null;
+    if (sessionCount > 0) return null;
+  }
 
   const close = (): void => {
     try {
@@ -37,7 +47,12 @@ export function Welcome({ onOpenGalaxy }: WelcomeProps): JSX.Element | null {
       /* ignore */
     }
     setDismissed(true);
+    onClose?.();
   };
+
+  const enabledAdvisors = Object.values(advisorsMap)
+    .filter((a) => a.enabled)
+    .sort((a, b) => a.codename.localeCompare(b.codename));
 
   return (
     <div className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none">
@@ -81,15 +96,30 @@ export function Welcome({ onOpenGalaxy }: WelcomeProps): JSX.Element | null {
           />
           <Step
             n={3}
-            title="Click an advisor in the inner ring"
+            title="Meet the advisor crew"
             body={
               <>
-                {advisorCount > 0
-                  ? `${advisorCount} crew members are loaded.`
-                  : 'Crew loading…'}{' '}
-                Click any of them — Compass (PM), Forge (Builder), Lumen
-                (UX), Argus (Reviewer), Sentinel (Security) — to read their
-                role and Invoke them on the focused planet.
+                {enabledAdvisors.length > 0
+                  ? `${enabledAdvisors.length} crew members loaded. Click any in the inner ring to read their role and invoke them on the focused planet.`
+                  : 'Crew loading…'}
+                {enabledAdvisors.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {enabledAdvisors.map((a) => (
+                      <li key={a.id} className="flex items-baseline gap-2">
+                        <span
+                          className="font-mono text-xs"
+                          style={{ color: a.color }}
+                        >
+                          {a.glyph} {a.codename}
+                        </span>
+                        <span className="text-slate-500 text-xs">—</span>
+                        <span className="text-slate-300 text-xs">
+                          {a.name}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </>
             }
           />

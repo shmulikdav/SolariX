@@ -29,6 +29,7 @@ export default function App(): JSX.Element {
   const [galaxyOpen, setGalaxyOpen] = useState(false);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   useEffect(() => {
     startWsClient();
@@ -51,6 +52,9 @@ export default function App(): JSX.Element {
         state.selectSkill(null);
         setGalaxyOpen(false);
         setNewTaskOpen(false);
+        setHelpOpen(false);
+      } else if (!isTextField && e.key === '?') {
+        setHelpOpen((v) => !v);
       } else if (!isTextField && (e.key === 'g' || e.key === 'G')) {
         setGalaxyOpen((v) => !v);
       } else if (!isTextField && (e.key === 'l' || e.key === 'L')) {
@@ -95,6 +99,7 @@ export default function App(): JSX.Element {
         onOpenGalaxy={() => setGalaxyOpen(true)}
         onNewTask={() => setNewTaskOpen(true)}
         onOpenTimeline={() => setTimelineOpen(true)}
+        onOpenHelp={() => setHelpOpen(true)}
       />
       <DecisionQueue />
       <SidePanel />
@@ -113,7 +118,11 @@ export default function App(): JSX.Element {
         onClose={() => setTimelineOpen(false)}
       />
       <SceneControls />
-      <Welcome onOpenGalaxy={() => setGalaxyOpen(true)} />
+      <Welcome
+        onOpenGalaxy={() => setGalaxyOpen(true)}
+        forceOpen={helpOpen}
+        onClose={() => setHelpOpen(false)}
+      />
       <Toasts />
       <EmptyHint />
     </div>
