@@ -13,6 +13,7 @@ import {
   setSessionStatus,
 } from './state/sessions.js';
 import { listMissions } from './state/missions.js';
+import { loadTimeline } from './state/timeline.js';
 import {
   getAdvisor,
   listAdvisors,
@@ -123,6 +124,18 @@ export function createHttpApp(opts: {
         limit,
       }),
     );
+  });
+
+  app.get('/api/timeline', (c) => {
+    const sinceMsStr = c.req.query('sinceMs');
+    const untilMsStr = c.req.query('untilMs');
+    const limitStr = c.req.query('limit');
+    const sinceMs = sinceMsStr
+      ? parseInt(sinceMsStr, 10)
+      : Date.now() - 30 * 60 * 1000;
+    const untilMs = untilMsStr ? parseInt(untilMsStr, 10) : Date.now();
+    const limit = limitStr ? parseInt(limitStr, 10) : undefined;
+    return c.json(loadTimeline(opts.db, { sinceMs, untilMs, limit }));
   });
 
   app.get('/api/advisors', (c) => c.json(listAdvisors(opts.db)));

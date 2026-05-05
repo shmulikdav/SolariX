@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Scene } from './scene/Scene.js';
 import { ListView } from './hud/ListView.js';
+import { TimelineDrawer } from './hud/TimelineDrawer.js';
 import { TopBar } from './hud/TopBar.js';
 import { Toasts } from './hud/Toasts.js';
 import { Welcome } from './hud/Welcome.js';
@@ -26,6 +27,7 @@ import { startWsClient } from './ws/client.js';
 export default function App(): JSX.Element {
   const [galaxyOpen, setGalaxyOpen] = useState(false);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
+  const [timelineOpen, setTimelineOpen] = useState(false);
 
   useEffect(() => {
     startWsClient();
@@ -71,6 +73,8 @@ export default function App(): JSX.Element {
         state.toggleMotion();
       } else if (!isTextField && (e.key === 'v' || e.key === 'V')) {
         state.toggleViewMode();
+      } else if (!isTextField && (e.key === 't' || e.key === 'T')) {
+        setTimelineOpen((v) => !v);
       } else if (!isTextField && top && (e.key === 'y' || e.key === 'Y')) {
         state.resolvePermission(top.requestId, true);
       } else if (!isTextField && top && (e.key === 'n' || e.key === 'N')) {
@@ -87,6 +91,7 @@ export default function App(): JSX.Element {
       <TopBar
         onOpenGalaxy={() => setGalaxyOpen(true)}
         onNewTask={() => setNewTaskOpen(true)}
+        onOpenTimeline={() => setTimelineOpen(true)}
       />
       <DecisionQueue />
       <SidePanel />
@@ -99,6 +104,10 @@ export default function App(): JSX.Element {
       <NewTaskModal
         open={newTaskOpen}
         onClose={() => setNewTaskOpen(false)}
+      />
+      <TimelineDrawer
+        open={timelineOpen}
+        onClose={() => setTimelineOpen(false)}
       />
       <SceneControls />
       <Welcome onOpenGalaxy={() => setGalaxyOpen(true)} />

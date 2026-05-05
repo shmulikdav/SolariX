@@ -3,16 +3,19 @@ import { useSolixStore, selectPlanets } from '../store/index.js';
 interface TopBarProps {
   onOpenGalaxy?: () => void;
   onNewTask?: () => void;
+  onOpenTimeline?: () => void;
 }
 
 export function TopBar({
   onOpenGalaxy,
   onNewTask,
+  onOpenTimeline,
 }: TopBarProps = {}): JSX.Element {
   const connected = useSolixStore((s) => s.connected);
   const planets = useSolixStore(selectPlanets);
   const viewMode = useSolixStore((s) => s.viewMode);
   const toggleViewMode = useSolixStore((s) => s.toggleViewMode);
+  const playbackActive = useSolixStore((s) => s.playback.active);
 
   const counts = planets.reduce(
     (acc, s) => {
@@ -47,6 +50,11 @@ export function TopBar({
         >
           {connected ? 'CONNECTED' : 'OFFLINE'}
         </div>
+        {playbackActive && (
+          <div className="ml-2 px-2 py-1 rounded text-[10px] border border-solix-accent text-solix-accent solix-pulse">
+            ▸ PLAYBACK
+          </div>
+        )}
       </div>
 
       <div className="pointer-events-auto flex items-center gap-3 text-xs">
@@ -60,6 +68,15 @@ export function TopBar({
         >
           {viewMode === 'list' ? '🪐 Galaxy' : '☰ List'}
         </button>
+        {onOpenTimeline && (
+          <button
+            onClick={onOpenTimeline}
+            className="px-2 py-1 rounded bg-solix-panel border border-solix-border text-slate-300 hover:text-white hover:bg-solix-border/30"
+            title="Timeline playback (T)"
+          >
+            ⏱ Timeline
+          </button>
+        )}
         {onNewTask && (
           <button
             onClick={onNewTask}

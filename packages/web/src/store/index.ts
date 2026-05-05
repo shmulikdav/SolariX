@@ -8,6 +8,7 @@ import type {
   ServerMessage,
   Session,
   Skill,
+  TimelineEvent,
   ToolCall,
 } from '@solix/shared';
 import { chime, notify } from '../notifications.js';
@@ -28,6 +29,143 @@ export interface ChatEntry extends ChatDelta {
   receivedAt: number;
 }
 
+/**
+ * Playback / time-scrubbing state.
+ *
+ * When `active` is true:
+ *   - the `<Scene>` and `<ListView>` read from `derivedSessions` /
+ *     `derivedMissions` / `derivedToolCalls` instead of the live state
+ *   - incoming WS messages still update the *live* state but the visible
+ *     state is what we derive from `events` up to `currentMs`
+ *
+ * `events` is the timeline returned by GET /api/timeline. We derive the
+ * scene-at-time-T client side so scrubbing the slider is instantaneous.
+ */
+export interface PlaybackState {
+  active: boolean;
+  loading: boolean;
+  events: TimelineEvent[];
+  earliestMs: number;
+  latestMs: number;
+  currentMs: number;
+  playing: boolean;
+  speed: number; // 1 = real-time replay; 4 = 4x; 16 = 16x
+  derivedSessions: Record<string, Session>;
+  derivedMissions: Record<string, Mission>;
+  derivedToolCalls: RecentToolCall[];
+}
+
+/**
+ * Replay events up to time T to compute "what the scene looked like at T."
+ *
+ * Cheap to call — O(events) — and called only on user-driven scrub events
+ * or once per RAF frame while playing back. We pull live session/mission
+ * records as the source of truth for static metadata (cwd, model, projectId,
+ * shortName) and just toggle in/out their existence + status based on the
+ * event stream.
+ */
+function derivePlaybackSnapshot(
+  events: TimelineEvent[],
+  currentMs: number,
+  liveSessions: Record<string, Session>,
+  liveMissions: Record<string, Mission>,
+): {
+  derivedSessions: Record<string, Session>;
+  derivedMissions: Record<string, Mission>;
+  derivedToolCalls: RecentToolCall[];
+} {
+  const sessions: Record<string, Session> = {};
+  const missions: Record<string, Mission> = {};
+  // Comet streaks during playback: only those within the last ~2s of
+  // virtual time, so the visual matches live-mode TTL.
+  const COMET_TTL_MS = 2000;
+  const tools: RecentToolCall[] = [];
+
+  for (const e of events) {
+    if (e.ts > currentMs) break;
+    switch (e.type) {
+      case 'session_started': {
+        const live = liveSessions[e.sessionId];
+        if (!live) continue;
+        sessions[e.sessionId] = { ...live, status: 'idle' };
+        break;
+      }
+      case 'session_terminated': {
+        delete sessions[e.sessionId];
+        break;
+      }
+      case 'mission_started': {
+        if (!e.missionId) continue;
+        const liveMission = liveMissions[e.missionId];
+        const session = sessions[e.sessionId];
+        if (session) {
+          sessions[e.sessionId] = {
+            ...session,
+            status: 'active',
+            currentMissionId: e.missionId,
+          };
+        }
+        if (liveMission) {
+          missions[e.missionId] = { ...liveMission, status: 'active' };
+        }
+        break;
+      }
+      case 'mission_completed': {
+        if (!e.missionId) continue;
+        const session = sessions[e.sessionId];
+        const liveMission = liveMissions[e.missionId];
+        if (session && session.currentMissionId === e.missionId) {
+          sessions[e.sessionId] = {
+            ...session,
+            status: 'idle',
+            currentMissionId: undefined,
+            lastCompletedMissionId: e.missionId,
+          };
+        }
+        if (liveMission) {
+          missions[e.missionId] = { ...liveMission, status: 'completed' };
+        }
+        break;
+      }
+      case 'tool_call': {
+        // Carry the tool call only if it's within the visible TTL window.
+        if (currentMs - e.ts <= COMET_TTL_MS) {
+          tools.push({
+            id: `tc-${e.ts}-${e.sessionId}`,
+            sessionId: e.sessionId,
+            tool: e.toolName ?? 'tool',
+            args: {},
+            startedAt: e.ts,
+            status: 'ok',
+            receivedAt: e.ts,
+          });
+        }
+        break;
+      }
+    }
+  }
+
+  return {
+    derivedSessions: sessions,
+    derivedMissions: missions,
+    derivedToolCalls: tools,
+  };
+}
+
+const EMPTY_PLAYBACK: PlaybackState = {
+  active: false,
+  loading: false,
+  events: [],
+  earliestMs: 0,
+  latestMs: 0,
+  currentMs: 0,
+  playing: false,
+  speed: 4,
+  derivedSessions: {},
+  derivedMissions: {},
+  derivedToolCalls: [],
+};
+
 interface SolixState {
   connected: boolean;
   projects: Record<string, Project>;
@@ -44,6 +182,7 @@ interface SolixState {
   selectedSkillId: string | null;
   motionEnabled: boolean;
   viewMode: 'galaxy' | 'list';
+  playback: PlaybackState;
   toasts: { id: string; level: 'info' | 'warn' | 'error'; message: string }[];
 
   setConnected: (c: boolean) => void;
@@ -62,6 +201,12 @@ interface SolixState {
   toggleMotion: () => void;
   setViewMode: (m: 'galaxy' | 'list') => void;
   toggleViewMode: () => void;
+  enterPlayback: (events: TimelineEvent[], earliestMs: number, latestMs: number) => void;
+  exitPlayback: () => void;
+  setPlaybackTime: (ms: number) => void;
+  setPlaybackSpeed: (speed: number) => void;
+  setPlaybackPlaying: (playing: boolean) => void;
+  setPlaybackLoading: (loading: boolean) => void;
 
   send: (msg: ClientMessage) => void;
   attachSocket: (send: (msg: ClientMessage) => void) => void;
@@ -120,6 +265,7 @@ export const useSolixStore = create<SolixState>((set, get) => ({
   selectedSkillId: null,
   motionEnabled: readMotionPref(),
   viewMode: readViewPref(),
+  playback: EMPTY_PLAYBACK,
   toasts: [],
 
   setConnected: (connected) => set({ connected }),
@@ -390,28 +536,81 @@ export const useSolixStore = create<SolixState>((set, get) => ({
     set({ viewMode: next });
   },
 
+  enterPlayback: (events, earliestMs, latestMs) => {
+    const start = earliestMs;
+    set((s) => ({
+      playback: {
+        ...s.playback,
+        active: true,
+        loading: false,
+        events,
+        earliestMs,
+        latestMs,
+        currentMs: start,
+        playing: false,
+        ...derivePlaybackSnapshot(events, start, get().sessions, get().missions),
+      },
+    }));
+  },
+  exitPlayback: () => set({ playback: EMPTY_PLAYBACK }),
+  setPlaybackTime: (ms) => {
+    set((s) => {
+      const clamped = Math.max(s.playback.earliestMs, Math.min(ms, s.playback.latestMs));
+      return {
+        playback: {
+          ...s.playback,
+          currentMs: clamped,
+          ...derivePlaybackSnapshot(
+            s.playback.events,
+            clamped,
+            get().sessions,
+            get().missions,
+          ),
+        },
+      };
+    });
+  },
+  setPlaybackSpeed: (speed) =>
+    set((s) => ({ playback: { ...s.playback, speed } })),
+  setPlaybackPlaying: (playing) =>
+    set((s) => ({ playback: { ...s.playback, playing } })),
+  setPlaybackLoading: (loading) =>
+    set((s) => ({ playback: { ...s.playback, loading } })),
+
   send: () => {
     /* replaced when socket attaches */
   },
   attachSocket: (send) => set({ send }),
 }));
 
+function effectiveSessions(state: SolixState): Record<string, Session> {
+  return state.playback.active
+    ? state.playback.derivedSessions
+    : state.sessions;
+}
+
 export function selectPlanets(state: SolixState): Session[] {
-  return Object.values(state.sessions).filter(
+  return Object.values(effectiveSessions(state)).filter(
     (s) => !s.parentSessionId && s.kind !== 'advisor',
   );
 }
 
 export function selectAdvisorPlanets(state: SolixState): Session[] {
-  return Object.values(state.sessions).filter(
+  return Object.values(effectiveSessions(state)).filter(
     (s) => !s.parentSessionId && s.kind === 'advisor',
   );
 }
 
 export function selectMoons(state: SolixState, planetId: string): Session[] {
-  return Object.values(state.sessions).filter(
+  return Object.values(effectiveSessions(state)).filter(
     (s) => s.parentSessionId === planetId,
   );
+}
+
+export function selectVisibleToolCalls(state: SolixState): RecentToolCall[] {
+  return state.playback.active
+    ? state.playback.derivedToolCalls
+    : state.recentToolCalls;
 }
 
 export function selectEnabledAdvisors(state: SolixState): Advisor[] {

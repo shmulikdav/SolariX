@@ -166,3 +166,30 @@ export interface GalaxyManifest {
   scheduledTasks?: GalaxyManifestScheduledTask[];
   theme?: { sunColor?: string; bgColor?: string };
 }
+
+/**
+ * Timeline events — synthesized from missions/tool_calls/sessions tables on
+ * demand for the playback feature. Not persisted as a separate table; the
+ * server derives them at query time so we never duplicate state.
+ */
+export type TimelineEventType =
+  | 'session_started'
+  | 'session_terminated'
+  | 'mission_started'
+  | 'mission_completed'
+  | 'tool_call';
+
+export interface TimelineEvent {
+  ts: number;
+  type: TimelineEventType;
+  sessionId: string;
+  projectId?: string;
+  cwd?: string;
+  // Per-event payload bits — kept small. The client uses these to update
+  // its derived "scene at time T" without round-tripping to the server.
+  missionId?: string;
+  missionShortName?: string;
+  missionPrompt?: string;
+  toolName?: string;
+  status?: SessionStatus;
+}
