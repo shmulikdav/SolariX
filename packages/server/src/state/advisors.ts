@@ -44,11 +44,18 @@ interface AdvisorRow {
 }
 
 function findAgentsDir(): string {
+  // Env override mirrors SOLIX_WEB_DIST in http.ts — useful for users
+  // who want to ship a custom advisor pack outside the npm package.
+  if (process.env.SOLIX_AGENTS_DIR && existsSync(process.env.SOLIX_AGENTS_DIR)) {
+    return process.env.SOLIX_AGENTS_DIR;
+  }
   // Locate packages/agents/manifest.json from the running server module.
   // packages/server/src/state/advisors.ts → ../../../agents
   // (search a few candidates so this works in dev and any future bundle.)
   const here = dirname(fileURLToPath(import.meta.url));
   const candidates = [
+    // Bundled npm package: agents/ ships next to the bundled JS file.
+    resolve(here, 'agents'),
     resolve(here, '..', '..', '..', 'agents'),
     resolve(here, '..', '..', 'agents'),
     resolve(here, '..', 'agents'),

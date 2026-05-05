@@ -463,6 +463,9 @@ function findWebDist(): string | null {
   }
   const here = dirname(fileURLToPath(import.meta.url));
   const candidates = [
+    // Bundled npm package: web/ ships next to the bundled JS file.
+    resolve(here, 'web'),
+    // Monorepo: server's compiled output is at packages/server/dist.
     resolve(here, '..', '..', 'web', 'dist'),
     resolve(here, '..', '..', '..', 'web', 'dist'),
     resolve(here, '..', '..', '..', 'packages', 'web', 'dist'),

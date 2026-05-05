@@ -35,24 +35,27 @@ sub-command in the order you'd actually use them.
 ## 0. How `solix` is invoked
 
 The CLI binary is `solix`, defined by `packages/cli/package.json:bin`.
-You can run it three ways:
+For most users:
+
+```sh
+npm i -g @shmulikdav/solix
+solix start
+```
+
+That's it. The published package bundles the server, shared types, the
+built React UI, the advisor manifest, and the hook scripts — one
+`npm install` gives you everything.
+
+Other invocation forms (mostly for contributors):
 
 | Context | Command |
 |---|---|
 | Published / globally installed | `solix <cmd>` |
-| From a monorepo checkout, after `pnpm -r build` | `node packages/cli/dist/index.js <cmd>` |
+| Monorepo checkout, after `pnpm -r build` | `node packages/cli/dist/index.js <cmd>` |
 | Inside the workspace, no global install | `pnpm --filter @shmulikdav/solix exec solix <cmd>` |
 
 Anywhere this guide says `solix …`, substitute the form that fits
-your setup. Example:
-
-```sh
-# Published install
-solix start
-
-# Monorepo checkout
-node packages/cli/dist/index.js start
-```
+your setup.
 
 ---
 

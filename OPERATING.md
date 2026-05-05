@@ -23,17 +23,12 @@ once.
 Done once per machine.
 
 ```sh
-# 1. Install the binary on PATH (one of):
-npm i -g @shmulikdav/solix              # if published
-# or, in a monorepo checkout:
-pnpm install && pnpm -r build
-# (then either add packages/cli/dist/index.js to PATH, or alias:
-#   alias solix='node /path/to/SolariX/packages/cli/dist/index.js'
-# )
+# 1. Install the binary on PATH
+npm i -g @shmulikdav/solix
 
-# 2. Verify the binary is on PATH
-which solix         # → e.g. /usr/local/bin/solix
-solix --version     # → 1.0.0
+# 2. Verify
+which solix             # → /usr/local/bin/solix
+solix --version         # → 1.0.0
 
 # 3. Wire the Claude Code hooks
 solix install
@@ -45,6 +40,15 @@ solix doctor
 You should see ✓ marks for `~/.claude/settings.json`, the agent
 manifest, and the DB. The server-running check will fail until you
 boot it — that's expected.
+
+> **From source instead?** Clone the repo, `pnpm install && pnpm -r
+> build`, then either add `packages/cli/dist/index.js` to PATH or
+> `alias solix='node /path/to/SolariX/packages/cli/dist/index.js'`.
+
+> **Native dep note:** Solix uses `better-sqlite3`. Most users get a
+> prebuilt binary on `npm install`. If yours doesn't, npm compiles
+> from source — needs `xcode-select --install` (macOS),
+> `build-essential` (Linux), or VS Build Tools (Windows).
 
 ---
 

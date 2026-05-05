@@ -15,48 +15,54 @@ terminals.
 
 ## Quick start
 
+The easiest path — install from npm:
+
+```sh
+npm i -g @shmulikdav/solix
+solix install        # patches ~/.claude/settings.json
+solix start          # serves API + WS + UI on http://127.0.0.1:4242
+```
+
+Open **http://127.0.0.1:4242** — you'll get a Welcome modal walking
+you through five things you can do.
+
+**See it without running Claude Code yet?** In another terminal:
+
+```sh
+solix demo
+```
+
+Seeds three user planets, an active mission with comet streaks, a moon,
+a red permission flare, and pins Compass — so the empty galaxy lights
+up immediately.
+
+Then run `claude` in any terminal and a real planet will appear within
+a second.
+
+To verify the install: `solix doctor`. To remove cleanly: `solix
+uninstall`.
+
+> **Native dep note:** Solix uses `better-sqlite3`. Most platforms get a
+> prebuilt binary on `npm install`. If yours doesn't, npm will compile
+> from source — that needs a working C++ toolchain (`xcode-select
+> --install` on macOS, `build-essential` on Linux, VS Build Tools on
+> Windows).
+
+### From source (contributors)
+
 ```sh
 pnpm install
-pnpm --filter @solix/web prepare-assets     # fetches CC-licensed planet + sky textures (~3 MB)
-pnpm --filter @solix/web build              # build the UI bundle once
-pnpm --filter @shmulikdav/solix exec tsx src/index.ts install   # patches ~/.claude/settings.json
-pnpm --filter @shmulikdav/solix exec tsx src/index.ts start     # serves API + WS + UI
+pnpm --filter @solix/web prepare-assets     # CC-licensed textures (~3 MB)
+pnpm -r build
+node packages/cli/dist/index.js install     # or: alias solix='node ...dist/index.js'
+node packages/cli/dist/index.js start
 ```
 
 `prepare-assets` is opt-in. With textures present, the sun gets a real
 surface, the 5 default advisors render as bespoke planets (Compass=Saturn
 with rings, Forge=Mars, Lumen=Earth, Argus=Jupiter, Sentinel=Moon), and
 the sky becomes a Milky Way panorama. Without them, the scene falls back
-to a procedural look — Solix still works fully. See the "Custom textures"
-note further down for the asset details.
-
-Open **http://127.0.0.1:4242** — you'll get a Welcome modal walking you
-through five things you can do.
-
-**See it without running Claude Code yet?** In another terminal:
-
-```sh
-pnpm --filter @shmulikdav/solix exec tsx src/index.ts demo
-```
-
-Seeds three user planets, an active mission with comet streaks, a moon, a
-red permission flare, and pins Compass — so the empty galaxy lights up
-immediately.
-
-Then run `claude` in any terminal and a real planet will appear within a
-second.
-
-To verify the install:
-
-```sh
-pnpm --filter @shmulikdav/solix exec tsx src/index.ts doctor
-```
-
-To remove the integration cleanly:
-
-```sh
-pnpm --filter @shmulikdav/solix exec tsx src/index.ts uninstall
-```
+to a procedural look — Solix still works fully.
 
 ## Architecture
 
