@@ -11,6 +11,8 @@ export function TopBar({
 }: TopBarProps = {}): JSX.Element {
   const connected = useSolixStore((s) => s.connected);
   const planets = useSolixStore(selectPlanets);
+  const viewMode = useSolixStore((s) => s.viewMode);
+  const toggleViewMode = useSolixStore((s) => s.toggleViewMode);
 
   const counts = planets.reduce(
     (acc, s) => {
@@ -51,6 +53,13 @@ export function TopBar({
         <Stat label="active" value={counts.active} color="text-solix-ok" />
         <Stat label="attention" value={counts.attention} color="text-solix-warn" />
         <Stat label="idle" value={counts.idle} color="text-slate-400" />
+        <button
+          onClick={toggleViewMode}
+          className="px-2 py-1 rounded bg-solix-panel border border-solix-border text-slate-300 hover:text-white hover:bg-solix-border/30"
+          title={`Switch to ${viewMode === 'list' ? 'galaxy' : 'list'} view (V)`}
+        >
+          {viewMode === 'list' ? '🪐 Galaxy' : '☰ List'}
+        </button>
         {onNewTask && (
           <button
             onClick={onNewTask}

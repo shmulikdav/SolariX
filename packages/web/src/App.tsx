@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Scene } from './scene/Scene.js';
+import { ListView } from './hud/ListView.js';
 import { TopBar } from './hud/TopBar.js';
 import { Toasts } from './hud/Toasts.js';
 import { Welcome } from './hud/Welcome.js';
@@ -68,6 +69,8 @@ export default function App(): JSX.Element {
       } else if (!isTextField && e.key === ' ') {
         e.preventDefault();
         state.toggleMotion();
+      } else if (!isTextField && (e.key === 'v' || e.key === 'V')) {
+        state.toggleViewMode();
       } else if (!isTextField && top && (e.key === 'y' || e.key === 'Y')) {
         state.resolvePermission(top.requestId, true);
       } else if (!isTextField && top && (e.key === 'n' || e.key === 'N')) {
@@ -80,7 +83,7 @@ export default function App(): JSX.Element {
 
   return (
     <div className="relative h-full w-full">
-      <Scene />
+      <ViewSurface />
       <TopBar
         onOpenGalaxy={() => setGalaxyOpen(true)}
         onNewTask={() => setNewTaskOpen(true)}
@@ -103,6 +106,15 @@ export default function App(): JSX.Element {
       <EmptyHint />
     </div>
   );
+}
+
+/**
+ * Renders either the 3D galaxy or the table list view, depending on the
+ * persisted viewMode. The TopBar / DecisionQueue / panels overlay both.
+ */
+function ViewSurface(): JSX.Element {
+  const viewMode = useSolixStore((s) => s.viewMode);
+  return viewMode === 'list' ? <ListView /> : <Scene />;
 }
 
 function EmptyHint(): JSX.Element | null {

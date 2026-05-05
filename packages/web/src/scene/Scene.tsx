@@ -13,6 +13,7 @@ import { Planet, PlanetOrbitRing } from './Planet.js';
 import { CometLayer } from './Comets.js';
 import { AdvisorRing } from './AdvisorRing.js';
 import { AsteroidBelt } from './AsteroidBelt.js';
+import { ProjectLabels } from './ProjectLabels.js';
 import { attachControls, detachControls } from './cameraControls.js';
 import { BackSide, type Mesh } from 'three';
 
@@ -62,6 +63,7 @@ export function Scene(): JSX.Element {
         <Planet key={p.id} session={p} />
       ))}
       <CometLayer />
+      <ProjectLabels />
       <ControlsBridge />
       {/*
         Bloom makes the textured sun, active planet emissives, and red /

@@ -86,7 +86,11 @@ export function CometLayer(): JSX.Element {
         const session = sessions[tc.sessionId];
         if (!session) return null;
         const radius = planetOrbitRadius(session.orbitSlot);
-        const phase = planetPhase(session.orbitSlot, session.id);
+        const phase = planetPhase(
+          session.orbitSlot,
+          session.id,
+          session.projectId,
+        );
         const t = (Date.now() - tc.startedAt) / 1000;
         const speed = 0.18;
         const angle = phase + t * speed * 0.3;

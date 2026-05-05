@@ -43,6 +43,7 @@ interface SolixState {
   selectedAdvisorId: string | null;
   selectedSkillId: string | null;
   motionEnabled: boolean;
+  viewMode: 'galaxy' | 'list';
   toasts: { id: string; level: 'info' | 'warn' | 'error'; message: string }[];
 
   setConnected: (c: boolean) => void;
@@ -59,6 +60,8 @@ interface SolixState {
   launchTask: (cwd: string, model: string, initialPrompt?: string) => void;
   setMotionEnabled: (b: boolean) => void;
   toggleMotion: () => void;
+  setViewMode: (m: 'galaxy' | 'list') => void;
+  toggleViewMode: () => void;
 
   send: (msg: ClientMessage) => void;
   attachSocket: (send: (msg: ClientMessage) => void) => void;
@@ -67,6 +70,7 @@ interface SolixState {
 const TOOL_CALL_TTL_MS = 2000;
 
 const MOTION_KEY = 'solix.motion.v1';
+const VIEW_KEY = 'solix.viewMode.v1';
 
 function readMotionPref(): boolean {
   try {
@@ -80,6 +84,22 @@ function readMotionPref(): boolean {
 function writeMotionPref(b: boolean): void {
   try {
     localStorage.setItem(MOTION_KEY, b ? '1' : '0');
+  } catch {
+    /* ignore */
+  }
+}
+
+function readViewPref(): 'galaxy' | 'list' {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'galaxy';
+  } catch {
+    return 'galaxy';
+  }
+}
+
+function writeViewPref(m: 'galaxy' | 'list'): void {
+  try {
+    localStorage.setItem(VIEW_KEY, m);
   } catch {
     /* ignore */
   }
@@ -99,6 +119,7 @@ export const useSolixStore = create<SolixState>((set, get) => ({
   selectedAdvisorId: null,
   selectedSkillId: null,
   motionEnabled: readMotionPref(),
+  viewMode: readViewPref(),
   toasts: [],
 
   setConnected: (connected) => set({ connected }),
@@ -358,6 +379,15 @@ export const useSolixStore = create<SolixState>((set, get) => ({
     const next = !get().motionEnabled;
     writeMotionPref(next);
     set({ motionEnabled: next });
+  },
+  setViewMode: (m) => {
+    writeViewPref(m);
+    set({ viewMode: m });
+  },
+  toggleViewMode: () => {
+    const next = get().viewMode === 'list' ? 'galaxy' : 'list';
+    writeViewPref(next);
+    set({ viewMode: next });
   },
 
   send: () => {

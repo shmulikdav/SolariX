@@ -26,7 +26,7 @@ export function Planet({ session }: PlanetProps): JSX.Element {
   const ringRef = useRef<Mesh>(null);
   const materialRef = useRef<MeshStandardMaterial>(null);
   const phase = useMemo(
-    () => planetPhase(session.orbitSlot, session.id),
+    () => planetPhase(session.orbitSlot, session.id, session.projectId),
     [session.orbitSlot, session.id],
   );
   const radius = useMemo(
