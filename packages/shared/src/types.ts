@@ -119,6 +119,7 @@ export interface Advisor {
   pinned: boolean;
   pinnedSessionId?: string;
   requiredSkills: string[];
+  texturePack?: string;
 }
 
 export type SkillSource = 'anthropic' | 'solix' | 'user';

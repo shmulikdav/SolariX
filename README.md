@@ -17,15 +17,18 @@ terminals.
 
 ```sh
 pnpm install
+pnpm --filter @solix/web prepare-assets     # fetches CC-licensed planet + sky textures (~3 MB)
 pnpm --filter @solix/web build              # build the UI bundle once
 pnpm --filter @shmulikdav/solix exec tsx src/index.ts install   # patches ~/.claude/settings.json
 pnpm --filter @shmulikdav/solix exec tsx src/index.ts start     # serves API + WS + UI
 ```
 
-The starfield is procedural (drei's `<Stars>`) — no asset fetch,
-nothing to download, runs offline. If you'd rather drop a real
-equirectangular space JPG/HDR in as a custom skybox, see the
-"Custom sky" note further down.
+`prepare-assets` is opt-in. With textures present, the sun gets a real
+surface, the 5 default advisors render as bespoke planets (Compass=Saturn
+with rings, Forge=Mars, Lumen=Earth, Argus=Jupiter, Sentinel=Moon), and
+the sky becomes a Milky Way panorama. Without them, the scene falls back
+to a procedural look — Solix still works fully. See the "Custom textures"
+note further down for the asset details.
 
 Open **http://127.0.0.1:4242** — you'll get a Welcome modal walking you
 through five things you can do.
@@ -173,21 +176,32 @@ record project hints. They never spawn pinned advisors, run shell commands,
 auto-install skills to the filesystem, or schedule tasks. You stay in
 control.
 
-## Custom sky (optional)
+## Custom textures (optional)
 
-Solix's default sky is a procedural starfield from drei's `<Stars>` —
-no asset fetch, runs offline, scales to any density. If you want a
-real equirectangular Milky Way image instead (e.g. from
-[solarsystemscope.com/textures](https://www.solarsystemscope.com/textures/)
-or any CC-licensed NASA/ESO panorama), drop a `.hdr` or 4K JPG at
-`packages/web/public/hdri/milky_way_2k.hdr` and swap the `<Stars>` line
-in `Scene.tsx` for an `<Environment background files="..." />` block.
+By default Solix runs `prepare-assets` to pull a small set of
+CC-licensed planet + sky textures (~3 MB total) from public CDNs:
 
-A Polyhaven HDRI fetch script is included for convenience:
-`pnpm --filter @solix/web prepare-assets`. Note that most Polyhaven
-HDRIs are *outdoor night photos* with ground in the lower hemisphere —
-useful as ambient lighting, not as a deep-space backdrop. Pure-space
-panoramas (NASA/ESO) work better as skyboxes.
+| Texture | Used by | Source |
+|---|---|---|
+| `milky_way.jpg` | Sky | jsDelivr — `jeromeetienne/threex.planets` (galaxy_starfield) |
+| `sun.jpg` | The sun | jsDelivr — `jeromeetienne/threex.planets` |
+| `saturn.jpg` + `saturn_ring.png` | Compass advisor | jsDelivr — `jeromeetienne/threex.planets` |
+| `mars.jpg` | Forge advisor | jsDelivr — `jeromeetienne/threex.planets` |
+| `earth.jpg` + `earth_clouds.png` | Lumen advisor | three.js examples |
+| `jupiter.jpg` | Argus advisor | jsDelivr — `jeromeetienne/threex.planets` |
+| `moon.jpg` | Sentinel advisor | three.js examples |
+
+The fetch script tries multiple mirrors; if any download fails, the
+scene falls back gracefully — missing textures revert to procedural
+spheres, no errors. Run `pnpm --filter @solix/web prepare-assets`
+again any time to re-attempt.
+
+To swap any texture for your own (e.g., a higher-res version from
+[solarsystemscope.com/textures](https://www.solarsystemscope.com/textures/) —
+their site is gated behind Cloudflare so manual download is the path),
+drop a replacement file with the same name into
+`packages/web/public/textures/`. The file is gitignored so it won't be
+committed.
 
 ## Context management
 

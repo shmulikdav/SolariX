@@ -13,6 +13,7 @@ import {
   planetPhase,
 } from './orbits.js';
 import { Moon } from './Moon.js';
+import { AtmosphereRim } from './AtmosphereRim.js';
 
 interface PlanetProps {
   session: Session;
@@ -162,6 +163,22 @@ export function Planet({ session }: PlanetProps): JSX.Element {
           metalness={0.3}
         />
       </mesh>
+
+      {/*
+        Atmosphere rim — Fresnel glow at the silhouette in the planet's
+        own color. Cheap (one extra back-side sphere), preserves the
+        model-color encoding on user planets, adds depth without breaking
+        anything when motion is paused.
+      */}
+      <AtmosphereRim
+        radius={planetSize}
+        color={
+          isAdvisor && advisorForRole
+            ? advisorForRole.color
+            : modelColor(session.model)
+        }
+        intensity={session.status === 'active' ? 1.2 : 0.7}
+      />
 
       <mesh ref={flareRef} visible={false}>
         <sphereGeometry args={[planetSize * 1.4, 24, 24]} />

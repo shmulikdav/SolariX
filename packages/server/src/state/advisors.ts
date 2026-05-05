@@ -17,6 +17,7 @@ interface ManifestAdvisor {
   agentMd: string;
   enabledByDefault: boolean;
   requiredSkills: string[];
+  texturePack?: string;
 }
 
 interface Manifest {
@@ -38,6 +39,7 @@ interface AdvisorRow {
   enabled: number;
   pinned: number;
   pinned_session_id: string | null;
+  texture_pack: string | null;
   updated_at: number;
 }
 
@@ -89,6 +91,7 @@ function rowToAdvisor(row: AdvisorRow): Advisor {
     pinned: row.pinned === 1,
     pinnedSessionId: row.pinned_session_id ?? undefined,
     requiredSkills,
+    texturePack: row.texture_pack ?? undefined,
   };
 }
 
@@ -98,16 +101,16 @@ export function seedAdvisors(db: DB): Advisor[] {
   const insert = db.prepare(
     `INSERT OR IGNORE INTO advisors
        (id, role, codename, name, description, glyph, color, default_model,
-        agent_md_path, required_skills_json, enabled, pinned, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+        agent_md_path, required_skills_json, enabled, pinned, texture_pack, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
   );
-  // Always refresh static metadata (description, glyph, color, model) without
-  // touching the user-mutable enabled/pinned state.
+  // Always refresh static metadata (description, glyph, color, model,
+  // texture_pack) without touching the user-mutable enabled/pinned state.
   const refresh = db.prepare(
     `UPDATE advisors
      SET role = ?, codename = ?, name = ?, description = ?, glyph = ?,
          color = ?, default_model = ?, agent_md_path = ?,
-         required_skills_json = ?, updated_at = ?
+         required_skills_json = ?, texture_pack = ?, updated_at = ?
      WHERE id = ?`,
   );
   for (const a of manifest.advisors) {
@@ -124,6 +127,7 @@ export function seedAdvisors(db: DB): Advisor[] {
       md,
       JSON.stringify(a.requiredSkills),
       a.enabledByDefault ? 1 : 0,
+      a.texturePack ?? null,
       ts,
     );
     refresh.run(
@@ -136,6 +140,7 @@ export function seedAdvisors(db: DB): Advisor[] {
       a.defaultModel,
       md,
       JSON.stringify(a.requiredSkills),
+      a.texturePack ?? null,
       ts,
       a.id,
     );

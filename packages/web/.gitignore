@@ -1,3 +1,10 @@
-# Fetched on demand via `pnpm --filter @solix/web prepare-assets`.
-# Binary; not worth versioning.
+# Texture binaries fetched on demand by `pnpm --filter @solix/web prepare-assets`.
+# Not worth versioning — they're CC-licensed assets pulled from public CDNs.
+public/textures/*.jpg
+public/textures/*.jpeg
+public/textures/*.png
+public/textures/*.webp
+public/textures/README.md
+
+# Legacy HDRI dir from an earlier prototype.
 public/hdri/*.hdr
