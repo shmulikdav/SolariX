@@ -246,14 +246,17 @@ export function createHttpApp(opts: {
     const name = c.req.query('name') ?? undefined;
     const author = c.req.query('author') ?? undefined;
     const description = c.req.query('description') ?? undefined;
+    const preview = c.req.query('preview') === '1';
     const manifest = exportManifest(opts.db, {
       name,
       author,
       description,
     });
-    // Snapshot every export into version history (no-op if identical to
-    // the previous version — see snapshotExport).
-    snapshotExport(opts.db, manifest);
+    // Snapshot every real export into version history (no-op if identical
+    // to the previous version — see snapshotExport). Preview reads (used
+    // by the import-confirm diff) skip snapshotting so the timeline stays
+    // clean.
+    if (!preview) snapshotExport(opts.db, manifest);
     return c.json(manifest);
   });
 

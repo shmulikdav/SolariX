@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import type {
   AuditEvent,
   AuditKind,
+  GalaxyManifest,
   GalaxyManifestDiff,
   GalaxyVersion,
 } from '@solix/shared';
+import { diffManifests } from '@solix/shared';
 import { useSolixStore } from '../store/index.js';
 
 interface ImportResponse {
@@ -32,6 +34,15 @@ export function GalaxyPanel({
   const [importUrl, setImportUrl] = useState('');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  // Two-step import: first click *previews* the diff (when possible) and
+  // sets pendingImport; second click in PendingImportPanel actually
+  // applies it. Closes the silent-overwrite hole.
+  const [pendingImport, setPendingImport] = useState<{
+    body: BodyInit;
+    label: string;
+    diff?: GalaxyManifestDiff;
+    manifest?: GalaxyManifest;
+  } | null>(null);
   const sessionsCount = useSolixStore(
     (s) => Object.keys(s.sessions).length,
   );
@@ -93,12 +104,56 @@ export function GalaxyPanel({
     }
   };
 
+  const stageImport = async (
+    body: BodyInit,
+    label: string,
+    incoming?: GalaxyManifest,
+  ): Promise<void> => {
+    setResult(null);
+    let diff: GalaxyManifestDiff | undefined;
+    let manifest = incoming;
+    if (manifest) {
+      try {
+        const res = await fetch('/api/galaxy/export?preview=1');
+        if (res.ok) {
+          const current = (await res.json()) as GalaxyManifest;
+          diff = diffManifests(current, manifest);
+        }
+      } catch {
+        // Diff is best-effort — falling through to a plain confirm is fine.
+      }
+    }
+    setPendingImport({ body, label, diff, manifest });
+  };
+
   const onImportText = (): void => {
-    void submitImport(importText);
+    let parsed: GalaxyManifest | undefined;
+    try {
+      parsed = JSON.parse(importText) as GalaxyManifest;
+    } catch {
+      setResult('Could not parse JSON.');
+      return;
+    }
+    void stageImport(importText, 'pasted manifest', parsed);
   };
 
   const onImportUrl = (): void => {
-    void submitImport(JSON.stringify({ url: importUrl }));
+    void stageImport(
+      JSON.stringify({ url: importUrl }),
+      `URL: ${importUrl}`,
+      undefined,
+    );
+  };
+
+  const confirmPendingImport = (): void => {
+    if (!pendingImport) return;
+    const body = pendingImport.body;
+    setPendingImport(null);
+    void submitImport(body);
+  };
+
+  const cancelPendingImport = (): void => {
+    setPendingImport(null);
   };
 
   return (
@@ -200,6 +255,17 @@ export function GalaxyPanel({
             Apply manifest
           </button>
         </section>
+
+        {pendingImport && (
+          <PendingImportPanel
+            label={pendingImport.label}
+            diff={pendingImport.diff}
+            manifest={pendingImport.manifest}
+            busy={busy}
+            onConfirm={confirmPendingImport}
+            onCancel={cancelPendingImport}
+          />
+        )}
 
         {result && (
           <div className="text-xs text-slate-300 border border-solix-border rounded p-2 bg-black/30">
@@ -605,6 +671,79 @@ function DiffView({ diff }: { diff: GalaxyManifestDiff }): JSX.Element {
         added={diff.projects.added}
         removed={diff.projects.removed}
       />
+    </div>
+  );
+}
+
+/**
+ * Confirmation step shown after the user clicks "Apply manifest" or
+ * "Pull and import." Renders the diff against the current galaxy when
+ * we have the incoming manifest in-hand (paste path); for the URL path
+ * we skip the diff and show a simple "fetch + apply" confirmation
+ * instead — the server will resolve the URL.
+ */
+function PendingImportPanel({
+  label,
+  diff,
+  manifest,
+  busy,
+  onConfirm,
+  onCancel,
+}: {
+  label: string;
+  diff?: GalaxyManifestDiff;
+  manifest?: GalaxyManifest;
+  busy: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}): JSX.Element {
+  return (
+    <div className="rounded border border-amber-300/60 bg-amber-500/10 p-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="text-[11px] uppercase tracking-wide text-amber-200">
+          confirm import
+        </div>
+        <div className="text-[10px] text-slate-400 font-mono truncate max-w-[55%]">
+          {label}
+        </div>
+      </div>
+      {manifest && (
+        <div className="text-xs text-slate-200">
+          <span className="font-semibold">{manifest.name}</span>
+          {manifest.author && (
+            <span className="text-slate-400"> · by {manifest.author}</span>
+          )}
+        </div>
+      )}
+      {diff ? (
+        <DiffView diff={diff} />
+      ) : manifest ? (
+        <div className="text-xs text-slate-400 italic">
+          Could not compute a diff against the current galaxy. Apply will
+          still proceed if you confirm.
+        </div>
+      ) : (
+        <div className="text-xs text-slate-300">
+          Solix will fetch the manifest from this URL and apply it. Diff
+          preview is only available for pasted JSON.
+        </div>
+      )}
+      <div className="flex gap-2">
+        <button
+          onClick={onConfirm}
+          disabled={busy}
+          className="flex-1 py-1.5 rounded bg-amber-500/20 border border-amber-300 text-amber-100 text-xs hover:bg-amber-500/30 disabled:opacity-50"
+        >
+          Apply
+        </button>
+        <button
+          onClick={onCancel}
+          disabled={busy}
+          className="px-3 py-1.5 rounded border border-solix-border text-slate-300 text-xs hover:text-white disabled:opacity-50"
+        >
+          Cancel
+        </button>
+      </div>
     </div>
   );
 }

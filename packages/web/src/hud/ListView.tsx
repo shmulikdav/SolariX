@@ -320,10 +320,7 @@ function HealthBar({
 }): JSX.Element {
   const color = healthColor(score);
   return (
-    <div
-      className="inline-flex items-center gap-2"
-      title={reasons.length ? reasons.join(' · ') : `Health ${score}`}
-    >
+    <div className="relative inline-flex items-center gap-2 group">
       <span
         className="text-[11px] font-mono font-bold"
         style={{ color }}
@@ -338,6 +335,30 @@ function HealthBar({
             background: color,
           }}
         />
+      </div>
+      <div className="pointer-events-none absolute right-0 top-full mt-1 z-50 hidden group-hover:block w-64 rounded border border-solix-border bg-solix-panel/95 backdrop-blur p-2 text-left shadow-xl">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-[10px] uppercase tracking-wide text-slate-400">
+            Health
+          </span>
+          <span className="text-xs font-bold" style={{ color }}>
+            {score}/100
+          </span>
+        </div>
+        {reasons.length === 0 ? (
+          <div className="text-[11px] text-slate-400 italic">
+            All four bands healthy: stable status, no pending decisions,
+            context budget, mission progress.
+          </div>
+        ) : (
+          <ul className="space-y-0.5">
+            {reasons.map((r) => (
+              <li key={r} className="text-[11px] text-slate-200 leading-snug">
+                · {r}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   );

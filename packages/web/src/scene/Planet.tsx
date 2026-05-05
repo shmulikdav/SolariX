@@ -14,7 +14,7 @@ import {
 } from './orbits.js';
 import { Moon } from './Moon.js';
 import { AtmosphereRim } from './AtmosphereRim.js';
-import { computeHealth } from '../health.js';
+import { computeHealth, healthColor as healthBadgeColor } from '../health.js';
 
 interface PlanetProps {
   session: Session;
@@ -61,11 +61,11 @@ export function Planet({ session }: PlanetProps): JSX.Element {
         (p) => p.sessionId === session.id,
       ).length,
   );
-  const health = useMemo(
-    () =>
-      computeHealth(session, currentMission, pendingForSession).score,
+  const healthDetail = useMemo(
+    () => computeHealth(session, currentMission, pendingForSession),
     [session, currentMission, pendingForSession],
   );
+  const health = healthDetail.score;
   const rimIntensity = 0.4 + (health / 100) * 0.8;
 
   const baseColor = useMemo(
@@ -274,6 +274,20 @@ export function Planet({ session }: PlanetProps): JSX.Element {
           </div>
           <div className="opacity-70">
             {String(session.model)} · {statusLabel(session.status)}
+          </div>
+          <div
+            className="opacity-70"
+            title={
+              healthDetail.reasons.length
+                ? healthDetail.reasons.join(' · ')
+                : 'Stable, low context, no pending decisions'
+            }
+          >
+            <span style={{ color: healthBadgeColor(health) }}>♥</span>{' '}
+            health {health}
+            {healthDetail.reasons[0] && (
+              <span className="opacity-80"> · {healthDetail.reasons[0]}</span>
+            )}
           </div>
         </div>
       </Html>

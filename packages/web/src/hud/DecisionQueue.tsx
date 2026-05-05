@@ -145,6 +145,8 @@ function DecisionCard({
         </span>
       </div>
 
+      <PermissionPreview tool={tool} args={args} />
+
       {suggestion && <SuggestionLine suggestion={suggestion} />}
 
       <div className="mt-3 flex gap-1.5">
@@ -170,6 +172,167 @@ function DecisionCard({
       </div>
     </div>
   );
+}
+
+/**
+ * Inline preview that turns "approve this opaque tool call" into "here's
+ * exactly what's about to happen." Shape varies by tool:
+ *   - Bash: the full command, monospace
+ *   - Edit / Write / NotebookEdit: file path + a short before/after window
+ *   - Read / Glob / Grep: the path or pattern
+ * Returns null for tools where the one-line args summary already says it.
+ */
+function PermissionPreview({
+  tool,
+  args,
+}: {
+  tool: string;
+  args: Record<string, unknown>;
+}): JSX.Element | null {
+  const [expanded, setExpanded] = useState(false);
+
+  if (tool === 'Bash') {
+    const cmd = strArg(args, 'command') ?? '';
+    const desc = strArg(args, 'description');
+    if (!cmd) return null;
+    return (
+      <PreviewShell label="will run">
+        <pre className="whitespace-pre-wrap break-words font-mono text-[11px] text-slate-100">
+          {cmd}
+        </pre>
+        {desc && (
+          <div className="mt-1 text-[10px] text-slate-500 italic">
+            {desc}
+          </div>
+        )}
+      </PreviewShell>
+    );
+  }
+
+  if (tool === 'Edit' || tool === 'NotebookEdit') {
+    const path = strArg(args, 'file_path') ?? strArg(args, 'notebook_path');
+    const oldStr = strArg(args, 'old_string');
+    const newStr = strArg(args, 'new_string');
+    if (!path && !oldStr && !newStr) return null;
+    return (
+      <PreviewShell label="patch">
+        {path && (
+          <div className="font-mono text-[11px] text-solix-accent break-all">
+            {path}
+          </div>
+        )}
+        {oldStr && (
+          <DiffSnippet
+            sign="-"
+            text={oldStr}
+            expanded={expanded}
+            colorClass="text-solix-danger bg-solix-danger/10"
+          />
+        )}
+        {newStr && (
+          <DiffSnippet
+            sign="+"
+            text={newStr}
+            expanded={expanded}
+            colorClass="text-solix-ok bg-solix-ok/10"
+          />
+        )}
+        {(longish(oldStr) || longish(newStr)) && (
+          <button
+            onClick={() => setExpanded((v) => !v)}
+            className="mt-1 text-[10px] text-slate-400 hover:text-slate-100"
+          >
+            {expanded ? 'collapse' : 'expand'}
+          </button>
+        )}
+      </PreviewShell>
+    );
+  }
+
+  if (tool === 'Write') {
+    const path = strArg(args, 'file_path');
+    const content = strArg(args, 'content') ?? '';
+    if (!path) return null;
+    return (
+      <PreviewShell label="will write">
+        <div className="font-mono text-[11px] text-solix-accent break-all">
+          {path}
+        </div>
+        {content && (
+          <DiffSnippet
+            sign="+"
+            text={content}
+            expanded={expanded}
+            colorClass="text-solix-ok bg-solix-ok/10"
+          />
+        )}
+        {longish(content) && (
+          <button
+            onClick={() => setExpanded((v) => !v)}
+            className="mt-1 text-[10px] text-slate-400 hover:text-slate-100"
+          >
+            {expanded ? 'collapse' : 'expand'}
+          </button>
+        )}
+      </PreviewShell>
+    );
+  }
+
+  return null;
+}
+
+function PreviewShell({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}): JSX.Element {
+  return (
+    <div className="mt-2 rounded border border-solix-border bg-black/30 px-2 py-1.5">
+      <div className="text-[9px] uppercase tracking-wider text-slate-500 mb-1">
+        {label}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function DiffSnippet({
+  sign,
+  text,
+  expanded,
+  colorClass,
+}: {
+  sign: '+' | '-';
+  text: string;
+  expanded: boolean;
+  colorClass: string;
+}): JSX.Element {
+  const shown = expanded ? text : truncateMiddle(text, 240);
+  return (
+    <pre
+      className={`mt-1 px-1.5 py-1 rounded text-[11px] font-mono whitespace-pre-wrap break-words ${colorClass}`}
+    >
+      <span className="opacity-50 mr-1">{sign}</span>
+      {shown}
+    </pre>
+  );
+}
+
+function strArg(args: Record<string, unknown>, key: string): string | undefined {
+  const v = args[key];
+  return typeof v === 'string' ? v : undefined;
+}
+
+function longish(s: string | undefined): boolean {
+  return Boolean(s && s.length > 240);
+}
+
+function truncateMiddle(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const half = Math.floor((max - 3) / 2);
+  return `${text.slice(0, half)}\n…\n${text.slice(-half)}`;
 }
 
 function SuggestionLine({
