@@ -225,3 +225,41 @@ export interface AuditEvent {
   /** Free-form structured detail; kept JSON-string in DB. */
   payload?: Record<string, unknown>;
 }
+
+/**
+ * Persisted snapshot of a galaxy manifest. Created on every export so the
+ * user can browse past states, see what changed between versions, and
+ * restore a previous configuration if they want.
+ */
+export interface GalaxyVersion {
+  id: string;
+  ts: number;
+  /** Sequential index — v1, v2, v3… for human-readable labelling. */
+  ordinal: number;
+  /** What name was passed at export time. */
+  name: string;
+  author?: string;
+  description?: string;
+  /** Full manifest, kept JSON-string in DB. */
+  manifest: GalaxyManifest;
+}
+
+/**
+ * Manifest diff result. Pure function output; consumed by the Versions
+ * UI to show "what changed between v3 and v5."
+ */
+export interface GalaxyManifestDiff {
+  advisors: {
+    added: string[];
+    removed: string[];
+    pinChanged: { role: string; from: boolean; to: boolean }[];
+  };
+  skills: {
+    added: string[];
+    removed: string[];
+  };
+  projects: {
+    added: string[];
+    removed: string[];
+  };
+}

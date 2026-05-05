@@ -181,7 +181,7 @@ interface SolixState {
   selectedAdvisorId: string | null;
   selectedSkillId: string | null;
   motionEnabled: boolean;
-  viewMode: 'galaxy' | 'list';
+  viewMode: 'galaxy' | 'list' | 'missions';
   playback: PlaybackState;
   toasts: { id: string; level: 'info' | 'warn' | 'error'; message: string }[];
 
@@ -199,7 +199,7 @@ interface SolixState {
   launchTask: (cwd: string, model: string, initialPrompt?: string) => void;
   setMotionEnabled: (b: boolean) => void;
   toggleMotion: () => void;
-  setViewMode: (m: 'galaxy' | 'list') => void;
+  setViewMode: (m: 'galaxy' | 'list' | 'missions') => void;
   toggleViewMode: () => void;
   enterPlayback: (events: TimelineEvent[], earliestMs: number, latestMs: number) => void;
   exitPlayback: () => void;
@@ -234,15 +234,17 @@ function writeMotionPref(b: boolean): void {
   }
 }
 
-function readViewPref(): 'galaxy' | 'list' {
+function readViewPref(): 'galaxy' | 'list' | 'missions' {
   try {
-    return localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'galaxy';
+    const v = localStorage.getItem(VIEW_KEY);
+    if (v === 'list' || v === 'missions' || v === 'galaxy') return v;
+    return 'galaxy';
   } catch {
     return 'galaxy';
   }
 }
 
-function writeViewPref(m: 'galaxy' | 'list'): void {
+function writeViewPref(m: 'galaxy' | 'list' | 'missions'): void {
   try {
     localStorage.setItem(VIEW_KEY, m);
   } catch {
@@ -531,7 +533,10 @@ export const useSolixStore = create<SolixState>((set, get) => ({
     set({ viewMode: m });
   },
   toggleViewMode: () => {
-    const next = get().viewMode === 'list' ? 'galaxy' : 'list';
+    const order = ['galaxy', 'list', 'missions'] as const;
+    const cur = get().viewMode;
+    const idx = order.indexOf(cur);
+    const next = order[(idx + 1) % order.length] ?? 'galaxy';
     writeViewPref(next);
     set({ viewMode: next });
   },

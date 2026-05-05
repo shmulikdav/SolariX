@@ -14,7 +14,6 @@ export function TopBar({
   const connected = useSolixStore((s) => s.connected);
   const planets = useSolixStore(selectPlanets);
   const viewMode = useSolixStore((s) => s.viewMode);
-  const toggleViewMode = useSolixStore((s) => s.toggleViewMode);
   const playbackActive = useSolixStore((s) => s.playback.active);
 
   const counts = planets.reduce(
@@ -61,13 +60,7 @@ export function TopBar({
         <Stat label="active" value={counts.active} color="text-solix-ok" />
         <Stat label="attention" value={counts.attention} color="text-solix-warn" />
         <Stat label="idle" value={counts.idle} color="text-slate-400" />
-        <button
-          onClick={toggleViewMode}
-          className="px-2 py-1 rounded bg-solix-panel border border-solix-border text-slate-300 hover:text-white hover:bg-solix-border/30"
-          title={`Switch to ${viewMode === 'list' ? 'galaxy' : 'list'} view (V)`}
-        >
-          {viewMode === 'list' ? '🪐 Galaxy' : '☰ List'}
-        </button>
+        <ViewToggle viewMode={viewMode} />
         {onOpenTimeline && (
           <button
             onClick={onOpenTimeline}
@@ -96,6 +89,38 @@ export function TopBar({
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+function ViewToggle({
+  viewMode,
+}: {
+  viewMode: 'galaxy' | 'list' | 'missions';
+}): JSX.Element {
+  const setViewMode = useSolixStore((s) => s.setViewMode);
+  const opts: { mode: 'galaxy' | 'list' | 'missions'; label: string }[] = [
+    { mode: 'galaxy', label: '🪐' },
+    { mode: 'list', label: '☰' },
+    { mode: 'missions', label: '◎' },
+  ];
+  return (
+    <div className="inline-flex rounded border border-solix-border bg-solix-panel overflow-hidden">
+      {opts.map((o) => (
+        <button
+          key={o.mode}
+          onClick={() => setViewMode(o.mode)}
+          className={`px-2 py-1 text-xs ${
+            viewMode === o.mode
+              ? 'bg-solix-border/50 text-white'
+              : 'text-slate-400 hover:text-slate-100'
+          }`}
+          title={`${o.mode} view (V)`}
+        >
+          {o.label}{' '}
+          <span className="capitalize">{o.mode}</span>
+        </button>
+      ))}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Scene } from './scene/Scene.js';
 import { ListView } from './hud/ListView.js';
+import { MissionView } from './hud/MissionView.js';
 import { TimelineDrawer } from './hud/TimelineDrawer.js';
 import { TopBar } from './hud/TopBar.js';
 import { Toasts } from './hud/Toasts.js';
@@ -73,6 +74,8 @@ export default function App(): JSX.Element {
         state.toggleMotion();
       } else if (!isTextField && (e.key === 'v' || e.key === 'V')) {
         state.toggleViewMode();
+      } else if (!isTextField && (e.key === 'm' || e.key === 'M')) {
+        state.setViewMode('missions');
       } else if (!isTextField && (e.key === 't' || e.key === 'T')) {
         setTimelineOpen((v) => !v);
       } else if (!isTextField && top && (e.key === 'y' || e.key === 'Y')) {
@@ -123,7 +126,9 @@ export default function App(): JSX.Element {
  */
 function ViewSurface(): JSX.Element {
   const viewMode = useSolixStore((s) => s.viewMode);
-  return viewMode === 'list' ? <ListView /> : <Scene />;
+  if (viewMode === 'list') return <ListView />;
+  if (viewMode === 'missions') return <MissionView />;
+  return <Scene />;
 }
 
 function EmptyHint(): JSX.Element | null {

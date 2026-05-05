@@ -31,9 +31,13 @@ import {
 } from './state/skills.js';
 import {
   exportManifest,
+  getVersion,
   importManifest,
   listImportHistory,
+  listVersions,
+  snapshotExport,
 } from './state/galaxy.js';
+import { diffManifests } from '@solix/shared';
 import { RegistryClient } from './cloud.js';
 import type { GalaxyManifest } from '@solix/shared';
 
@@ -247,7 +251,38 @@ export function createHttpApp(opts: {
       author,
       description,
     });
+    // Snapshot every export into version history (no-op if identical to
+    // the previous version — see snapshotExport).
+    snapshotExport(opts.db, manifest);
     return c.json(manifest);
+  });
+
+  app.get('/api/galaxy/versions', (c) => {
+    const limitStr = c.req.query('limit');
+    const limit = limitStr ? parseInt(limitStr, 10) : undefined;
+    return c.json(listVersions(opts.db, limit));
+  });
+
+  app.get('/api/galaxy/versions/:id', (c) => {
+    const v = getVersion(opts.db, c.req.param('id'));
+    if (!v) return c.json({ error: 'not found' }, 404);
+    return c.json(v);
+  });
+
+  app.get('/api/galaxy/diff', (c) => {
+    const fromId = c.req.query('from');
+    const toId = c.req.query('to');
+    if (!fromId || !toId) {
+      return c.json({ error: 'from and to query params required' }, 400);
+    }
+    const from = getVersion(opts.db, fromId);
+    const to = getVersion(opts.db, toId);
+    if (!from || !to) return c.json({ error: 'version not found' }, 404);
+    return c.json({
+      from: { id: from.id, ordinal: from.ordinal, ts: from.ts },
+      to: { id: to.id, ordinal: to.ordinal, ts: to.ts },
+      diff: diffManifests(from.manifest, to.manifest),
+    });
   });
 
   app.post('/api/galaxy/import', async (c) => {

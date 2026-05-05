@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react';
-import type { AuditEvent, AuditKind } from '@solix/shared';
+import type {
+  AuditEvent,
+  AuditKind,
+  GalaxyManifestDiff,
+  GalaxyVersion,
+} from '@solix/shared';
 import { useSolixStore } from '../store/index.js';
 
 interface ImportResponse {
@@ -15,7 +20,7 @@ interface GalaxyPanelProps {
   onClose: () => void;
 }
 
-type Tab = 'share' | 'audit';
+type Tab = 'share' | 'versions' | 'audit';
 
 export function GalaxyPanel({
   open,
@@ -121,6 +126,12 @@ export function GalaxyPanel({
         <TabButton active={tab === 'share'} onClick={() => setTab('share')}>
           Sharing
         </TabButton>
+        <TabButton
+          active={tab === 'versions'}
+          onClick={() => setTab('versions')}
+        >
+          Versions
+        </TabButton>
         <TabButton active={tab === 'audit'} onClick={() => setTab('audit')}>
           Audit
         </TabButton>
@@ -128,6 +139,8 @@ export function GalaxyPanel({
 
       {tab === 'audit' ? (
         <AuditTab open={open} />
+      ) : tab === 'versions' ? (
+        <VersionsTab open={open} />
       ) : (
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
         <section>
@@ -199,7 +212,9 @@ export function GalaxyPanel({
       <div className="px-4 py-3 border-t border-solix-border text-xs text-slate-500">
         {tab === 'audit'
           ? 'Append-only history. Read-only.'
-          : "Imports never spawn pinned advisors or run shell commands. You're in control."}
+          : tab === 'versions'
+            ? 'Each export snapshots a version. Identical re-exports are deduped.'
+            : "Imports never spawn pinned advisors or run shell commands. You're in control."}
       </div>
     </div>
   );
@@ -364,4 +379,263 @@ function kindColor(k: AuditKind): string {
   if (k === 'galaxy_imported') return 'text-cyan-300';
   if (k.startsWith('advisor_')) return 'text-amber-300';
   return 'text-slate-300';
+}
+
+interface DiffPayload {
+  from: { id: string; ordinal: number; ts: number };
+  to: { id: string; ordinal: number; ts: number };
+  diff: GalaxyManifestDiff;
+}
+
+function VersionsTab({ open }: { open: boolean }): JSX.Element {
+  const [versions, setVersions] = useState<GalaxyVersion[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // Two clicks to compare: first sets `from`, second sets `to`.
+  const [fromId, setFromId] = useState<string | null>(null);
+  const [toId, setToId] = useState<string | null>(null);
+  const [diff, setDiff] = useState<DiffPayload | null>(null);
+  const [diffLoading, setDiffLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setLoading(true);
+    fetch('/api/galaxy/versions')
+      .then((r) =>
+        r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)),
+      )
+      .then((rows: GalaxyVersion[]) => {
+        if (!cancelled) setVersions(rows);
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!fromId || !toId) {
+      setDiff(null);
+      return;
+    }
+    if (fromId === toId) {
+      setDiff(null);
+      return;
+    }
+    let cancelled = false;
+    setDiffLoading(true);
+    fetch(`/api/galaxy/diff?from=${fromId}&to=${toId}`)
+      .then((r) =>
+        r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)),
+      )
+      .then((d: DiffPayload) => {
+        if (!cancelled) setDiff(d);
+      })
+      .catch(() => {
+        if (!cancelled) setDiff(null);
+      })
+      .finally(() => {
+        if (!cancelled) setDiffLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fromId, toId]);
+
+  const onPick = (id: string): void => {
+    if (!fromId) {
+      setFromId(id);
+    } else if (!toId && id !== fromId) {
+      setToId(id);
+    } else {
+      // Reset selection — start over from this version.
+      setFromId(id);
+      setToId(null);
+      setDiff(null);
+    }
+  };
+
+  const clearSelection = (): void => {
+    setFromId(null);
+    setToId(null);
+    setDiff(null);
+  };
+
+  const promptKey = (v: GalaxyVersion): 'from' | 'to' | null =>
+    v.id === fromId ? 'from' : v.id === toId ? 'to' : null;
+
+  return (
+    <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      {(fromId || toId) && (
+        <div className="flex items-center justify-between text-[11px] text-slate-400">
+          <div>
+            {fromId && !toId && 'Pick a second version to diff…'}
+            {fromId && toId && diffLoading && 'Computing diff…'}
+            {fromId && toId && !diffLoading && diff && (
+              <>
+                v{diff.from.ordinal} → v{diff.to.ordinal}
+              </>
+            )}
+          </div>
+          <button
+            onClick={clearSelection}
+            className="text-slate-500 hover:text-slate-100"
+          >
+            clear
+          </button>
+        </div>
+      )}
+
+      {diff && <DiffView diff={diff.diff} />}
+
+      {loading && (
+        <div className="text-xs text-slate-500 italic">Loading…</div>
+      )}
+      {error && (
+        <div className="text-xs text-solix-danger italic">
+          Could not load versions: {error}
+        </div>
+      )}
+      {!loading && versions.length === 0 && (
+        <div className="text-xs text-slate-500 italic">
+          No versions yet. Hit "Download manifest" on the Sharing tab to
+          create one.
+        </div>
+      )}
+
+      <ul className="space-y-1.5">
+        {versions.map((v) => {
+          const role = promptKey(v);
+          return (
+            <li key={v.id}>
+              <button
+                onClick={() => onPick(v.id)}
+                className={`w-full text-left rounded border p-2 ${
+                  role === 'from'
+                    ? 'border-solix-accent bg-solix-accent/10'
+                    : role === 'to'
+                      ? 'border-cyan-400 bg-cyan-400/10'
+                      : 'border-solix-border bg-black/20 hover:bg-solix-border/30'
+                }`}
+              >
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="uppercase tracking-wide text-slate-400">
+                    v{v.ordinal} · {v.name}
+                  </span>
+                  <span className="text-slate-500 font-mono">
+                    {new Date(v.ts).toLocaleString('en-US', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      month: 'short',
+                      day: 'numeric',
+                    })}
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-300 mt-1">
+                  {v.manifest.advisors.length} advisors ·{' '}
+                  {v.manifest.skills.length} skills ·{' '}
+                  {v.manifest.projects.length} projects
+                  {role && (
+                    <span className="ml-2 text-[9px] uppercase tracking-wider text-slate-400">
+                      [{role}]
+                    </span>
+                  )}
+                </div>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+function DiffView({ diff }: { diff: GalaxyManifestDiff }): JSX.Element {
+  const empty =
+    diff.advisors.added.length === 0 &&
+    diff.advisors.removed.length === 0 &&
+    diff.advisors.pinChanged.length === 0 &&
+    diff.skills.added.length === 0 &&
+    diff.skills.removed.length === 0 &&
+    diff.projects.added.length === 0 &&
+    diff.projects.removed.length === 0;
+  if (empty) {
+    return (
+      <div className="text-xs text-slate-500 italic border border-solix-border rounded p-2 bg-black/20">
+        No changes between these versions.
+      </div>
+    );
+  }
+  return (
+    <div className="rounded border border-solix-border bg-black/30 p-2 space-y-2 text-xs">
+      <DiffSection
+        label="Advisors"
+        added={diff.advisors.added}
+        removed={diff.advisors.removed}
+      />
+      {diff.advisors.pinChanged.length > 0 && (
+        <div>
+          <div className="text-[10px] uppercase tracking-wide text-slate-500">
+            Advisor pin changes
+          </div>
+          <ul className="mt-1 space-y-0.5">
+            {diff.advisors.pinChanged.map((c) => (
+              <li key={c.role} className="text-slate-200">
+                <span className="font-mono">{c.role}</span>:{' '}
+                {c.from ? 'pinned' : 'unpinned'} →{' '}
+                {c.to ? 'pinned' : 'unpinned'}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <DiffSection
+        label="Skills"
+        added={diff.skills.added}
+        removed={diff.skills.removed}
+      />
+      <DiffSection
+        label="Projects"
+        added={diff.projects.added}
+        removed={diff.projects.removed}
+      />
+    </div>
+  );
+}
+
+function DiffSection({
+  label,
+  added,
+  removed,
+}: {
+  label: string;
+  added: string[];
+  removed: string[];
+}): JSX.Element | null {
+  if (added.length === 0 && removed.length === 0) return null;
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-wide text-slate-500">
+        {label}
+      </div>
+      <ul className="mt-1 space-y-0.5">
+        {added.map((id) => (
+          <li key={`+${id}`} className="text-solix-ok">
+            + {id}
+          </li>
+        ))}
+        {removed.map((id) => (
+          <li key={`-${id}`} className="text-solix-danger">
+            − {id}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }

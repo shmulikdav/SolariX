@@ -81,6 +81,17 @@ CREATE TABLE IF NOT EXISTS audit_events (
 CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_events(ts);
 CREATE INDEX IF NOT EXISTS idx_audit_session ON audit_events(session_id);
 
+CREATE TABLE IF NOT EXISTS galaxy_versions (
+  id TEXT PRIMARY KEY,
+  ts INTEGER NOT NULL,
+  ordinal INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  author TEXT,
+  description TEXT,
+  manifest_json TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_galaxy_versions_ts ON galaxy_versions(ts);
+
 CREATE TABLE IF NOT EXISTS missions (
   id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL REFERENCES sessions(id),
