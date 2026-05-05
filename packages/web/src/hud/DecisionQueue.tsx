@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSolixStore } from '../store/index.js';
 import type { Mission, Session } from '@solix/shared';
+import { suggestForPermission } from '../suggestions.js';
 
 /**
  * Decision Queue — the "what do I need to do?" inbox.
@@ -114,6 +115,9 @@ function DecisionCard({
   const name =
     session?.name ?? session?.id.slice(0, 8) ?? 'unknown agent';
   const project = session?.cwd ? basename(session.cwd) : '';
+  const suggestion = session
+    ? suggestForPermission(session, mission, tool, args)
+    : null;
 
   return (
     <div className="pointer-events-auto rounded border border-solix-danger bg-solix-danger/10 p-3 backdrop-blur shadow-lg">
@@ -141,6 +145,8 @@ function DecisionCard({
         </span>
       </div>
 
+      {suggestion && <SuggestionLine suggestion={suggestion} />}
+
       <div className="mt-3 flex gap-1.5">
         <button
           onClick={onApprove}
@@ -162,6 +168,27 @@ function DecisionCard({
           Ask
         </button>
       </div>
+    </div>
+  );
+}
+
+function SuggestionLine({
+  suggestion,
+}: {
+  suggestion: { text: string; severity: 'info' | 'warn' | 'danger' };
+}): JSX.Element {
+  const colorClass =
+    suggestion.severity === 'danger'
+      ? 'text-solix-danger border-solix-danger/40 bg-solix-danger/10'
+      : suggestion.severity === 'warn'
+        ? 'text-solix-warn border-solix-warn/40 bg-solix-warn/10'
+        : 'text-slate-300 border-solix-border bg-black/20';
+  return (
+    <div
+      className={`mt-2 px-2 py-1 rounded border text-[11px] leading-snug ${colorClass}`}
+    >
+      <span className="font-semibold mr-1">Suggested:</span>
+      {suggestion.text}
     </div>
   );
 }

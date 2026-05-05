@@ -14,6 +14,7 @@ import {
 } from './orbits.js';
 import { Moon } from './Moon.js';
 import { AtmosphereRim } from './AtmosphereRim.js';
+import { computeHealth } from '../health.js';
 
 interface PlanetProps {
   session: Session;
@@ -46,6 +47,26 @@ export function Planet({ session }: PlanetProps): JSX.Element {
   const selectedSessionId = useSolixStore((s) => s.selectedSessionId);
   const isSelected = selectedSessionId === session.id;
   const isAdvisor = session.kind === 'advisor';
+  // Health drives the atmosphere rim intensity — high-health planets
+  // glow brighter, struggling ones recede. computeHealth is cheap; we
+  // pull current mission + pending count from the store.
+  const currentMission = useSolixStore((s) =>
+    session.currentMissionId
+      ? s.missions[session.currentMissionId]
+      : undefined,
+  );
+  const pendingForSession = useSolixStore(
+    (s) =>
+      Object.values(s.pendingPermissions).filter(
+        (p) => p.sessionId === session.id,
+      ).length,
+  );
+  const health = useMemo(
+    () =>
+      computeHealth(session, currentMission, pendingForSession).score,
+    [session, currentMission, pendingForSession],
+  );
+  const rimIntensity = 0.4 + (health / 100) * 0.8;
 
   const baseColor = useMemo(
     () =>
@@ -199,7 +220,7 @@ export function Planet({ session }: PlanetProps): JSX.Element {
             ? advisorForRole.color
             : modelColor(session.model)
         }
-        intensity={session.status === 'active' ? 1.2 : 0.7}
+        intensity={rimIntensity * (session.status === 'active' ? 1.2 : 0.9)}
       />
 
       <mesh ref={flareRef} visible={false}>

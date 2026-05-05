@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSolixStore } from '../store/index.js';
 import { statusLabel } from '../scene/colors.js';
+import { suggestForSession } from '../suggestions.js';
 
 type Tab = 'chat' | 'missions' | 'files';
 
@@ -27,6 +28,14 @@ export function SidePanel(): JSX.Element | null {
       .filter((m) => m.sessionId === session.id)
       .sort((a, b) => b.startedAt - a.startedAt);
   }, [missions, session]);
+
+  const currentMission = useMemo(() => {
+    if (!session?.currentMissionId) return undefined;
+    return missions[session.currentMissionId];
+  }, [missions, session]);
+  const sessionSuggestion = session
+    ? suggestForSession(session, currentMission)
+    : null;
 
   // Auto-scroll chat to the newest message whenever it grows.
   useEffect(() => {
@@ -69,6 +78,21 @@ export function SidePanel(): JSX.Element | null {
           ✕
         </button>
       </div>
+
+      {sessionSuggestion && (
+        <div
+          className={`px-4 py-2 border-b border-solix-border text-[11px] leading-snug ${
+            sessionSuggestion.severity === 'danger'
+              ? 'text-solix-danger bg-solix-danger/10'
+              : sessionSuggestion.severity === 'warn'
+                ? 'text-solix-warn bg-solix-warn/10'
+                : 'text-slate-300 bg-black/20'
+          }`}
+        >
+          <span className="font-semibold mr-1">Suggested:</span>
+          {sessionSuggestion.text}
+        </div>
+      )}
 
       <div className="px-4 py-2 border-b border-solix-border">
         <div className="flex items-center justify-between text-xs text-slate-400">

@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import type { AuditEvent, AuditKind } from '@solix/shared';
 import { useSolixStore } from '../store/index.js';
 
 interface ImportResponse {
@@ -14,10 +15,13 @@ interface GalaxyPanelProps {
   onClose: () => void;
 }
 
+type Tab = 'share' | 'audit';
+
 export function GalaxyPanel({
   open,
   onClose,
 }: GalaxyPanelProps): JSX.Element | null {
+  const [tab, setTab] = useState<Tab>('share');
   const [name, setName] = useState('My Galaxy');
   const [importText, setImportText] = useState('');
   const [importUrl, setImportUrl] = useState('');
@@ -113,6 +117,18 @@ export function GalaxyPanel({
         </button>
       </div>
 
+      <div className="flex border-b border-solix-border text-xs">
+        <TabButton active={tab === 'share'} onClick={() => setTab('share')}>
+          Sharing
+        </TabButton>
+        <TabButton active={tab === 'audit'} onClick={() => setTab('audit')}>
+          Audit
+        </TabButton>
+      </div>
+
+      {tab === 'audit' ? (
+        <AuditTab open={open} />
+      ) : (
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
         <section>
           <div className="text-xs uppercase tracking-wide text-slate-400 mb-2">
@@ -178,11 +194,174 @@ export function GalaxyPanel({
           </div>
         )}
       </div>
+      )}
 
       <div className="px-4 py-3 border-t border-solix-border text-xs text-slate-500">
-        Imports never spawn pinned advisors or run shell commands. You're in
-        control.
+        {tab === 'audit'
+          ? 'Append-only history. Read-only.'
+          : "Imports never spawn pinned advisors or run shell commands. You're in control."}
       </div>
     </div>
   );
+}
+
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}): JSX.Element {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex-1 px-3 py-2 ${
+        active
+          ? 'text-solix-accent border-b-2 border-solix-accent'
+          : 'text-slate-400 hover:text-slate-200 border-b-2 border-transparent'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+const ALL_KINDS: AuditKind[] = [
+  'permission_approved',
+  'permission_denied',
+  'advisor_invoked',
+  'advisor_pinned',
+  'advisor_unpinned',
+  'galaxy_imported',
+];
+
+function AuditTab({ open }: { open: boolean }): JSX.Element {
+  const [events, setEvents] = useState<AuditEvent[]>([]);
+  const [filter, setFilter] = useState<AuditKind | 'all'>('all');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    const url = `/api/audit${filter === 'all' ? '' : `?kind=${filter}`}`;
+    fetch(url)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((rows: AuditEvent[]) => {
+        if (!cancelled) setEvents(rows);
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, filter]);
+
+  return (
+    <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <FilterChip
+          label="all"
+          active={filter === 'all'}
+          onClick={() => setFilter('all')}
+        />
+        {ALL_KINDS.map((k) => (
+          <FilterChip
+            key={k}
+            label={shortKind(k)}
+            active={filter === k}
+            onClick={() => setFilter(k)}
+          />
+        ))}
+      </div>
+
+      {loading && (
+        <div className="text-xs text-slate-500 italic">Loading…</div>
+      )}
+      {error && (
+        <div className="text-xs text-solix-danger italic">
+          Could not load audit events: {error}
+        </div>
+      )}
+
+      {!loading && events.length === 0 && (
+        <div className="text-xs text-slate-500 italic">
+          No audit events yet. Approve a permission or invoke an advisor and
+          they'll start appearing here.
+        </div>
+      )}
+
+      <ul className="space-y-1.5">
+        {events.map((ev) => (
+          <li
+            key={ev.id}
+            className="rounded border border-solix-border bg-black/20 p-2"
+          >
+            <div className="flex items-center justify-between text-[10px]">
+              <span className={`uppercase tracking-wide ${kindColor(ev.kind)}`}>
+                {shortKind(ev.kind)}
+              </span>
+              <span className="text-slate-500 font-mono">
+                {new Date(ev.ts).toLocaleString('en-US', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                  hour12: false,
+                  month: 'short',
+                  day: 'numeric',
+                })}
+              </span>
+            </div>
+            <div className="text-[12px] text-slate-100 mt-1 leading-snug">
+              {ev.summary}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function FilterChip({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}): JSX.Element {
+  return (
+    <button
+      onClick={onClick}
+      className={`text-[10px] px-2 py-0.5 rounded border ${
+        active
+          ? 'bg-solix-accent/15 border-solix-accent text-solix-accent'
+          : 'border-solix-border text-slate-400 hover:text-slate-200'
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function shortKind(k: AuditKind | 'all'): string {
+  if (k === 'all') return 'all';
+  return k.replace(/_/g, ' ');
+}
+
+function kindColor(k: AuditKind): string {
+  if (k === 'permission_approved') return 'text-solix-ok';
+  if (k === 'permission_denied') return 'text-solix-danger';
+  if (k === 'galaxy_imported') return 'text-cyan-300';
+  if (k.startsWith('advisor_')) return 'text-amber-300';
+  return 'text-slate-300';
 }

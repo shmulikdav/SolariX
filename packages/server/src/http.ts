@@ -14,6 +14,8 @@ import {
 } from './state/sessions.js';
 import { listMissions } from './state/missions.js';
 import { loadTimeline } from './state/timeline.js';
+import { listAudit } from './state/audit.js';
+import type { AuditKind } from '@solix/shared';
 import {
   getAdvisor,
   listAdvisors,
@@ -136,6 +138,23 @@ export function createHttpApp(opts: {
     const untilMs = untilMsStr ? parseInt(untilMsStr, 10) : Date.now();
     const limit = limitStr ? parseInt(limitStr, 10) : undefined;
     return c.json(loadTimeline(opts.db, { sinceMs, untilMs, limit }));
+  });
+
+  app.get('/api/audit', (c) => {
+    const sessionId = c.req.query('sessionId') ?? undefined;
+    const kindStr = c.req.query('kind');
+    const sinceStr = c.req.query('since');
+    const untilStr = c.req.query('until');
+    const limitStr = c.req.query('limit');
+    return c.json(
+      listAudit(opts.db, {
+        sessionId,
+        kind: kindStr ? (kindStr as AuditKind) : undefined,
+        since: sinceStr ? parseInt(sinceStr, 10) : undefined,
+        until: untilStr ? parseInt(untilStr, 10) : undefined,
+        limit: limitStr ? parseInt(limitStr, 10) : undefined,
+      }),
+    );
   });
 
   app.get('/api/advisors', (c) => c.json(listAdvisors(opts.db)));

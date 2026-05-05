@@ -193,3 +193,35 @@ export interface TimelineEvent {
   toolName?: string;
   status?: SessionStatus;
 }
+
+/**
+ * Audit log — append-only history of every privileged action a user took
+ * (or the system took on their behalf). Persisted in SQLite under
+ * `audit_events`. The Audit tab in GalaxyPanel reads this; downstream
+ * exports (CSV / Slack relay) are out of scope for v1 but the shape is
+ * stable enough to support them later.
+ */
+export type AuditKind =
+  | 'permission_approved'
+  | 'permission_denied'
+  | 'advisor_invoked'
+  | 'advisor_pinned'
+  | 'advisor_unpinned'
+  | 'galaxy_imported'
+  | 'galaxy_exported'
+  | 'galaxy_published'
+  | 'skill_installed'
+  | 'session_terminated';
+
+export interface AuditEvent {
+  id: string;
+  ts: number;
+  kind: AuditKind;
+  sessionId?: string;
+  advisorId?: string;
+  projectId?: string;
+  /** Short human-readable line — e.g. "Approved Bash for demo-c: git push…" */
+  summary: string;
+  /** Free-form structured detail; kept JSON-string in DB. */
+  payload?: Record<string, unknown>;
+}

@@ -6,6 +6,7 @@ import {
   useSolixStore,
 } from '../store/index.js';
 import { modelColor, statusLabel } from '../scene/colors.js';
+import { computeHealth, healthColor } from '../health.js';
 
 type SortKey =
   | 'name'
@@ -13,13 +14,16 @@ type SortKey =
   | 'progress'
   | 'context'
   | 'lastActivity'
-  | 'needs';
+  | 'needs'
+  | 'health';
 
 interface Row {
   session: Session;
   project?: Project;
   mission?: Mission;
   needsAttention: boolean;
+  health: number;
+  healthReasons: string[];
 }
 
 const STATUS_PRIORITY: Record<string, number> = {
@@ -63,6 +67,10 @@ export function ListView(): JSX.Element {
       const mission = s.currentMissionId
         ? missions[s.currentMissionId]
         : undefined;
+      const pendingForSession = Object.values(pendingPermissions).filter(
+        (p) => p.sessionId === s.id,
+      ).length;
+      const { score, reasons } = computeHealth(s, mission, pendingForSession);
       return {
         session: s,
         project: projects[s.projectId],
@@ -72,6 +80,8 @@ export function ListView(): JSX.Element {
           s.status === 'awaiting_permission' ||
           s.status === 'awaiting_input' ||
           s.status === 'plan_review',
+        health: score,
+        healthReasons: reasons,
       };
     });
   }, [planets, advisorPlanets, projects, missions, pendingPermissions]);
@@ -118,6 +128,8 @@ export function ListView(): JSX.Element {
         // True first when ascending — that's "needs attention at top".
         if (a.needsAttention === b.needsAttention) return 0;
         return a.needsAttention ? -1 * dir : 1 * dir;
+      case 'health':
+        return (a.health - b.health) * dir;
     }
   };
 
@@ -182,6 +194,9 @@ export function ListView(): JSX.Element {
                       <Th onClick={() => onSort('status')}>
                         Status{sortIndicator('status')}
                       </Th>
+                      <Th onClick={() => onSort('health')} numeric>
+                        Health{sortIndicator('health')}
+                      </Th>
                       <Th onClick={() => onSort('progress')}>
                         Mission · tools{sortIndicator('progress')}
                       </Th>
@@ -233,6 +248,12 @@ export function ListView(): JSX.Element {
                         </td>
                         <td className="px-3 py-2 text-xs text-slate-300">
                           {statusLabel(row.session.status)}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <HealthBar
+                            score={row.health}
+                            reasons={row.healthReasons}
+                          />
                         </td>
                         <td className="px-3 py-2 text-xs text-slate-300 truncate max-w-xs">
                           {row.mission ? (
@@ -287,6 +308,38 @@ function Th({
     >
       {children}
     </th>
+  );
+}
+
+function HealthBar({
+  score,
+  reasons,
+}: {
+  score: number;
+  reasons: string[];
+}): JSX.Element {
+  const color = healthColor(score);
+  return (
+    <div
+      className="inline-flex items-center gap-2"
+      title={reasons.length ? reasons.join(' · ') : `Health ${score}`}
+    >
+      <span
+        className="text-[11px] font-mono font-bold"
+        style={{ color }}
+      >
+        {score}
+      </span>
+      <div className="w-16 h-1.5 rounded-full bg-slate-800 overflow-hidden">
+        <div
+          className="h-full"
+          style={{
+            width: `${Math.max(2, score)}%`,
+            background: color,
+          }}
+        />
+      </div>
+    </div>
   );
 }
 
