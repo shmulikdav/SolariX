@@ -30,6 +30,8 @@ export function NewTaskModal({
   const [model, setModel] = useState<string>('default');
   const [advisorId, setAdvisorId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
+  const [worktreeBranch, setWorktreeBranch] = useState('');
+  const [worktreeBaseRef, setWorktreeBaseRef] = useState('');
   const [preflight, setPreflight] = useState<
     { claudeAvailable: boolean; version?: string } | null
   >(null);
@@ -75,9 +77,17 @@ export function NewTaskModal({
       : trimmedPrompt;
     const finalModel =
       advisor && model === 'default' ? advisor.defaultModel : model;
-    launchTask(trimmedCwd, finalModel, finalPrompt);
+    const trimmedBranch = worktreeBranch.trim();
+    launchTask(trimmedCwd, finalModel, finalPrompt, {
+      worktreeBranch: trimmedBranch || undefined,
+      worktreeBaseRef: trimmedBranch
+        ? worktreeBaseRef.trim() || undefined
+        : undefined,
+    });
     setPrompt('');
     setAdvisorId(null);
+    setWorktreeBranch('');
+    setWorktreeBaseRef('');
     onClose();
   };
 
@@ -207,6 +217,34 @@ export function NewTaskModal({
               )}
             </label>
           )}
+
+          <label className="block">
+            <div className="text-[10px] uppercase tracking-wide text-slate-400 mb-1">
+              Worktree branch{' '}
+              <span className="text-slate-600 normal-case">(optional)</span>
+            </div>
+            <input
+              value={worktreeBranch}
+              onChange={(e) => setWorktreeBranch(e.target.value)}
+              placeholder="leave empty to run in the chosen directory"
+              className="w-full text-sm font-mono bg-black/40 border border-solix-border rounded p-2 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-solix-accent"
+            />
+            {worktreeBranch.trim() && (
+              <div className="mt-2 space-y-1">
+                <div className="text-[10px] text-slate-500 italic">
+                  Solix will create (or reuse) a fresh git worktree at
+                  ~/.solix/worktrees/&lt;repo&gt;-{worktreeBranch.trim() || '<branch>'}
+                  and spawn Claude there. Existing branches are reused.
+                </div>
+                <input
+                  value={worktreeBaseRef}
+                  onChange={(e) => setWorktreeBaseRef(e.target.value)}
+                  placeholder="based on (default: HEAD)"
+                  className="w-full text-xs font-mono bg-black/40 border border-solix-border rounded p-1.5 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-solix-accent"
+                />
+              </div>
+            )}
+          </label>
 
           <label className="block">
             <div className="text-[10px] uppercase tracking-wide text-slate-400 mb-1">

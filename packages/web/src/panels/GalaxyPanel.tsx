@@ -157,7 +157,7 @@ export function GalaxyPanel({
   };
 
   return (
-    <div className="absolute top-0 right-0 h-full w-[480px] bg-solix-panel border-l border-solix-border backdrop-blur-md flex flex-col z-30">
+    <div className="absolute top-0 right-0 h-full w-full sm:w-[480px] bg-solix-panel border-l border-solix-border backdrop-blur-md flex flex-col z-30">
       <div className="px-4 py-3 border-b border-solix-border flex items-start justify-between">
         <div>
           <div className="text-xs uppercase tracking-wide text-solix-accent">

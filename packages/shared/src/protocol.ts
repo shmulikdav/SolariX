@@ -57,6 +57,12 @@ export type ClientMessage =
       cwd: string;
       model?: Model;
       initialPrompt?: string;
+      /** When set, the server creates a fresh git worktree on this branch
+       * (under ~/.solix/worktrees/...) and spawns claude there instead of in
+       * `cwd`. Existing branches are reused; new ones branch from
+       * `worktreeBaseRef` (defaults to HEAD). */
+      worktreeBranch?: string;
+      worktreeBaseRef?: string;
     }
   | { type: 'terminate_session'; sessionId: string }
   | { type: 'invoke_advisor'; advisorId: string; targetSessionId?: string; prompt?: string }

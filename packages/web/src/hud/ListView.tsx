@@ -55,6 +55,14 @@ export function ListView(): JSX.Element {
   const missions = useSolixStore((s) => s.missions);
   const pendingPermissions = useSolixStore((s) => s.pendingPermissions);
   const selectSession = useSolixStore((s) => s.selectSession);
+  const selectedSessionIds = useSolixStore((s) => s.selectedSessionIds);
+  const toggleSessionSelection = useSolixStore(
+    (s) => s.toggleSessionSelection,
+  );
+  const clearSessionSelection = useSolixStore(
+    (s) => s.clearSessionSelection,
+  );
+  const terminateSessions = useSolixStore((s) => s.terminateSessions);
 
   const [sortKey, setSortKey] = useState<SortKey>('needs');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -146,8 +154,34 @@ export function ListView(): JSX.Element {
   const sortIndicator = (key: SortKey): string =>
     sortKey !== key ? '' : sortDir === 'asc' ? ' ▲' : ' ▼';
 
+  const selectedCount = selectedSessionIds.size;
+
   return (
-    <div className="absolute inset-0 overflow-y-auto bg-solix-bg pt-20 pb-8 px-6 z-0">
+    <div className="absolute inset-0 overflow-y-auto bg-solix-bg pt-20 pb-20 px-6 z-0">
+      {selectedCount > 0 && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 pointer-events-auto">
+          <div className="rounded-full border border-solix-accent/60 bg-solix-panel/95 backdrop-blur shadow-2xl px-4 py-2 flex items-center gap-3">
+            <span className="text-xs text-slate-200 font-mono">
+              {selectedCount} selected
+            </span>
+            <button
+              onClick={() =>
+                terminateSessions([...selectedSessionIds])
+              }
+              className="text-xs px-3 py-1 rounded border border-solix-danger text-solix-danger hover:bg-solix-danger/15"
+            >
+              Terminate
+            </button>
+            <button
+              onClick={clearSessionSelection}
+              className="text-xs text-slate-400 hover:text-slate-200"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-6xl mx-auto">
         <div className="text-xs text-slate-500 uppercase tracking-widest mb-3">
           List view · {allRows.length} agent{allRows.length === 1 ? '' : 's'}
@@ -186,6 +220,33 @@ export function ListView(): JSX.Element {
                 <table className="w-full text-sm">
                   <thead className="bg-black/30 text-[10px] uppercase tracking-wide text-slate-500">
                     <tr>
+                      <Th>
+                        <input
+                          type="checkbox"
+                          aria-label="Select all in project"
+                          checked={
+                            sorted.length > 0 &&
+                            sorted.every((r) =>
+                              selectedSessionIds.has(r.session.id),
+                            )
+                          }
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            const allSelected = sorted.every((r) =>
+                              selectedSessionIds.has(r.session.id),
+                            );
+                            for (const r of sorted) {
+                              const isSel = selectedSessionIds.has(r.session.id);
+                              if (allSelected && isSel) {
+                                toggleSessionSelection(r.session.id);
+                              } else if (!allSelected && !isSel) {
+                                toggleSessionSelection(r.session.id);
+                              }
+                            }
+                          }}
+                          className="cursor-pointer"
+                        />
+                      </Th>
                       <Th onClick={() => onSort('needs')}>
                         ● {sortIndicator('needs')}
                       </Th>
@@ -217,8 +278,26 @@ export function ListView(): JSX.Element {
                         onClick={() => selectSession(row.session.id)}
                         className={`border-t border-solix-border hover:bg-solix-border/20 cursor-pointer ${
                           row.needsAttention ? 'bg-solix-danger/5' : ''
+                        } ${
+                          selectedSessionIds.has(row.session.id)
+                            ? 'bg-solix-accent/5'
+                            : ''
                         }`}
                       >
+                        <td
+                          className="px-3 py-2"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <input
+                            type="checkbox"
+                            aria-label="Select agent"
+                            checked={selectedSessionIds.has(row.session.id)}
+                            onChange={() =>
+                              toggleSessionSelection(row.session.id)
+                            }
+                            className="cursor-pointer"
+                          />
+                        </td>
                         <td className="px-3 py-2">
                           {row.needsAttention ? (
                             <span className="inline-block w-2 h-2 rounded-full bg-solix-danger solix-pulse" />
@@ -244,6 +323,14 @@ export function ListView(): JSX.Element {
                             {row.session.kind === 'advisor' && (
                               <span className="text-[9px] uppercase tracking-wide text-amber-300">
                                 advisor
+                              </span>
+                            )}
+                            {row.session.worktreePath && (
+                              <span
+                                className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-solix-accent/40 text-solix-accent"
+                                title={row.session.worktreePath}
+                              >
+                                ⌥{branchLabel(row.session.worktreePath)}
                               </span>
                             )}
                           </div>
@@ -299,6 +386,16 @@ export function ListView(): JSX.Element {
       </div>
     </div>
   );
+}
+
+/**
+ * Worktree paths follow `~/.solix/worktrees/<repo>-<branch>`. The chip
+ * shows `<repo>-<branch>` (the basename) — short, descriptive, no need
+ * to re-shell git for the actual branch name.
+ */
+function branchLabel(path: string): string {
+  const parts = path.split('/').filter(Boolean);
+  return parts[parts.length - 1] ?? path;
 }
 
 /**

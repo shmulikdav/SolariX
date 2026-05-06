@@ -1,5 +1,7 @@
-import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { existsSync, mkdirSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { basename, join } from 'node:path';
 import { nanoid } from 'nanoid';
 import type { Model } from '@solix/shared';
 import type { DB } from './db.js';
@@ -23,6 +25,75 @@ interface InternalTaskRecord {
   // Last sessionId returned by claude --print on this cwd, if any. Used to
   // pass --resume on follow-up prompts so multi-turn works.
   lastClaudeSessionId?: string;
+  // When the user launched into a Solix-managed worktree, the worktree path
+  // is stored here so the SessionStart hook can persist it on the session.
+  worktreePath?: string;
+}
+
+interface WorktreeResult {
+  path: string;
+  created: boolean;
+}
+
+/**
+ * Resolve (or create) a git worktree for `branch` rooted at the repo
+ * containing `repoCwd`. Returns the worktree path so the launcher can use
+ * it as the spawn cwd. Reuses an existing worktree if one is already
+ * registered at the same path. New branches are created from `baseRef`
+ * (default 'HEAD').
+ */
+function ensureWorktree(opts: {
+  repoCwd: string;
+  branch: string;
+  baseRef?: string;
+}): WorktreeResult {
+  const repoRoot = (() => {
+    const r = spawnSync('git', ['rev-parse', '--show-toplevel'], {
+      cwd: opts.repoCwd,
+      encoding: 'utf8',
+    });
+    if (r.status !== 0) {
+      throw new Error(`not a git repository: ${opts.repoCwd}`);
+    }
+    return (r.stdout ?? '').trim();
+  })();
+
+  const repoName = basename(repoRoot);
+  const safeBranch = opts.branch.replace(/[^a-zA-Z0-9._-]+/g, '-');
+  const worktreesDir = join(homedir(), '.solix', 'worktrees');
+  const path = join(worktreesDir, `${repoName}-${safeBranch}`);
+
+  // Already registered? Reuse.
+  const list = spawnSync('git', ['worktree', 'list', '--porcelain'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  });
+  if (list.status === 0 && (list.stdout ?? '').includes(`worktree ${path}`)) {
+    return { path, created: false };
+  }
+
+  mkdirSync(worktreesDir, { recursive: true });
+
+  // Branch exists locally? Use it; otherwise create from baseRef.
+  const branchProbe = spawnSync(
+    'git',
+    ['rev-parse', '--verify', '--quiet', `refs/heads/${opts.branch}`],
+    { cwd: repoRoot, encoding: 'utf8' },
+  );
+  const args =
+    branchProbe.status === 0
+      ? ['worktree', 'add', path, opts.branch]
+      : ['worktree', 'add', path, '-b', opts.branch, opts.baseRef ?? 'HEAD'];
+  const add = spawnSync('git', args, {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  });
+  if (add.status !== 0) {
+    throw new Error(
+      `git worktree add failed: ${(add.stderr ?? '').slice(0, 280)}`,
+    );
+  }
+  return { path, created: true };
 }
 
 const FAKE_CLAUDE = process.env.SOLIX_FAKE_CLAUDE === '1';
@@ -203,16 +274,52 @@ export class Launcher {
     cwd: string;
     model?: Model;
     initialPrompt: string;
+    worktreeBranch?: string;
+    worktreeBaseRef?: string;
   }): { ok: boolean; sessionId?: string } {
     if (!opts.initialPrompt.trim()) return { ok: false };
-    if (FAKE_CLAUDE) {
-      return this.launchSynthetic(opts);
+
+    let spawnCwd = opts.cwd;
+    let worktreePath: string | undefined;
+    if (opts.worktreeBranch?.trim()) {
+      try {
+        const wt = ensureWorktree({
+          repoCwd: opts.cwd,
+          branch: opts.worktreeBranch.trim(),
+          baseRef: opts.worktreeBaseRef?.trim() || undefined,
+        });
+        spawnCwd = wt.path;
+        worktreePath = wt.path;
+        this.broadcaster.broadcast({
+          type: 'toast',
+          level: 'info',
+          message: wt.created
+            ? `Worktree created at ${wt.path}`
+            : `Reusing worktree ${wt.path}`,
+        });
+      } catch (err) {
+        this.broadcaster.broadcast({
+          type: 'toast',
+          level: 'error',
+          message: `Worktree setup failed: ${(err as Error).message}`,
+        });
+        return { ok: false };
+      }
     }
-    if (!existsSync(opts.cwd)) {
+
+    if (FAKE_CLAUDE) {
+      return this.launchSynthetic({
+        cwd: spawnCwd,
+        model: opts.model,
+        initialPrompt: opts.initialPrompt,
+        worktreePath,
+      });
+    }
+    if (!existsSync(spawnCwd)) {
       this.broadcaster.broadcast({
         type: 'toast',
         level: 'error',
-        message: `Launch failed: cwd does not exist (${opts.cwd})`,
+        message: `Launch failed: cwd does not exist (${spawnCwd})`,
       });
       return { ok: false };
     }
@@ -224,9 +331,10 @@ export class Launcher {
     const sessionId = `task-${nanoid(8)}`;
     return this.spawnPrint({
       sessionId,
-      cwd: opts.cwd,
+      cwd: spawnCwd,
       args,
       isFollowUp: false,
+      worktreePath,
     });
   }
 
@@ -276,11 +384,22 @@ export class Launcher {
     }).ok;
   }
 
+  /** Returns the worktree path the launcher resolved for an internal task,
+   * if any. Used by router.onSessionStart to persist worktree_path on the
+   * session row when claude reports its session_start hook. */
+  worktreePathForInternalCwd(cwd: string): string | undefined {
+    for (const rec of this.internalTasks.values()) {
+      if (rec.cwd === cwd && rec.worktreePath) return rec.worktreePath;
+    }
+    return undefined;
+  }
+
   private spawnPrint(opts: {
     sessionId: string;
     cwd: string;
     args: string[];
     isFollowUp: boolean;
+    worktreePath?: string;
   }): { ok: boolean; sessionId?: string } {
     let child: ChildProcess;
     try {
@@ -301,7 +420,10 @@ export class Launcher {
 
     const pid = child.pid ?? 0;
     if (!opts.isFollowUp) {
-      this.internalTasks.set(opts.sessionId, { cwd: opts.cwd });
+      this.internalTasks.set(opts.sessionId, {
+        cwd: opts.cwd,
+        worktreePath: opts.worktreePath,
+      });
     }
 
     let stdout = '';
@@ -358,6 +480,7 @@ export class Launcher {
     cwd: string;
     model?: Model;
     initialPrompt: string;
+    worktreePath?: string;
   }): { ok: boolean; sessionId: string } {
     const project = ensureProject(this.db, opts.cwd);
     const sessionId = `task-${nanoid(8)}`;
@@ -369,6 +492,7 @@ export class Launcher {
       cwd: opts.cwd,
       origin: 'internal',
       model: opts.model ?? 'sonnet',
+      worktreePath: opts.worktreePath,
     });
     const active = setSessionStatus(this.db, sessionId, 'active');
     if (active)

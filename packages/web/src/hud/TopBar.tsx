@@ -35,15 +35,15 @@ export function TopBar({
 
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-4 z-20">
-      <div className="pointer-events-auto flex items-center gap-3">
+      <div className="pointer-events-auto flex items-center gap-2 sm:gap-3">
         <div className="text-xl font-bold tracking-widest text-solix-accent">
           SOLIX
         </div>
-        <div className="text-xs text-slate-400">
+        <div className="hidden md:block text-xs text-slate-400">
           a solar-system command center
         </div>
         <div
-          className={`ml-3 px-2 py-1 rounded text-[10px] border ${
+          className={`ml-1 sm:ml-3 px-2 py-1 rounded text-[10px] border ${
             connected
               ? 'border-solix-ok text-solix-ok'
               : 'border-solix-danger text-solix-danger solix-pulse'
@@ -58,15 +58,19 @@ export function TopBar({
         )}
       </div>
 
-      <div className="pointer-events-auto flex items-center gap-3 text-xs">
-        <Stat label="active" value={counts.active} color="text-solix-ok" />
-        <Stat label="attention" value={counts.attention} color="text-solix-warn" />
-        <Stat label="idle" value={counts.idle} color="text-slate-400" />
+      <div className="pointer-events-auto flex items-center gap-2 sm:gap-3 text-xs">
+        {/* Counters and timeline are useful but not critical on mobile;
+            hide them at <sm to keep the topbar single-row. */}
+        <div className="hidden sm:flex items-center gap-2">
+          <Stat label="active" value={counts.active} color="text-solix-ok" />
+          <Stat label="attention" value={counts.attention} color="text-solix-warn" />
+          <Stat label="idle" value={counts.idle} color="text-slate-400" />
+        </div>
         <ViewToggle viewMode={viewMode} />
         {onOpenTimeline && (
           <button
             onClick={onOpenTimeline}
-            className="px-2 py-1 rounded bg-solix-panel border border-solix-border text-slate-300 hover:text-white hover:bg-solix-border/30"
+            className="hidden sm:inline-block px-2 py-1 rounded bg-solix-panel border border-solix-border text-slate-300 hover:text-white hover:bg-solix-border/30"
             title="Timeline playback (T)"
           >
             ⏱ Timeline
@@ -130,7 +134,7 @@ function ViewToggle({
           title={`${o.mode} view (V)`}
         >
           {o.label}{' '}
-          <span className="capitalize">{o.mode}</span>
+          <span className="hidden sm:inline capitalize">{o.mode}</span>
         </button>
       ))}
     </div>

@@ -22,6 +22,7 @@ interface SessionRow {
   name: string | null;
   kind: SessionKind | null;
   advisor_role: string | null;
+  worktree_path: string | null;
   current_mission_id: string | null;
   last_completed_mission_id: string | null;
   created_at: number;
@@ -48,6 +49,7 @@ function rowToSession(row: SessionRow): Session {
     lastCompletedMissionId: row.last_completed_mission_id ?? undefined,
     orbitSlot: row.orbit_slot,
     name: row.name ?? undefined,
+    worktreePath: row.worktree_path ?? undefined,
   };
 }
 
@@ -73,6 +75,7 @@ export interface CreateSessionInput {
   parentSessionId?: string;
   kind?: SessionKind;
   advisorRole?: string;
+  worktreePath?: string;
 }
 
 export function upsertSession(db: DB, input: CreateSessionInput): Session {
@@ -105,9 +108,9 @@ export function upsertSession(db: DB, input: CreateSessionInput): Session {
     `INSERT INTO sessions (
        id, pid, project_id, parent_session_id, origin, model, status,
        context_usage_pct, orbit_slot, cwd, name, kind, advisor_role,
-       created_at, updated_at
+       worktree_path, created_at, updated_at
      )
-     VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, NULL, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, NULL, ?, ?, ?, ?, ?)`,
   ).run(
     input.id,
     input.pid,
@@ -120,6 +123,7 @@ export function upsertSession(db: DB, input: CreateSessionInput): Session {
     input.cwd,
     kind,
     input.advisorRole ?? null,
+    input.worktreePath ?? null,
     ts,
     ts,
   );
@@ -139,6 +143,7 @@ export function upsertSession(db: DB, input: CreateSessionInput): Session {
     parentSessionId: input.parentSessionId,
     contextUsagePct: 0,
     orbitSlot,
+    worktreePath: input.worktreePath,
   };
 }
 

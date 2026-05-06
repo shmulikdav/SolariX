@@ -166,6 +166,7 @@ export function getDb(): DB {
   // Idempotent column adds for repos upgrading from M0+M1.
   ensureColumn(db, 'sessions', 'kind', "kind TEXT NOT NULL DEFAULT 'user'");
   ensureColumn(db, 'sessions', 'advisor_role', 'advisor_role TEXT');
+  ensureColumn(db, 'sessions', 'worktree_path', 'worktree_path TEXT');
   ensureColumn(db, 'advisors', 'texture_pack', 'texture_pack TEXT');
   ensureColumn(db, 'missions', 'error_summary', 'error_summary TEXT');
   _db = db;

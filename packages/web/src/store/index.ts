@@ -196,7 +196,16 @@ interface SolixState {
   pinAdvisor: (advisorId: string) => void;
   unpinAdvisor: (advisorId: string) => void;
   sendPromptTo: (sessionId: string, text: string) => void;
-  launchTask: (cwd: string, model: string, initialPrompt?: string) => void;
+  launchTask: (
+    cwd: string,
+    model: string,
+    initialPrompt?: string,
+    opts?: { worktreeBranch?: string; worktreeBaseRef?: string },
+  ) => void;
+  selectedSessionIds: Set<string>;
+  toggleSessionSelection: (id: string) => void;
+  clearSessionSelection: () => void;
+  terminateSessions: (ids: string[]) => void;
   setMotionEnabled: (b: boolean) => void;
   toggleMotion: () => void;
   setViewMode: (m: 'galaxy' | 'list' | 'missions') => void;
@@ -510,13 +519,35 @@ export const useSolixStore = create<SolixState>((set, get) => ({
     }));
   },
 
-  launchTask: (cwd, model, initialPrompt) => {
+  launchTask: (cwd, model, initialPrompt, opts) => {
     get().send({
       type: 'launch_session',
       cwd,
       model,
       initialPrompt,
+      worktreeBranch: opts?.worktreeBranch,
+      worktreeBaseRef: opts?.worktreeBaseRef,
     });
+  },
+
+  selectedSessionIds: new Set<string>(),
+  toggleSessionSelection: (id) => {
+    set((s) => {
+      const next = new Set(s.selectedSessionIds);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return { selectedSessionIds: next };
+    });
+  },
+  clearSessionSelection: () => {
+    set({ selectedSessionIds: new Set<string>() });
+  },
+  terminateSessions: (ids) => {
+    const send = get().send;
+    for (const sessionId of ids) {
+      send({ type: 'terminate_session', sessionId });
+    }
+    set({ selectedSessionIds: new Set<string>() });
   },
 
   setMotionEnabled: (b) => {

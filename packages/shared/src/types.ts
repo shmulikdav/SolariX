@@ -32,6 +32,10 @@ export interface Session {
   lastCompletedMissionId?: string;
   orbitSlot: number;
   name?: string;
+  /** When this session was launched into a freshly-created git worktree
+   * (Sprint I), the worktree path is stored here. List view renders a
+   * branch chip from it. */
+  worktreePath?: string;
 }
 
 export type MissionStatus = 'active' | 'completed' | 'failed' | 'cancelled';

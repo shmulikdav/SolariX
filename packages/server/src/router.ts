@@ -114,6 +114,10 @@ export class EventRouter {
     const project = ensureProject(this.db, event.cwd);
     const sessionId = this.extractSessionId(event);
     const advisorRole = this.launcher?.advisorRoleForPid(event.pid);
+    // If this session was launched into a Solix-managed worktree, the
+    // launcher recorded its path under the spawn cwd. Persisting it here
+    // means List view can render a "branch" chip without re-shelling git.
+    const worktreePath = this.launcher?.worktreePathForInternalCwd(event.cwd);
     const session = upsertSession(this.db, {
       id: sessionId,
       pid: event.pid,
@@ -129,6 +133,7 @@ export class EventRouter {
       parentSessionId: this.extractParentSessionId(event),
       kind: advisorRole ? 'advisor' : 'user',
       advisorRole,
+      worktreePath,
     });
     this.broadcaster.broadcast({ type: 'session_upsert', session });
     // Start tailing the session's transcript so the Chat tab streams in real
@@ -462,6 +467,8 @@ export class EventRouter {
     cwd: string;
     model?: Model;
     initialPrompt?: string;
+    worktreeBranch?: string;
+    worktreeBaseRef?: string;
   }): { ok: boolean; sessionId?: string } {
     if (!this.launcher) return { ok: false };
     if (!opts.initialPrompt?.trim()) {
@@ -476,6 +483,8 @@ export class EventRouter {
       cwd: opts.cwd,
       model: opts.model,
       initialPrompt: opts.initialPrompt,
+      worktreeBranch: opts.worktreeBranch,
+      worktreeBaseRef: opts.worktreeBaseRef,
     });
   }
 
