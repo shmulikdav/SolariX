@@ -2,6 +2,7 @@
   "name": "@shmulikdav/solix",
   "version": "1.0.0",
   "description": "Solix — a solar-system command center for Claude Code agents",
+  "license": "MIT",
   "type": "module",
   "bin": {
     "solix": "./dist/index.js"
@@ -9,22 +10,55 @@
   "main": "./dist/index.js",
   "files": [
     "dist",
-    "hooks",
-    "README.md"
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shmulikdav/solarix.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/shmulikdav/solarix#readme",
+  "bugs": {
+    "url": "https://github.com/shmulikdav/solarix/issues"
+  },
+  "keywords": [
+    "claude-code",
+    "claude",
+    "agents",
+    "orchestration",
+    "cli",
+    "anthropic"
   ],
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc && node ./scripts/copy-hooks.mjs",
-    "typecheck": "tsc --noEmit"
+    "build": "tsup && node ./scripts/copy-static.mjs",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm -w -r build",
+    "pack:dry": "pnpm -w -r build && npm pack --dry-run"
   },
   "dependencies": {
-    "@solix/server": "workspace:*",
-    "@solix/shared": "workspace:*",
+    "@hono/node-server": "^1.11.0",
+    "better-sqlite3": "^11.0.0",
     "commander": "^12.0.0",
-    "open": "^10.1.0"
+    "hono": "^4.4.0",
+    "nanoid": "^5.0.7",
+    "open": "^10.1.0",
+    "ws": "^8.17.0"
   },
   "devDependencies": {
+    "@solix/server": "workspace:*",
+    "@solix/shared": "workspace:*",
+    "@types/better-sqlite3": "^7.6.10",
     "@types/node": "^20.12.0",
+    "@types/ws": "^8.5.10",
+    "tsup": "^8.0.0",
     "tsx": "^4.7.2",
     "typescript": "^5.4.5"
   }

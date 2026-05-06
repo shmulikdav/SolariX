@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { HookEvent } from '@solix/shared';
@@ -13,6 +14,9 @@ import {
   setSessionStatus,
 } from './state/sessions.js';
 import { listMissions } from './state/missions.js';
+import { loadTimeline } from './state/timeline.js';
+import { listAudit } from './state/audit.js';
+import type { AuditKind } from '@solix/shared';
 import {
   getAdvisor,
   listAdvisors,
@@ -28,9 +32,13 @@ import {
 } from './state/skills.js';
 import {
   exportManifest,
+  getVersion,
   importManifest,
   listImportHistory,
+  listVersions,
+  snapshotExport,
 } from './state/galaxy.js';
+import { diffManifests } from '@solix/shared';
 import { RegistryClient } from './cloud.js';
 import type { GalaxyManifest } from '@solix/shared';
 
@@ -125,6 +133,35 @@ export function createHttpApp(opts: {
     );
   });
 
+  app.get('/api/timeline', (c) => {
+    const sinceMsStr = c.req.query('sinceMs');
+    const untilMsStr = c.req.query('untilMs');
+    const limitStr = c.req.query('limit');
+    const sinceMs = sinceMsStr
+      ? parseInt(sinceMsStr, 10)
+      : Date.now() - 30 * 60 * 1000;
+    const untilMs = untilMsStr ? parseInt(untilMsStr, 10) : Date.now();
+    const limit = limitStr ? parseInt(limitStr, 10) : undefined;
+    return c.json(loadTimeline(opts.db, { sinceMs, untilMs, limit }));
+  });
+
+  app.get('/api/audit', (c) => {
+    const sessionId = c.req.query('sessionId') ?? undefined;
+    const kindStr = c.req.query('kind');
+    const sinceStr = c.req.query('since');
+    const untilStr = c.req.query('until');
+    const limitStr = c.req.query('limit');
+    return c.json(
+      listAudit(opts.db, {
+        sessionId,
+        kind: kindStr ? (kindStr as AuditKind) : undefined,
+        since: sinceStr ? parseInt(sinceStr, 10) : undefined,
+        until: untilStr ? parseInt(untilStr, 10) : undefined,
+        limit: limitStr ? parseInt(limitStr, 10) : undefined,
+      }),
+    );
+  });
+
   app.get('/api/advisors', (c) => c.json(listAdvisors(opts.db)));
 
   app.get('/api/advisors/:id', (c) => {
@@ -210,12 +247,46 @@ export function createHttpApp(opts: {
     const name = c.req.query('name') ?? undefined;
     const author = c.req.query('author') ?? undefined;
     const description = c.req.query('description') ?? undefined;
+    const preview = c.req.query('preview') === '1';
     const manifest = exportManifest(opts.db, {
       name,
       author,
       description,
     });
+    // Snapshot every real export into version history (no-op if identical
+    // to the previous version — see snapshotExport). Preview reads (used
+    // by the import-confirm diff) skip snapshotting so the timeline stays
+    // clean.
+    if (!preview) snapshotExport(opts.db, manifest);
     return c.json(manifest);
+  });
+
+  app.get('/api/galaxy/versions', (c) => {
+    const limitStr = c.req.query('limit');
+    const limit = limitStr ? parseInt(limitStr, 10) : undefined;
+    return c.json(listVersions(opts.db, limit));
+  });
+
+  app.get('/api/galaxy/versions/:id', (c) => {
+    const v = getVersion(opts.db, c.req.param('id'));
+    if (!v) return c.json({ error: 'not found' }, 404);
+    return c.json(v);
+  });
+
+  app.get('/api/galaxy/diff', (c) => {
+    const fromId = c.req.query('from');
+    const toId = c.req.query('to');
+    if (!fromId || !toId) {
+      return c.json({ error: 'from and to query params required' }, 400);
+    }
+    const from = getVersion(opts.db, fromId);
+    const to = getVersion(opts.db, toId);
+    if (!from || !to) return c.json({ error: 'version not found' }, 404);
+    return c.json({
+      from: { id: from.id, ordinal: from.ordinal, ts: from.ts },
+      to: { id: to.id, ordinal: to.ordinal, ts: to.ts },
+      diff: diffManifests(from.manifest, to.manifest),
+    });
   });
 
   app.post('/api/galaxy/import', async (c) => {
@@ -262,6 +333,32 @@ export function createHttpApp(opts: {
   });
 
   app.get('/api/galaxy/imports', (c) => c.json(listImportHistory(opts.db)));
+
+  // Preflight check used by the NewTaskModal to warn before the user
+  // clicks Launch. Cached for the process lifetime — installing claude
+  // requires a server restart anyway.
+  let preflightCache: { claudeAvailable: boolean; version?: string } | null =
+    null;
+  app.get('/api/system/preflight', (c) => {
+    if (preflightCache) return c.json(preflightCache);
+    try {
+      const res = spawnSync('claude', ['--version'], {
+        timeout: 2000,
+        encoding: 'utf8',
+      });
+      if (res.status === 0) {
+        preflightCache = {
+          claudeAvailable: true,
+          version: (res.stdout ?? '').trim() || undefined,
+        };
+      } else {
+        preflightCache = { claudeAvailable: false };
+      }
+    } catch {
+      preflightCache = { claudeAvailable: false };
+    }
+    return c.json(preflightCache);
+  });
 
   // Serve the built web bundle as static when present so `solix start` is one
   // process that gives you the API + WS + UI on a single URL.
@@ -366,6 +463,9 @@ function findWebDist(): string | null {
   }
   const here = dirname(fileURLToPath(import.meta.url));
   const candidates = [
+    // Bundled npm package: web/ ships next to the bundled JS file.
+    resolve(here, 'web'),
+    // Monorepo: server's compiled output is at packages/server/dist.
     resolve(here, '..', '..', 'web', 'dist'),
     resolve(here, '..', '..', '..', 'web', 'dist'),
     resolve(here, '..', '..', '..', 'packages', 'web', 'dist'),

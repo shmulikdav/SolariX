@@ -12,7 +12,8 @@
       "defaultModel": "opus",
       "agentMd": "compass.md",
       "enabledByDefault": true,
-      "requiredSkills": ["mission-summary"]
+      "requiredSkills": ["mission-summary"],
+      "texturePack": "saturn"
     },
     {
       "id": "forge",
@@ -25,7 +26,8 @@
       "defaultModel": "opus",
       "agentMd": "forge.md",
       "enabledByDefault": true,
-      "requiredSkills": []
+      "requiredSkills": [],
+      "texturePack": "mars"
     },
     {
       "id": "lumen",
@@ -38,7 +40,8 @@
       "defaultModel": "opus",
       "agentMd": "lumen.md",
       "enabledByDefault": true,
-      "requiredSkills": []
+      "requiredSkills": [],
+      "texturePack": "earth"
     },
     {
       "id": "argus",
@@ -51,7 +54,8 @@
       "defaultModel": "opus",
       "agentMd": "argus.md",
       "enabledByDefault": true,
-      "requiredSkills": []
+      "requiredSkills": [],
+      "texturePack": "jupiter"
     },
     {
       "id": "sentinel",
@@ -64,7 +68,8 @@
       "defaultModel": "opus",
       "agentMd": "sentinel.md",
       "enabledByDefault": true,
-      "requiredSkills": ["permission-explainer"]
+      "requiredSkills": ["permission-explainer"],
+      "texturePack": "moon"
     },
     {
       "id": "mira",

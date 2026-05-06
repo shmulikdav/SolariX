@@ -22,10 +22,33 @@ export function moonOrbitSpeed(): number {
   return 0.7;
 }
 
-export function planetPhase(orbitSlot: number, sessionId: string): number {
-  let h = 0;
-  for (let i = 0; i < sessionId.length; i++) {
-    h = (h * 31 + sessionId.charCodeAt(i)) >>> 0;
+/**
+ * Per-session orbital phase (radians).
+ *
+ * Sessions in the same project share a base angle so they cluster as a
+ * visual group. Within a project, sessions spread out into a small wedge
+ * around that base — gives a "this is project X's neighborhood" effect
+ * without sacrificing per-planet identity.
+ *
+ *   projectId → base angle on the orbital plane (deterministic hash)
+ *   sessionId → tiny offset within that project's wedge
+ *   orbitSlot → minor radial spread
+ */
+export function planetPhase(
+  orbitSlot: number,
+  sessionId: string,
+  projectId?: string,
+): number {
+  const base = projectId ? hashAngle(projectId) : hashAngle(sessionId);
+  const offset = ((hashAngle(sessionId) % 0.6) - 0.3) * (projectId ? 1 : 0);
+  return base + offset + orbitSlot * 0.05;
+}
+
+function hashAngle(seed: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    h = (h ^ seed.charCodeAt(i)) >>> 0;
+    h = Math.imul(h, 16777619);
   }
-  return ((h % 360) / 360) * Math.PI * 2 + orbitSlot * 0.4;
+  return ((h % 360) / 360) * Math.PI * 2;
 }

@@ -77,8 +77,12 @@ function Comet({
 }
 
 export function CometLayer(): JSX.Element {
-  const toolCalls = useSolixStore((s) => s.recentToolCalls);
-  const sessions = useSolixStore((s) => s.sessions);
+  const toolCalls = useSolixStore((s) =>
+    s.playback.active ? s.playback.derivedToolCalls : s.recentToolCalls,
+  );
+  const sessions = useSolixStore((s) =>
+    s.playback.active ? s.playback.derivedSessions : s.sessions,
+  );
 
   return (
     <group>
@@ -86,7 +90,11 @@ export function CometLayer(): JSX.Element {
         const session = sessions[tc.sessionId];
         if (!session) return null;
         const radius = planetOrbitRadius(session.orbitSlot);
-        const phase = planetPhase(session.orbitSlot, session.id);
+        const phase = planetPhase(
+          session.orbitSlot,
+          session.id,
+          session.projectId,
+        );
         const t = (Date.now() - tc.startedAt) / 1000;
         const speed = 0.18;
         const angle = phase + t * speed * 0.3;

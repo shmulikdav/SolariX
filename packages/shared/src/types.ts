@@ -119,6 +119,7 @@ export interface Advisor {
   pinned: boolean;
   pinnedSessionId?: string;
   requiredSkills: string[];
+  texturePack?: string;
 }
 
 export type SkillSource = 'anthropic' | 'solix' | 'user';
@@ -164,4 +165,101 @@ export interface GalaxyManifest {
   projects: GalaxyManifestProject[];
   scheduledTasks?: GalaxyManifestScheduledTask[];
   theme?: { sunColor?: string; bgColor?: string };
+}
+
+/**
+ * Timeline events — synthesized from missions/tool_calls/sessions tables on
+ * demand for the playback feature. Not persisted as a separate table; the
+ * server derives them at query time so we never duplicate state.
+ */
+export type TimelineEventType =
+  | 'session_started'
+  | 'session_terminated'
+  | 'mission_started'
+  | 'mission_completed'
+  | 'tool_call';
+
+export interface TimelineEvent {
+  ts: number;
+  type: TimelineEventType;
+  sessionId: string;
+  projectId?: string;
+  cwd?: string;
+  // Per-event payload bits — kept small. The client uses these to update
+  // its derived "scene at time T" without round-tripping to the server.
+  missionId?: string;
+  missionShortName?: string;
+  missionPrompt?: string;
+  toolName?: string;
+  status?: SessionStatus;
+}
+
+/**
+ * Audit log — append-only history of every privileged action a user took
+ * (or the system took on their behalf). Persisted in SQLite under
+ * `audit_events`. The Audit tab in GalaxyPanel reads this; downstream
+ * exports (CSV / Slack relay) are out of scope for v1 but the shape is
+ * stable enough to support them later.
+ */
+export type AuditKind =
+  | 'permission_approved'
+  | 'permission_denied'
+  | 'advisor_invoked'
+  | 'advisor_pinned'
+  | 'advisor_unpinned'
+  | 'galaxy_imported'
+  | 'galaxy_exported'
+  | 'galaxy_published'
+  | 'skill_installed'
+  | 'session_terminated';
+
+export interface AuditEvent {
+  id: string;
+  ts: number;
+  kind: AuditKind;
+  sessionId?: string;
+  advisorId?: string;
+  projectId?: string;
+  /** Short human-readable line — e.g. "Approved Bash for demo-c: git push…" */
+  summary: string;
+  /** Free-form structured detail; kept JSON-string in DB. */
+  payload?: Record<string, unknown>;
+}
+
+/**
+ * Persisted snapshot of a galaxy manifest. Created on every export so the
+ * user can browse past states, see what changed between versions, and
+ * restore a previous configuration if they want.
+ */
+export interface GalaxyVersion {
+  id: string;
+  ts: number;
+  /** Sequential index — v1, v2, v3… for human-readable labelling. */
+  ordinal: number;
+  /** What name was passed at export time. */
+  name: string;
+  author?: string;
+  description?: string;
+  /** Full manifest, kept JSON-string in DB. */
+  manifest: GalaxyManifest;
+}
+
+/**
+ * Manifest diff result. Pure function output; consumed by the Versions
+ * UI to show "what changed between v3 and v5."
+ */
+export interface GalaxyManifestDiff {
+  advisors: {
+    added: string[];
+    removed: string[];
+    pinChanged: { role: string; from: boolean; to: boolean }[];
+  };
+  skills: {
+    added: string[];
+    removed: string[];
+  };
+  projects: {
+    added: string[];
+    removed: string[];
+  };
 }

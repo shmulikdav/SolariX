@@ -4,6 +4,7 @@ import type {
   GalaxyManifestAdvisor,
   GalaxyManifestProject,
   GalaxyManifestSkill,
+  GalaxyVersion,
 } from '@solix/shared';
 import type { DB } from '../db.js';
 import { now } from '../util.js';
@@ -140,4 +141,110 @@ export function listImportHistory(
       manifestName: name,
     };
   });
+}
+
+// ──── Versioning ───────────────────────────────────────────────────────
+
+interface GalaxyVersionRow {
+  id: string;
+  ts: number;
+  ordinal: number;
+  name: string;
+  author: string | null;
+  description: string | null;
+  manifest_json: string;
+}
+
+function rowToVersion(row: GalaxyVersionRow): GalaxyVersion {
+  let manifest: GalaxyManifest;
+  try {
+    manifest = JSON.parse(row.manifest_json) as GalaxyManifest;
+  } catch {
+    // Should never happen — table only stores manifests we just produced.
+    manifest = {
+      version: 1,
+      name: row.name,
+      advisors: [],
+      skills: [],
+      projects: [],
+    };
+  }
+  return {
+    id: row.id,
+    ts: row.ts,
+    ordinal: row.ordinal,
+    name: row.name,
+    author: row.author ?? undefined,
+    description: row.description ?? undefined,
+    manifest,
+  };
+}
+
+/**
+ * Snapshot a manifest into the version history. Skips persistence if
+ * the most recent version is byte-identical (avoids cluttering the
+ * timeline when the user re-exports without changes).
+ */
+export function snapshotExport(
+  db: DB,
+  manifest: GalaxyManifest,
+): GalaxyVersion {
+  const last = db
+    .prepare(
+      'SELECT manifest_json, ordinal FROM galaxy_versions ORDER BY ordinal DESC LIMIT 1',
+    )
+    .get() as { manifest_json: string; ordinal: number } | undefined;
+
+  if (last) {
+    const lastJson = last.manifest_json;
+    const newJson = JSON.stringify(manifest);
+    if (lastJson === newJson) {
+      const existing = db
+        .prepare('SELECT * FROM galaxy_versions WHERE ordinal = ? LIMIT 1')
+        .get(last.ordinal) as GalaxyVersionRow;
+      return rowToVersion(existing);
+    }
+  }
+
+  const id = nanoid();
+  const ts = now();
+  const ordinal = (last?.ordinal ?? 0) + 1;
+  db.prepare(
+    `INSERT INTO galaxy_versions (id, ts, ordinal, name, author, description, manifest_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    id,
+    ts,
+    ordinal,
+    manifest.name,
+    manifest.author ?? null,
+    manifest.description ?? null,
+    JSON.stringify(manifest),
+  );
+
+  return {
+    id,
+    ts,
+    ordinal,
+    name: manifest.name,
+    author: manifest.author,
+    description: manifest.description,
+    manifest,
+  };
+}
+
+export function listVersions(db: DB, limit = 50): GalaxyVersion[] {
+  const rows = db
+    .prepare(
+      'SELECT * FROM galaxy_versions ORDER BY ordinal DESC LIMIT ?',
+    )
+    .all(Math.min(limit, 500)) as GalaxyVersionRow[];
+  return rows.map(rowToVersion);
+}
+
+export function getVersion(db: DB, id: string): GalaxyVersion | null {
+  const row = db
+    .prepare('SELECT * FROM galaxy_versions WHERE id = ? LIMIT 1')
+    .get(id) as GalaxyVersionRow | undefined;
+  return row ? rowToVersion(row) : null;
 }

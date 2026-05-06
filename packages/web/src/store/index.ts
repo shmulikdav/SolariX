@@ -8,8 +8,10 @@ import type {
   ServerMessage,
   Session,
   Skill,
+  TimelineEvent,
   ToolCall,
 } from '@solix/shared';
+import { chime, notify } from '../notifications.js';
 
 export interface PendingPermission {
   requestId: string;
@@ -27,6 +29,143 @@ export interface ChatEntry extends ChatDelta {
   receivedAt: number;
 }
 
+/**
+ * Playback / time-scrubbing state.
+ *
+ * When `active` is true:
+ *   - the `<Scene>` and `<ListView>` read from `derivedSessions` /
+ *     `derivedMissions` / `derivedToolCalls` instead of the live state
+ *   - incoming WS messages still update the *live* state but the visible
+ *     state is what we derive from `events` up to `currentMs`
+ *
+ * `events` is the timeline returned by GET /api/timeline. We derive the
+ * scene-at-time-T client side so scrubbing the slider is instantaneous.
+ */
+export interface PlaybackState {
+  active: boolean;
+  loading: boolean;
+  events: TimelineEvent[];
+  earliestMs: number;
+  latestMs: number;
+  currentMs: number;
+  playing: boolean;
+  speed: number; // 1 = real-time replay; 4 = 4x; 16 = 16x
+  derivedSessions: Record<string, Session>;
+  derivedMissions: Record<string, Mission>;
+  derivedToolCalls: RecentToolCall[];
+}
+
+/**
+ * Replay events up to time T to compute "what the scene looked like at T."
+ *
+ * Cheap to call — O(events) — and called only on user-driven scrub events
+ * or once per RAF frame while playing back. We pull live session/mission
+ * records as the source of truth for static metadata (cwd, model, projectId,
+ * shortName) and just toggle in/out their existence + status based on the
+ * event stream.
+ */
+function derivePlaybackSnapshot(
+  events: TimelineEvent[],
+  currentMs: number,
+  liveSessions: Record<string, Session>,
+  liveMissions: Record<string, Mission>,
+): {
+  derivedSessions: Record<string, Session>;
+  derivedMissions: Record<string, Mission>;
+  derivedToolCalls: RecentToolCall[];
+} {
+  const sessions: Record<string, Session> = {};
+  const missions: Record<string, Mission> = {};
+  // Comet streaks during playback: only those within the last ~2s of
+  // virtual time, so the visual matches live-mode TTL.
+  const COMET_TTL_MS = 2000;
+  const tools: RecentToolCall[] = [];
+
+  for (const e of events) {
+    if (e.ts > currentMs) break;
+    switch (e.type) {
+      case 'session_started': {
+        const live = liveSessions[e.sessionId];
+        if (!live) continue;
+        sessions[e.sessionId] = { ...live, status: 'idle' };
+        break;
+      }
+      case 'session_terminated': {
+        delete sessions[e.sessionId];
+        break;
+      }
+      case 'mission_started': {
+        if (!e.missionId) continue;
+        const liveMission = liveMissions[e.missionId];
+        const session = sessions[e.sessionId];
+        if (session) {
+          sessions[e.sessionId] = {
+            ...session,
+            status: 'active',
+            currentMissionId: e.missionId,
+          };
+        }
+        if (liveMission) {
+          missions[e.missionId] = { ...liveMission, status: 'active' };
+        }
+        break;
+      }
+      case 'mission_completed': {
+        if (!e.missionId) continue;
+        const session = sessions[e.sessionId];
+        const liveMission = liveMissions[e.missionId];
+        if (session && session.currentMissionId === e.missionId) {
+          sessions[e.sessionId] = {
+            ...session,
+            status: 'idle',
+            currentMissionId: undefined,
+            lastCompletedMissionId: e.missionId,
+          };
+        }
+        if (liveMission) {
+          missions[e.missionId] = { ...liveMission, status: 'completed' };
+        }
+        break;
+      }
+      case 'tool_call': {
+        // Carry the tool call only if it's within the visible TTL window.
+        if (currentMs - e.ts <= COMET_TTL_MS) {
+          tools.push({
+            id: `tc-${e.ts}-${e.sessionId}`,
+            sessionId: e.sessionId,
+            tool: e.toolName ?? 'tool',
+            args: {},
+            startedAt: e.ts,
+            status: 'ok',
+            receivedAt: e.ts,
+          });
+        }
+        break;
+      }
+    }
+  }
+
+  return {
+    derivedSessions: sessions,
+    derivedMissions: missions,
+    derivedToolCalls: tools,
+  };
+}
+
+const EMPTY_PLAYBACK: PlaybackState = {
+  active: false,
+  loading: false,
+  events: [],
+  earliestMs: 0,
+  latestMs: 0,
+  currentMs: 0,
+  playing: false,
+  speed: 4,
+  derivedSessions: {},
+  derivedMissions: {},
+  derivedToolCalls: [],
+};
+
 interface SolixState {
   connected: boolean;
   projects: Record<string, Project>;
@@ -42,6 +181,8 @@ interface SolixState {
   selectedAdvisorId: string | null;
   selectedSkillId: string | null;
   motionEnabled: boolean;
+  viewMode: 'galaxy' | 'list' | 'missions';
+  playback: PlaybackState;
   toasts: { id: string; level: 'info' | 'warn' | 'error'; message: string }[];
 
   setConnected: (c: boolean) => void;
@@ -58,6 +199,14 @@ interface SolixState {
   launchTask: (cwd: string, model: string, initialPrompt?: string) => void;
   setMotionEnabled: (b: boolean) => void;
   toggleMotion: () => void;
+  setViewMode: (m: 'galaxy' | 'list' | 'missions') => void;
+  toggleViewMode: () => void;
+  enterPlayback: (events: TimelineEvent[], earliestMs: number, latestMs: number) => void;
+  exitPlayback: () => void;
+  setPlaybackTime: (ms: number) => void;
+  setPlaybackSpeed: (speed: number) => void;
+  setPlaybackPlaying: (playing: boolean) => void;
+  setPlaybackLoading: (loading: boolean) => void;
 
   send: (msg: ClientMessage) => void;
   attachSocket: (send: (msg: ClientMessage) => void) => void;
@@ -66,6 +215,7 @@ interface SolixState {
 const TOOL_CALL_TTL_MS = 2000;
 
 const MOTION_KEY = 'solix.motion.v1';
+const VIEW_KEY = 'solix.viewMode.v1';
 
 function readMotionPref(): boolean {
   try {
@@ -79,6 +229,24 @@ function readMotionPref(): boolean {
 function writeMotionPref(b: boolean): void {
   try {
     localStorage.setItem(MOTION_KEY, b ? '1' : '0');
+  } catch {
+    /* ignore */
+  }
+}
+
+function readViewPref(): 'galaxy' | 'list' | 'missions' {
+  try {
+    const v = localStorage.getItem(VIEW_KEY);
+    if (v === 'list' || v === 'missions' || v === 'galaxy') return v;
+    return 'galaxy';
+  } catch {
+    return 'galaxy';
+  }
+}
+
+function writeViewPref(m: 'galaxy' | 'list' | 'missions'): void {
+  try {
+    localStorage.setItem(VIEW_KEY, m);
   } catch {
     /* ignore */
   }
@@ -98,6 +266,8 @@ export const useSolixStore = create<SolixState>((set, get) => ({
   selectedAdvisorId: null,
   selectedSkillId: null,
   motionEnabled: readMotionPref(),
+  viewMode: readViewPref(),
+  playback: EMPTY_PLAYBACK,
   toasts: [],
 
   setConnected: (connected) => set({ connected }),
@@ -198,6 +368,25 @@ export const useSolixStore = create<SolixState>((set, get) => ({
             [msg.requestId]: p,
           },
         }));
+        // Background notification + chime so the user catches this when
+        // the tab isn't focused. Both are no-ops when permissions / prefs
+        // aren't granted.
+        const session = get().sessions[msg.sessionId];
+        const name = session?.name ?? msg.sessionId.slice(0, 8);
+        const argSummary = (() => {
+          const k = Object.keys(msg.args)[0];
+          if (!k) return '';
+          const v = msg.args[k];
+          const s = typeof v === 'string' ? v : JSON.stringify(v);
+          return `: ${s.length > 60 ? s.slice(0, 60) + '…' : s}`;
+        })();
+        void notify({
+          title: `${name} needs you`,
+          body: `${msg.tool}${argSummary}`,
+          tag: `solix-perm-${msg.sessionId}`,
+          whenHidden: true,
+        });
+        chime();
         break;
       }
       case 'context_update': {
@@ -339,6 +528,59 @@ export const useSolixStore = create<SolixState>((set, get) => ({
     writeMotionPref(next);
     set({ motionEnabled: next });
   },
+  setViewMode: (m) => {
+    writeViewPref(m);
+    set({ viewMode: m });
+  },
+  toggleViewMode: () => {
+    const order = ['galaxy', 'list', 'missions'] as const;
+    const cur = get().viewMode;
+    const idx = order.indexOf(cur);
+    const next = order[(idx + 1) % order.length] ?? 'galaxy';
+    writeViewPref(next);
+    set({ viewMode: next });
+  },
+
+  enterPlayback: (events, earliestMs, latestMs) => {
+    const start = earliestMs;
+    set((s) => ({
+      playback: {
+        ...s.playback,
+        active: true,
+        loading: false,
+        events,
+        earliestMs,
+        latestMs,
+        currentMs: start,
+        playing: false,
+        ...derivePlaybackSnapshot(events, start, get().sessions, get().missions),
+      },
+    }));
+  },
+  exitPlayback: () => set({ playback: EMPTY_PLAYBACK }),
+  setPlaybackTime: (ms) => {
+    set((s) => {
+      const clamped = Math.max(s.playback.earliestMs, Math.min(ms, s.playback.latestMs));
+      return {
+        playback: {
+          ...s.playback,
+          currentMs: clamped,
+          ...derivePlaybackSnapshot(
+            s.playback.events,
+            clamped,
+            get().sessions,
+            get().missions,
+          ),
+        },
+      };
+    });
+  },
+  setPlaybackSpeed: (speed) =>
+    set((s) => ({ playback: { ...s.playback, speed } })),
+  setPlaybackPlaying: (playing) =>
+    set((s) => ({ playback: { ...s.playback, playing } })),
+  setPlaybackLoading: (loading) =>
+    set((s) => ({ playback: { ...s.playback, loading } })),
 
   send: () => {
     /* replaced when socket attaches */
@@ -346,22 +588,34 @@ export const useSolixStore = create<SolixState>((set, get) => ({
   attachSocket: (send) => set({ send }),
 }));
 
+function effectiveSessions(state: SolixState): Record<string, Session> {
+  return state.playback.active
+    ? state.playback.derivedSessions
+    : state.sessions;
+}
+
 export function selectPlanets(state: SolixState): Session[] {
-  return Object.values(state.sessions).filter(
+  return Object.values(effectiveSessions(state)).filter(
     (s) => !s.parentSessionId && s.kind !== 'advisor',
   );
 }
 
 export function selectAdvisorPlanets(state: SolixState): Session[] {
-  return Object.values(state.sessions).filter(
+  return Object.values(effectiveSessions(state)).filter(
     (s) => !s.parentSessionId && s.kind === 'advisor',
   );
 }
 
 export function selectMoons(state: SolixState, planetId: string): Session[] {
-  return Object.values(state.sessions).filter(
+  return Object.values(effectiveSessions(state)).filter(
     (s) => s.parentSessionId === planetId,
   );
+}
+
+export function selectVisibleToolCalls(state: SolixState): RecentToolCall[] {
+  return state.playback.active
+    ? state.playback.derivedToolCalls
+    : state.recentToolCalls;
 }
 
 export function selectEnabledAdvisors(state: SolixState): Advisor[] {
@@ -370,4 +624,39 @@ export function selectEnabledAdvisors(state: SolixState): Advisor[] {
 
 export function selectSkillsArray(state: SolixState): Skill[] {
   return Object.values(state.skills);
+}
+
+/**
+ * Focus mode — true when *anything* is selected (a session, an advisor, or
+ * a skill). When focus is active, planets that aren't the focused one dim
+ * to ~25% opacity so the eye lands on the selection.
+ */
+export function selectFocusActive(state: SolixState): boolean {
+  return Boolean(
+    state.selectedSessionId ||
+      state.selectedAdvisorId ||
+      state.selectedSkillId,
+  );
+}
+
+/**
+ * Returns true when this session is the currently-focused one (or its
+ * parent / pinned advisor session is). Used to leave the focused planet
+ * (and its moons) at full brightness while dimming the rest.
+ */
+export function isSessionFocused(
+  state: SolixState,
+  session: Session,
+): boolean {
+  if (state.selectedSessionId === session.id) return true;
+  if (
+    session.parentSessionId &&
+    state.selectedSessionId === session.parentSessionId
+  ) {
+    return true;
+  }
+  if (state.selectedAdvisorId && session.advisorRole) {
+    return state.selectedAdvisorId === session.advisorRole;
+  }
+  return false;
 }

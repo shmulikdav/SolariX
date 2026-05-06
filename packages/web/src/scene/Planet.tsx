@@ -13,6 +13,8 @@ import {
   planetPhase,
 } from './orbits.js';
 import { Moon } from './Moon.js';
+import { AtmosphereRim } from './AtmosphereRim.js';
+import { computeHealth, healthColor as healthBadgeColor } from '../health.js';
 
 interface PlanetProps {
   session: Session;
@@ -25,7 +27,7 @@ export function Planet({ session }: PlanetProps): JSX.Element {
   const ringRef = useRef<Mesh>(null);
   const materialRef = useRef<MeshStandardMaterial>(null);
   const phase = useMemo(
-    () => planetPhase(session.orbitSlot, session.id),
+    () => planetPhase(session.orbitSlot, session.id, session.projectId),
     [session.orbitSlot, session.id],
   );
   const radius = useMemo(
@@ -45,6 +47,26 @@ export function Planet({ session }: PlanetProps): JSX.Element {
   const selectedSessionId = useSolixStore((s) => s.selectedSessionId);
   const isSelected = selectedSessionId === session.id;
   const isAdvisor = session.kind === 'advisor';
+  // Health drives the atmosphere rim intensity — high-health planets
+  // glow brighter, struggling ones recede. computeHealth is cheap; we
+  // pull current mission + pending count from the store.
+  const currentMission = useSolixStore((s) =>
+    session.currentMissionId
+      ? s.missions[session.currentMissionId]
+      : undefined,
+  );
+  const pendingForSession = useSolixStore(
+    (s) =>
+      Object.values(s.pendingPermissions).filter(
+        (p) => p.sessionId === session.id,
+      ).length,
+  );
+  const healthDetail = useMemo(
+    () => computeHealth(session, currentMission, pendingForSession),
+    [session, currentMission, pendingForSession],
+  );
+  const health = healthDetail.score;
+  const rimIntensity = 0.4 + (health / 100) * 0.8;
 
   const baseColor = useMemo(
     () =>
@@ -57,9 +79,27 @@ export function Planet({ session }: PlanetProps): JSX.Element {
   );
 
   const angleRef = useRef(phase);
+  // Lerped focus-dim factor: 1.0 = full bright, 0.25 = dimmed because some
+  // OTHER planet is selected. Cached on the group via scale-channel-z so we
+  // don't re-allocate every frame.
+  const dimRef = useRef(1.0);
 
   useFrame((state, delta) => {
-    const motionEnabled = useSolixStore.getState().motionEnabled;
+    const storeState = useSolixStore.getState();
+    const motionEnabled = storeState.motionEnabled;
+    const focusActive = Boolean(
+      storeState.selectedSessionId ||
+        storeState.selectedAdvisorId ||
+        storeState.selectedSkillId,
+    );
+    const isThisFocused =
+      storeState.selectedSessionId === session.id ||
+      (isAdvisor &&
+        storeState.selectedAdvisorId === session.advisorRole);
+    const dimTarget = focusActive && !isThisFocused ? 0.25 : 1.0;
+    dimRef.current = MathUtils.lerp(dimRef.current, dimTarget, 0.08);
+    const dim = dimRef.current;
+
     const speed = planetOrbitSpeed(session.status === 'active', session.orbitSlot);
     if (motionEnabled) {
       angleRef.current += delta * speed * 0.3;
@@ -90,11 +130,15 @@ export function Planet({ session }: PlanetProps): JSX.Element {
       const target = statusEmissive(session.status);
       const targetColor = new Color(target.color);
       materialRef.current.emissive.lerp(targetColor, 0.08);
+      // Multiply emissive by dim so unfocused planets visibly recede
+      // without changing the base color (still readable for glance scanning).
       materialRef.current.emissiveIntensity = MathUtils.lerp(
         materialRef.current.emissiveIntensity,
-        target.intensity,
+        target.intensity * dim,
         0.06,
       );
+      materialRef.current.opacity = dim;
+      materialRef.current.transparent = dim < 0.99;
     }
 
     if (flareRef.current) {
@@ -124,7 +168,7 @@ export function Planet({ session }: PlanetProps): JSX.Element {
         const pulse = 0.5 + 0.5 * Math.sin(t * Math.PI * 2 * freq);
         const mat = flareRef.current.material as MeshStandardMaterial;
         mat.color.set(color);
-        mat.opacity = 0.25 + pulse * 0.5;
+        mat.opacity = (0.25 + pulse * 0.5) * dim;
         flareRef.current.visible = true;
         const s = 1.4 + pulse * 0.5;
         flareRef.current.scale.set(s, s, s);
@@ -162,6 +206,22 @@ export function Planet({ session }: PlanetProps): JSX.Element {
           metalness={0.3}
         />
       </mesh>
+
+      {/*
+        Atmosphere rim — Fresnel glow at the silhouette in the planet's
+        own color. Cheap (one extra back-side sphere), preserves the
+        model-color encoding on user planets, adds depth without breaking
+        anything when motion is paused.
+      */}
+      <AtmosphereRim
+        radius={planetSize}
+        color={
+          isAdvisor && advisorForRole
+            ? advisorForRole.color
+            : modelColor(session.model)
+        }
+        intensity={rimIntensity * (session.status === 'active' ? 1.2 : 0.9)}
+      />
 
       <mesh ref={flareRef} visible={false}>
         <sphereGeometry args={[planetSize * 1.4, 24, 24]} />
@@ -214,6 +274,20 @@ export function Planet({ session }: PlanetProps): JSX.Element {
           </div>
           <div className="opacity-70">
             {String(session.model)} · {statusLabel(session.status)}
+          </div>
+          <div
+            className="opacity-70"
+            title={
+              healthDetail.reasons.length
+                ? healthDetail.reasons.join(' · ')
+                : 'Stable, low context, no pending decisions'
+            }
+          >
+            <span style={{ color: healthBadgeColor(health) }}>♥</span>{' '}
+            health {health}
+            {healthDetail.reasons[0] && (
+              <span className="opacity-80"> · {healthDetail.reasons[0]}</span>
+            )}
           </div>
         </div>
       </Html>

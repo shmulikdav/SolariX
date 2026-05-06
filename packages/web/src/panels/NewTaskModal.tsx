@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSolixStore } from '../store/index.js';
 
 interface NewTaskModalProps {
@@ -13,14 +13,44 @@ export function NewTaskModal({
   onClose,
 }: NewTaskModalProps): JSX.Element | null {
   const projects = useSolixStore((s) => s.projects);
+  const advisorsMap = useSolixStore((s) => s.advisors);
   const launchTask = useSolixStore((s) => s.launchTask);
 
   const projectList = Object.values(projects).sort(
     (a, b) => b.lastActiveAt - a.lastActiveAt,
   );
+  const enabledAdvisors = useMemo(
+    () =>
+      Object.values(advisorsMap)
+        .filter((a) => a.enabled)
+        .sort((a, b) => a.codename.localeCompare(b.codename)),
+    [advisorsMap],
+  );
   const [cwd, setCwd] = useState<string>('');
   const [model, setModel] = useState<string>('default');
+  const [advisorId, setAdvisorId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
+  const [preflight, setPreflight] = useState<
+    { claudeAvailable: boolean; version?: string } | null
+  >(null);
+
+  // Check whether `claude` is on the server's PATH so we can warn before
+  // the user fills out the form. Cached server-side; safe to refetch.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    fetch('/api/system/preflight')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled) setPreflight(d);
+      })
+      .catch(() => {
+        /* offline; ignore */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   // When the modal opens (or when projects first arrive), default cwd to the
   // most recently active project so the user doesn't have to type a path.
@@ -37,8 +67,17 @@ export function NewTaskModal({
     const trimmedCwd = cwd.trim();
     const trimmedPrompt = prompt.trim();
     if (!trimmedCwd || !trimmedPrompt) return;
-    launchTask(trimmedCwd, model, trimmedPrompt);
+    const advisor = advisorId
+      ? enabledAdvisors.find((a) => a.id === advisorId)
+      : undefined;
+    const finalPrompt = advisor
+      ? `[Acting as ${advisor.codename} — ${advisor.name}. ${advisor.description}]\n\n${trimmedPrompt}`
+      : trimmedPrompt;
+    const finalModel =
+      advisor && model === 'default' ? advisor.defaultModel : model;
+    launchTask(trimmedCwd, finalModel, finalPrompt);
     setPrompt('');
+    setAdvisorId(null);
     onClose();
   };
 
@@ -57,6 +96,18 @@ export function NewTaskModal({
               Solix will spawn <code>claude --print</code> in this folder. A
               new planet appears the moment it starts.
             </div>
+            {preflight && !preflight.claudeAvailable && (
+              <div className="mt-2 text-[11px] text-solix-danger border border-solix-danger/40 bg-solix-danger/10 rounded px-2 py-1">
+                <span className="font-semibold">claude</span> not found on the
+                server's PATH. Install Claude Code, then restart the Solix
+                server.
+              </div>
+            )}
+            {preflight?.claudeAvailable && preflight.version && (
+              <div className="mt-1 text-[10px] text-slate-500 font-mono">
+                claude detected · {preflight.version}
+              </div>
+            )}
           </div>
           <button
             onClick={onClose}
@@ -117,6 +168,46 @@ export function NewTaskModal({
             </div>
           </label>
 
+          {enabledAdvisors.length > 0 && (
+            <label className="block">
+              <div className="text-[10px] uppercase tracking-wide text-slate-400 mb-1">
+                Advisor <span className="text-slate-600 normal-case">(optional)</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  onClick={() => setAdvisorId(null)}
+                  className={`text-xs px-3 py-1.5 rounded border ${
+                    advisorId === null
+                      ? 'bg-solix-accent/20 border-solix-accent text-solix-accent'
+                      : 'border-solix-border text-slate-300 hover:bg-solix-border/30'
+                  }`}
+                >
+                  none
+                </button>
+                {enabledAdvisors.map((a) => (
+                  <button
+                    key={a.id}
+                    onClick={() => setAdvisorId(a.id)}
+                    title={a.description}
+                    className={`text-xs px-3 py-1.5 rounded border flex items-center gap-1.5 ${
+                      advisorId === a.id
+                        ? 'border-amber-300 text-amber-100 bg-amber-500/15'
+                        : 'border-solix-border text-slate-300 hover:bg-solix-border/30'
+                    }`}
+                  >
+                    <span style={{ color: a.color }}>{a.glyph}</span>
+                    {a.codename}
+                  </button>
+                ))}
+              </div>
+              {advisorId && (
+                <div className="mt-1.5 text-[10px] text-slate-500 italic">
+                  The advisor's role will be prepended to your prompt.
+                </div>
+              )}
+            </label>
+          )}
+
           <label className="block">
             <div className="text-[10px] uppercase tracking-wide text-slate-400 mb-1">
               Prompt
@@ -150,7 +241,11 @@ export function NewTaskModal({
           </span>
           <button
             onClick={onLaunch}
-            disabled={!cwd.trim() || !prompt.trim()}
+            disabled={
+              !cwd.trim() ||
+              !prompt.trim() ||
+              preflight?.claudeAvailable === false
+            }
             className="px-4 py-1.5 rounded bg-solix-accent/20 border border-solix-accent text-solix-accent text-sm hover:bg-solix-accent/30 disabled:opacity-40"
           >
             Launch

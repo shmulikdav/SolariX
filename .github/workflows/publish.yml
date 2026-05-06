@@ -1,0 +1,45 @@
+name: Publish to npm
+
+# Triggered by pushing a tag of the form `v1.2.3`. The actual version
+# in the tarball is read from packages/cli/package.json — make sure
+# you bump it (`npm version` in packages/cli) before tagging.
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+      - name: Build (server, shared, web, cli)
+        run: pnpm -r build
+
+      - name: Inspect tarball
+        run: cd packages/cli && npm pack --dry-run
+
+      - name: Publish
+        run: cd packages/cli && npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

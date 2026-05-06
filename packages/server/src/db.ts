@@ -68,6 +68,30 @@ CREATE TABLE IF NOT EXISTS galaxy_imports (
   imported_at INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS audit_events (
+  id TEXT PRIMARY KEY,
+  ts INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  session_id TEXT,
+  advisor_id TEXT,
+  project_id TEXT,
+  summary TEXT NOT NULL,
+  payload_json TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_events(ts);
+CREATE INDEX IF NOT EXISTS idx_audit_session ON audit_events(session_id);
+
+CREATE TABLE IF NOT EXISTS galaxy_versions (
+  id TEXT PRIMARY KEY,
+  ts INTEGER NOT NULL,
+  ordinal INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  author TEXT,
+  description TEXT,
+  manifest_json TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_galaxy_versions_ts ON galaxy_versions(ts);
+
 CREATE TABLE IF NOT EXISTS missions (
   id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL REFERENCES sessions(id),
@@ -142,6 +166,7 @@ export function getDb(): DB {
   // Idempotent column adds for repos upgrading from M0+M1.
   ensureColumn(db, 'sessions', 'kind', "kind TEXT NOT NULL DEFAULT 'user'");
   ensureColumn(db, 'sessions', 'advisor_role', 'advisor_role TEXT');
+  ensureColumn(db, 'advisors', 'texture_pack', 'texture_pack TEXT');
   _db = db;
   return db;
 }

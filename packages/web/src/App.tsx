@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Scene } from './scene/Scene.js';
+import { ListView } from './hud/ListView.js';
+import { MissionView } from './hud/MissionView.js';
+import { TimelineDrawer } from './hud/TimelineDrawer.js';
 import { TopBar } from './hud/TopBar.js';
 import { Toasts } from './hud/Toasts.js';
 import { Welcome } from './hud/Welcome.js';
-import { PermissionTray } from './hud/PermissionTray.js';
+import { DecisionQueue } from './hud/DecisionQueue.js';
 import { SceneControls } from './hud/SceneControls.js';
 import {
   panDown,
@@ -25,6 +28,8 @@ import { startWsClient } from './ws/client.js';
 export default function App(): JSX.Element {
   const [galaxyOpen, setGalaxyOpen] = useState(false);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
+  const [timelineOpen, setTimelineOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   useEffect(() => {
     startWsClient();
@@ -47,6 +52,9 @@ export default function App(): JSX.Element {
         state.selectSkill(null);
         setGalaxyOpen(false);
         setNewTaskOpen(false);
+        setHelpOpen(false);
+      } else if (!isTextField && e.key === '?') {
+        setHelpOpen((v) => !v);
       } else if (!isTextField && (e.key === 'g' || e.key === 'G')) {
         setGalaxyOpen((v) => !v);
       } else if (!isTextField && (e.key === 'l' || e.key === 'L')) {
@@ -68,6 +76,12 @@ export default function App(): JSX.Element {
       } else if (!isTextField && e.key === ' ') {
         e.preventDefault();
         state.toggleMotion();
+      } else if (!isTextField && (e.key === 'v' || e.key === 'V')) {
+        state.toggleViewMode();
+      } else if (!isTextField && (e.key === 'm' || e.key === 'M')) {
+        state.setViewMode('missions');
+      } else if (!isTextField && (e.key === 't' || e.key === 'T')) {
+        setTimelineOpen((v) => !v);
       } else if (!isTextField && top && (e.key === 'y' || e.key === 'Y')) {
         state.resolvePermission(top.requestId, true);
       } else if (!isTextField && top && (e.key === 'n' || e.key === 'N')) {
@@ -80,12 +94,14 @@ export default function App(): JSX.Element {
 
   return (
     <div className="relative h-full w-full">
-      <Scene />
+      <ViewSurface />
       <TopBar
         onOpenGalaxy={() => setGalaxyOpen(true)}
         onNewTask={() => setNewTaskOpen(true)}
+        onOpenTimeline={() => setTimelineOpen(true)}
+        onOpenHelp={() => setHelpOpen(true)}
       />
-      <PermissionTray />
+      <DecisionQueue />
       <SidePanel />
       <AdvisorPanel />
       <SkillPanel />
@@ -97,12 +113,31 @@ export default function App(): JSX.Element {
         open={newTaskOpen}
         onClose={() => setNewTaskOpen(false)}
       />
+      <TimelineDrawer
+        open={timelineOpen}
+        onClose={() => setTimelineOpen(false)}
+      />
       <SceneControls />
-      <Welcome onOpenGalaxy={() => setGalaxyOpen(true)} />
+      <Welcome
+        onOpenGalaxy={() => setGalaxyOpen(true)}
+        forceOpen={helpOpen}
+        onClose={() => setHelpOpen(false)}
+      />
       <Toasts />
       <EmptyHint />
     </div>
   );
+}
+
+/**
+ * Renders either the 3D galaxy or the table list view, depending on the
+ * persisted viewMode. The TopBar / DecisionQueue / panels overlay both.
+ */
+function ViewSurface(): JSX.Element {
+  const viewMode = useSolixStore((s) => s.viewMode);
+  if (viewMode === 'list') return <ListView />;
+  if (viewMode === 'missions') return <MissionView />;
+  return <Scene />;
 }
 
 function EmptyHint(): JSX.Element | null {

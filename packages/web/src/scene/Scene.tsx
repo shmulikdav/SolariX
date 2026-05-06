@@ -1,6 +1,7 @@
-import { useEffect, useRef, type ComponentRef } from 'react';
+import { Suspense, useEffect, useRef, type ComponentRef } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
-import { OrbitControls, Stars } from '@react-three/drei';
+import { OrbitControls, Stars, useTexture } from '@react-three/drei';
+import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import {
   selectAdvisorPlanets,
   selectPlanets,
@@ -12,7 +13,11 @@ import { Planet, PlanetOrbitRing } from './Planet.js';
 import { CometLayer } from './Comets.js';
 import { AdvisorRing } from './AdvisorRing.js';
 import { AsteroidBelt } from './AsteroidBelt.js';
+import { ProjectLabels } from './ProjectLabels.js';
 import { attachControls, detachControls } from './cameraControls.js';
+import { BackSide, type Mesh } from 'three';
+
+const MILKY_WAY_URL = '/textures/milky_way.jpg';
 
 export function Scene(): JSX.Element {
   const planets = useSolixStore(selectPlanets);
@@ -38,16 +43,15 @@ export function Scene(): JSX.Element {
     >
       <color attach="background" args={['#05060c']} />
       <fog attach="fog" args={['#080a14', 60, 280]} />
-      <ambientLight intensity={0.12} />
-      <Stars
-        radius={180}
-        depth={80}
-        count={6000}
-        factor={4}
-        saturation={0.4}
-        fade
-        speed={0.6}
-      />
+      <ambientLight intensity={0.18} />
+      {/*
+        Real Milky Way panorama as a giant inside-out sphere skybox.
+        Falls back gracefully (Suspense boundary) to the procedural
+        <Stars> below if the texture isn't on disk.
+      */}
+      <Suspense fallback={<Stars radius={180} depth={80} count={6000} factor={4} saturation={0.4} fade speed={0} />}>
+        <MilkyWaySkybox />
+      </Suspense>
       <Starfield />
       <Sun />
       <AdvisorRing />
@@ -59,16 +63,36 @@ export function Scene(): JSX.Element {
         <Planet key={p.id} session={p} />
       ))}
       <CometLayer />
+      <ProjectLabels />
       <ControlsBridge />
+      {/*
+        Bloom makes the textured sun, active planet emissives, and red /
+        orange flares actually glow. Tuned to favor the brightest sources
+        (the sun) without lighting up regular UI text overlays via <Html>.
+      */}
+      <EffectComposer multisampling={4}>
+        <Bloom
+          intensity={1.1}
+          luminanceThreshold={0.55}
+          luminanceSmoothing={0.2}
+          mipmapBlur
+        />
+      </EffectComposer>
     </Canvas>
   );
 }
 
-/**
- * Renders <OrbitControls> and exposes its imperative ref + the camera to the
- * cameraControls module so the on-screen HUD buttons can pan/zoom/reset.
- * Lives inside <Canvas> because that's where useThree() works.
- */
+function MilkyWaySkybox(): JSX.Element {
+  const meshRef = useRef<Mesh>(null);
+  const texture = useTexture(MILKY_WAY_URL);
+  return (
+    <mesh ref={meshRef} scale={[-1, 1, 1]}>
+      <sphereGeometry args={[400, 48, 32]} />
+      <meshBasicMaterial map={texture} side={BackSide} toneMapped={false} />
+    </mesh>
+  );
+}
+
 function ControlsBridge(): JSX.Element {
   const ref = useRef<ComponentRef<typeof OrbitControls>>(null);
   const { camera } = useThree();

@@ -47,6 +47,20 @@ export function attachWs(server: HttpServer, ctx: WsContext): WebSocketServer {
     };
     ctx.broadcaster.send(ws, snapshot);
 
+    // Replay any pending permission requests so a fresh client immediately
+    // sees them in the Decision Queue. Otherwise the broadcast that
+    // delivered them happened before this connection opened and they'd be
+    // lost on reload.
+    for (const p of ctx.router.pendingPermissions()) {
+      ctx.broadcaster.send(ws, {
+        type: 'permission_request',
+        sessionId: p.sessionId,
+        tool: p.tool,
+        args: p.args,
+        requestId: p.requestId,
+      });
+    }
+
     ws.on('message', (raw) => {
       let msg: ClientMessage | null = null;
       try {

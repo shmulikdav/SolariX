@@ -3,14 +3,20 @@ import { useSolixStore, selectPlanets } from '../store/index.js';
 interface TopBarProps {
   onOpenGalaxy?: () => void;
   onNewTask?: () => void;
+  onOpenTimeline?: () => void;
+  onOpenHelp?: () => void;
 }
 
 export function TopBar({
   onOpenGalaxy,
   onNewTask,
+  onOpenTimeline,
+  onOpenHelp,
 }: TopBarProps = {}): JSX.Element {
   const connected = useSolixStore((s) => s.connected);
   const planets = useSolixStore(selectPlanets);
+  const viewMode = useSolixStore((s) => s.viewMode);
+  const playbackActive = useSolixStore((s) => s.playback.active);
 
   const counts = planets.reduce(
     (acc, s) => {
@@ -45,12 +51,27 @@ export function TopBar({
         >
           {connected ? 'CONNECTED' : 'OFFLINE'}
         </div>
+        {playbackActive && (
+          <div className="ml-2 px-2 py-1 rounded text-[10px] border border-solix-accent text-solix-accent solix-pulse">
+            ▸ PLAYBACK
+          </div>
+        )}
       </div>
 
       <div className="pointer-events-auto flex items-center gap-3 text-xs">
         <Stat label="active" value={counts.active} color="text-solix-ok" />
         <Stat label="attention" value={counts.attention} color="text-solix-warn" />
         <Stat label="idle" value={counts.idle} color="text-slate-400" />
+        <ViewToggle viewMode={viewMode} />
+        {onOpenTimeline && (
+          <button
+            onClick={onOpenTimeline}
+            className="px-2 py-1 rounded bg-solix-panel border border-solix-border text-slate-300 hover:text-white hover:bg-solix-border/30"
+            title="Timeline playback (T)"
+          >
+            ⏱ Timeline
+          </button>
+        )}
         {onNewTask && (
           <button
             onClick={onNewTask}
@@ -69,7 +90,49 @@ export function TopBar({
             ⌬ Galaxy
           </button>
         )}
+        {onOpenHelp && (
+          <button
+            onClick={onOpenHelp}
+            className="w-7 h-7 rounded-full bg-solix-panel border border-solix-border text-slate-300 hover:text-white hover:bg-solix-border/30 text-sm"
+            title="Help (?)"
+            aria-label="Help"
+          >
+            ?
+          </button>
+        )}
       </div>
+    </div>
+  );
+}
+
+function ViewToggle({
+  viewMode,
+}: {
+  viewMode: 'galaxy' | 'list' | 'missions';
+}): JSX.Element {
+  const setViewMode = useSolixStore((s) => s.setViewMode);
+  const opts: { mode: 'galaxy' | 'list' | 'missions'; label: string }[] = [
+    { mode: 'galaxy', label: '🪐' },
+    { mode: 'list', label: '☰' },
+    { mode: 'missions', label: '◎' },
+  ];
+  return (
+    <div className="inline-flex rounded border border-solix-border bg-solix-panel overflow-hidden">
+      {opts.map((o) => (
+        <button
+          key={o.mode}
+          onClick={() => setViewMode(o.mode)}
+          className={`px-2 py-1 text-xs ${
+            viewMode === o.mode
+              ? 'bg-solix-border/50 text-white'
+              : 'text-slate-400 hover:text-slate-100'
+          }`}
+          title={`${o.mode} view (V)`}
+        >
+          {o.label}{' '}
+          <span className="capitalize">{o.mode}</span>
+        </button>
+      ))}
     </div>
   );
 }

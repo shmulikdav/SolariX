@@ -24,6 +24,7 @@ import {
   setAdvisorPinned,
 } from './state/advisors.js';
 import { buildContextEnvelope } from './state/context.js';
+import { recordAudit } from './state/audit.js';
 import type { Launcher } from './launcher.js';
 import type { TranscriptWatcherManager } from './state/transcript.js';
 
@@ -355,6 +356,14 @@ export class EventRouter {
       level: 'info',
       message: `Invoke ${advisor.codename} → ${targetLabel} · ${envelope.recentMissions.length} mission(s) in envelope`,
     });
+    recordAudit(this.db, {
+      kind: 'advisor_invoked',
+      advisorId,
+      sessionId: target?.id,
+      projectId: target?.projectId,
+      summary: `Invoked ${advisor.codename} → ${targetLabel}`,
+      payload: { prompt, missionsInEnvelope: envelope.recentMissions.length },
+    });
     return { ok: true, envelope: envelope.prompt };
   }
 
@@ -364,12 +373,25 @@ export class EventRouter {
       const advisor = setAdvisorPinned(this.db, advisorId, true);
       if (!advisor) return false;
       this.broadcaster.broadcast({ type: 'advisor_upsert', advisor });
+      recordAudit(this.db, {
+        kind: 'advisor_pinned',
+        advisorId,
+        summary: `Pinned ${advisor.codename}`,
+      });
       return true;
     }
     const ok = this.launcher.pin(advisorId, cwd);
     const advisor = getAdvisor(this.db, advisorId);
-    if (advisor)
+    if (advisor) {
       this.broadcaster.broadcast({ type: 'advisor_upsert', advisor });
+      if (ok) {
+        recordAudit(this.db, {
+          kind: 'advisor_pinned',
+          advisorId,
+          summary: `Pinned ${advisor.codename} in ${cwd}`,
+        });
+      }
+    }
     return ok;
   }
 
@@ -380,8 +402,14 @@ export class EventRouter {
       setAdvisorPinned(this.db, advisorId, false);
     }
     const advisor = getAdvisor(this.db, advisorId);
-    if (advisor)
+    if (advisor) {
       this.broadcaster.broadcast({ type: 'advisor_upsert', advisor });
+      recordAudit(this.db, {
+        kind: 'advisor_unpinned',
+        advisorId,
+        summary: `Unpinned ${advisor.codename}`,
+      });
+    }
     return true;
   }
 
@@ -393,6 +421,20 @@ export class EventRouter {
     const session = setSessionStatus(this.db, pending.sessionId, status);
     if (session)
       this.broadcaster.broadcast({ type: 'session_upsert', session });
+    const argSummary = (() => {
+      const k = Object.keys(pending.args)[0];
+      if (!k) return '';
+      const v = pending.args[k];
+      const s = typeof v === 'string' ? v : JSON.stringify(v);
+      return `: ${s.length > 80 ? s.slice(0, 80) + '…' : s}`;
+    })();
+    recordAudit(this.db, {
+      kind: approved ? 'permission_approved' : 'permission_denied',
+      sessionId: pending.sessionId,
+      projectId: session?.projectId,
+      summary: `${approved ? 'Approved' : 'Denied'} ${pending.tool} for ${session?.name ?? pending.sessionId.slice(0, 8)}${argSummary}`,
+      payload: { tool: pending.tool, args: pending.args },
+    });
     return true;
   }
 
@@ -422,12 +464,28 @@ export class EventRouter {
     return this.launcher.sendPromptToInternal(sessionId, text);
   }
 
+  /** Pending permission requests, used by the WS snapshot so a fresh
+   * client connection sees what's already waiting on the server. */
+  pendingPermissions(): PendingPermission[] {
+    return [...this.permissions.values()];
+  }
+
   broadcastGalaxyImported(manifest: GalaxyManifest): void {
     this.broadcaster.broadcast({ type: 'galaxy_imported', manifest });
     this.broadcaster.broadcast({
       type: 'toast',
       level: 'info',
       message: `Galaxy "${manifest.name}" imported`,
+    });
+    recordAudit(this.db, {
+      kind: 'galaxy_imported',
+      summary: `Imported galaxy "${manifest.name}"`,
+      payload: {
+        author: manifest.author,
+        advisorCount: manifest.advisors.length,
+        skillCount: manifest.skills.length,
+        projectCount: manifest.projects.length,
+      },
     });
   }
 
