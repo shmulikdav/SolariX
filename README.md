@@ -2,6 +2,16 @@
 
 A solar-system command center for Claude Code agents.
 
+[![npm version](https://img.shields.io/npm/v/@shmulikdav/solix.svg)](https://www.npmjs.com/package/@shmulikdav/solix)
+[![npm downloads](https://img.shields.io/npm/dm/@shmulikdav/solix.svg)](https://www.npmjs.com/package/@shmulikdav/solix)
+[![license](https://img.shields.io/npm/l/@shmulikdav/solix.svg)](LICENSE)
+[![node](https://img.shields.io/node/v/@shmulikdav/solix.svg)](https://nodejs.org)
+
+```sh
+npm i -g @shmulikdav/solix
+solix install && solix start
+```
+
 Solix renders every running Claude Code session as a planet orbiting a central
 sun. You see all your agents at once, click any planet to inspect its mission
 log, and react to permission requests without context-switching between

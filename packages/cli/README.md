@@ -8,8 +8,10 @@ Status is encoded as visual properties — color (model), halo
 planet to read its transcript; press `Y` to approve a sensitive
 permission without leaving the browser.
 
-![status: 1.0.0](https://img.shields.io/badge/status-1.0.0-blue)
-![license: MIT](https://img.shields.io/badge/license-MIT-green)
+[![npm version](https://img.shields.io/npm/v/@shmulikdav/solix.svg)](https://www.npmjs.com/package/@shmulikdav/solix)
+[![npm downloads](https://img.shields.io/npm/dm/@shmulikdav/solix.svg)](https://www.npmjs.com/package/@shmulikdav/solix)
+[![license](https://img.shields.io/npm/l/@shmulikdav/solix.svg)](https://github.com/shmulikdav/solarix/blob/main/LICENSE)
+[![node](https://img.shields.io/node/v/@shmulikdav/solix.svg)](https://nodejs.org)
 
 ## Install
 
