@@ -16,6 +16,7 @@ import {
   bumpToolCallCount,
   completeMission,
   getMission,
+  setMissionError,
   startMission,
 } from './state/missions.js';
 import { recordToolCall } from './state/toolcalls.js';
@@ -290,9 +291,28 @@ export class EventRouter {
     const session = getSession(this.db, sessionId);
     if (!session?.currentMissionId) return;
     bumpToolCallCount(this.db, session.currentMissionId);
-    const mission = getMission(this.db, session.currentMissionId);
-    if (mission)
-      this.broadcaster.broadcast({ type: 'mission_upsert', mission });
+
+    // Capture tool failures so the Mission view can surface why something
+    // went wrong. Claude Code's post-tool hook payload puts the result
+    // under `tool_response`; an `is_error: true` flag (with the error
+    // text in `content`) signals a failure.
+    const payload = event.payload as Record<string, unknown>;
+    const toolResponse = payload.tool_response as
+      | { is_error?: boolean; content?: unknown }
+      | undefined;
+    let updated = getMission(this.db, session.currentMissionId);
+    if (toolResponse?.is_error) {
+      const raw =
+        typeof toolResponse.content === 'string'
+          ? toolResponse.content
+          : JSON.stringify(toolResponse.content ?? '');
+      const summary = raw.slice(0, 280).replace(/\s+/g, ' ').trim();
+      if (summary) {
+        updated = setMissionError(this.db, session.currentMissionId, summary);
+      }
+    }
+    if (updated)
+      this.broadcaster.broadcast({ type: 'mission_upsert', mission: updated });
   }
 
   private onNotification(event: HookEvent): void {

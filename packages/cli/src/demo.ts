@@ -191,4 +191,21 @@ export async function demoCmd(opts: DemoOptions = {}): Promise<void> {
   console.log(`  • 1 planet at 87% context (orange flare)`);
   console.log(`  • Compass pinned (always-on)`);
   console.log(`[solix demo] open ${BASE} to see it.`);
+
+  // Scripted follow-up: ~3s later, simulate Compass being invoked on demo-a.
+  // Triggers a toast and an Audit-tab row so first-time users see the
+  // advisor crew actually doing something, not just sitting in the ring.
+  console.log(
+    `[solix demo] in ~3s: Compass will be invoked on demo-a (watch for the toast + Audit tab row).`,
+  );
+  await sleep(3000);
+  await fetch(`${BASE}/api/advisors/compass/invoke`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      targetSessionId: 'demo-a',
+      prompt: 'Review the orbital math refactor before merging',
+    }),
+  });
+  console.log(`[solix demo] Compass invoked. Demo complete.`);
 }

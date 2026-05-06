@@ -1,6 +1,6 @@
 {
   "name": "@shmulikdav/solix",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Solix — a solar-system command center for Claude Code agents",
   "license": "MIT",
   "type": "module",
@@ -21,12 +21,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/shmulikdav/solarix.git",
+    "url": "git+https://github.com/shmulikdav/SolariX.git",
     "directory": "packages/cli"
   },
-  "homepage": "https://github.com/shmulikdav/solarix#readme",
+  "homepage": "https://github.com/shmulikdav/SolariX#readme",
   "bugs": {
-    "url": "https://github.com/shmulikdav/solarix/issues"
+    "url": "https://github.com/shmulikdav/SolariX/issues"
   },
   "keywords": [
     "claude-code",

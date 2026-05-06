@@ -167,6 +167,7 @@ export function getDb(): DB {
   ensureColumn(db, 'sessions', 'kind', "kind TEXT NOT NULL DEFAULT 'user'");
   ensureColumn(db, 'sessions', 'advisor_role', 'advisor_role TEXT');
   ensureColumn(db, 'advisors', 'texture_pack', 'texture_pack TEXT');
+  ensureColumn(db, 'missions', 'error_summary', 'error_summary TEXT');
   _db = db;
   return db;
 }

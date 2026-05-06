@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSolixStore } from '../store/index.js';
 import { statusLabel } from '../scene/colors.js';
 import { suggestForSession } from '../suggestions.js';
+import { GLOSSARY } from '../glossary.js';
 
 type Tab = 'chat' | 'missions' | 'files';
 
@@ -65,7 +66,10 @@ export function SidePanel(): JSX.Element | null {
           <div className="text-lg font-semibold truncate">
             {session.name ?? session.id.slice(0, 8)}
           </div>
-          <div className="text-xs text-slate-400 mt-0.5 truncate">
+          <div
+            className="text-xs text-slate-400 mt-0.5 truncate"
+            title={GLOSSARY[session.status] ?? undefined}
+          >
             {String(session.model)} · {statusLabel(session.status)}
             {session.origin === 'external' ? ' · external' : ' · internal'}
           </div>

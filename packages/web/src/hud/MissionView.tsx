@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { Mission, Project } from '@solix/shared';
 import { useSolixStore } from '../store/index.js';
+import { GLOSSARY } from '../glossary.js';
 
 type StatusFilter = 'all' | 'active' | 'completed' | 'failed' | 'cancelled';
 
@@ -133,6 +134,11 @@ export function MissionView(): JSX.Element {
                                   {m.longSummary}
                                 </div>
                               )}
+                              {m.status === 'failed' && m.errorSummary && (
+                                <div className="mt-1 text-xs text-solix-danger italic line-clamp-2">
+                                  error: {m.errorSummary}
+                                </div>
+                              )}
                             </div>
                             <div className="text-right text-[10px] text-slate-500 font-mono whitespace-nowrap">
                               {relativeTime(m.startedAt)}
@@ -154,7 +160,9 @@ export function MissionView(): JSX.Element {
                               </span>
                             )}
                             <span>{m.metrics.toolCallCount} tools</span>
-                            <span>{m.metrics.subagentCount} subagents</span>
+                            <span title={GLOSSARY.subagent}>
+                              {m.metrics.subagentCount} subagents
+                            </span>
                             <span>{m.filesTouched.length} files</span>
                           </div>
 

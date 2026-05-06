@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { Mission, Project, Session } from '@solix/shared';
+import type { Advisor, Mission, Project, Session } from '@solix/shared';
 import {
   selectAdvisorPlanets,
   selectPlanets,
@@ -7,6 +7,7 @@ import {
 } from '../store/index.js';
 import { modelColor, statusLabel } from '../scene/colors.js';
 import { computeHealth, healthColor } from '../health.js';
+import { GLOSSARY } from '../glossary.js';
 
 type SortKey =
   | 'name'
@@ -191,6 +192,7 @@ export function ListView(): JSX.Element {
                       <Th onClick={() => onSort('name')}>
                         Agent{sortIndicator('name')}
                       </Th>
+                      <Th>Advisor</Th>
                       <Th onClick={() => onSort('status')}>
                         Status{sortIndicator('status')}
                       </Th>
@@ -246,7 +248,16 @@ export function ListView(): JSX.Element {
                             )}
                           </div>
                         </td>
-                        <td className="px-3 py-2 text-xs text-slate-300">
+                        <td className="px-3 py-2 text-xs">
+                          <AdvisorCell
+                            session={row.session}
+                            mission={row.mission}
+                          />
+                        </td>
+                        <td
+                          className="px-3 py-2 text-xs text-slate-300"
+                          title={GLOSSARY[row.session.status] ?? undefined}
+                        >
                           {statusLabel(row.session.status)}
                         </td>
                         <td className="px-3 py-2 text-right">
@@ -287,6 +298,58 @@ export function ListView(): JSX.Element {
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * Resolves which advisor (if any) a session is associated with and renders
+ * a compact chip. Two paths:
+ *   - session.kind === 'advisor' → look up by advisorRole
+ *   - regular user session whose latest mission's prompt was prefixed by
+ *     NewTaskModal's `[Acting as <Codename> — ...]` (Sprint F)
+ */
+const ADVISOR_PROMPT_PREFIX = /^\[Acting as ([^\s—]+)/;
+
+function AdvisorCell({
+  session,
+  mission,
+}: {
+  session: Session;
+  mission?: Mission;
+}): JSX.Element {
+  const advisors = useSolixStore((s) => s.advisors);
+
+  let advisor: Advisor | undefined;
+  let muted = false;
+  if (session.advisorRole) {
+    advisor = Object.values(advisors).find(
+      (a) => a.id === session.advisorRole,
+    );
+  } else if (mission?.prompt) {
+    const m = mission.prompt.match(ADVISOR_PROMPT_PREFIX);
+    const codename = m?.[1]?.toLowerCase();
+    if (codename) {
+      advisor = Object.values(advisors).find(
+        (a) => a.codename.toLowerCase() === codename,
+      );
+      muted = true;
+    }
+  }
+
+  if (!advisor) {
+    return <span className="text-slate-700">—</span>;
+  }
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1 ${
+        muted ? 'opacity-60' : ''
+      }`}
+      title={advisor.description}
+    >
+      <span style={{ color: advisor.color }}>{advisor.glyph}</span>
+      <span className="text-slate-200">{advisor.codename}</span>
+    </span>
   );
 }
 

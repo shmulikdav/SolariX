@@ -15,6 +15,7 @@ import {
 import { Moon } from './Moon.js';
 import { AtmosphereRim } from './AtmosphereRim.js';
 import { computeHealth, healthColor as healthBadgeColor } from '../health.js';
+import { GLOSSARY } from '../glossary.js';
 
 interface PlanetProps {
   session: Session;
@@ -272,7 +273,10 @@ export function Planet({ session }: PlanetProps): JSX.Element {
                   : session.id.slice(0, 8))}
             </span>
           </div>
-          <div className="opacity-70">
+          <div
+            className="opacity-70"
+            title={GLOSSARY[session.status] ?? undefined}
+          >
             {String(session.model)} · {statusLabel(session.status)}
           </div>
           <div

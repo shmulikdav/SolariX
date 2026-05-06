@@ -56,6 +56,10 @@ export interface Mission {
   status: MissionStatus;
   metrics: MissionMetrics;
   filesTouched: string[];
+  /** Plain-text summary of the most recent failure inside this mission.
+   * Populated server-side from post-tool events with is_error=true.
+   * Surfaced in MissionView for failed missions. */
+  errorSummary?: string;
 }
 
 export type ToolCallStatus = 'running' | 'ok' | 'error';

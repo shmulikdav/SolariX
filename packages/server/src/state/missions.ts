@@ -19,6 +19,7 @@ interface MissionRow {
   subagent_count: number;
   tool_call_count: number;
   files_touched_json: string;
+  error_summary: string | null;
 }
 
 function rowToMission(row: MissionRow): Mission {
@@ -46,7 +47,21 @@ function rowToMission(row: MissionRow): Mission {
       toolCallCount: row.tool_call_count,
     },
     filesTouched,
+    errorSummary: row.error_summary ?? undefined,
   };
+}
+
+/** Record (or overwrite) the error summary for a mission. The most recent
+ * tool failure wins — that's what the UI surfaces in MissionView. */
+export function setMissionError(
+  db: DB,
+  missionId: string,
+  errorSummary: string,
+): Mission | null {
+  db.prepare(
+    `UPDATE missions SET error_summary = ? WHERE id = ?`,
+  ).run(errorSummary, missionId);
+  return getMission(db, missionId);
 }
 
 function shortNameFromPrompt(prompt: string): string {
