@@ -29,32 +29,61 @@ interface NebulaSprite {
 }
 
 const SPRITES: NebulaSprite[] = [
+  // Sprint K.5b: more sprites, more saturation, bigger presence. The
+  // sun got toned down, so the nebula carries the visual color now.
   {
-    // Magenta/pink at upper-left distance
-    position: [-180, 60, -120],
-    size: 220,
+    // Magenta cloud upper-left
+    position: [-160, 70, -110],
+    size: 240,
     hue: 0.92,
-    saturation: 0.55,
+    saturation: 0.75,
     rotationSpeed: 0.008,
     driftAxis: [0, 1, 0],
   },
   {
-    // Violet on the lower-right, slightly closer
-    position: [140, -40, -150],
-    size: 260,
+    // Deep violet on the lower-right
+    position: [150, -50, -130],
+    size: 280,
     hue: 0.74,
-    saturation: 0.55,
+    saturation: 0.78,
     rotationSpeed: -0.006,
     driftAxis: [1, 0, 0],
   },
   {
-    // Teal far behind, large and soft
-    position: [-30, -20, -250],
-    size: 340,
+    // Cyan/teal far behind the sun, large and soft
+    position: [-30, -20, -260],
+    size: 360,
     hue: 0.5,
-    saturation: 0.45,
+    saturation: 0.7,
     rotationSpeed: 0.004,
     driftAxis: [0, 1, 1],
+  },
+  {
+    // Hot pink streak above
+    position: [60, 130, -180],
+    size: 200,
+    hue: 0.95,
+    saturation: 0.85,
+    rotationSpeed: 0.011,
+    driftAxis: [1, 0.4, 0],
+  },
+  {
+    // Cool blue galaxy in deep upper-right distance
+    position: [200, 80, -240],
+    size: 290,
+    hue: 0.62,
+    saturation: 0.7,
+    rotationSpeed: -0.005,
+    driftAxis: [0.5, 1, 0],
+  },
+  {
+    // Warm amber filament low-left for color balance
+    position: [-130, -90, -200],
+    size: 220,
+    hue: 0.08,
+    saturation: 0.55,
+    rotationSpeed: 0.007,
+    driftAxis: [0, 0, 1],
   },
 ];
 
@@ -157,7 +186,7 @@ export function Nebula(): JSX.Element {
               transparent
               depthWrite={false}
               blending={AdditiveBlending}
-              opacity={0.35}
+              opacity={0.55}
               toneMapped={false}
             />
           </sprite>

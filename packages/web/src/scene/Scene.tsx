@@ -38,16 +38,14 @@ export function Scene(): JSX.Element {
   return (
     <Canvas
       shadows={false}
-      // Sprint K.5 composition: tilt to ~18° vertical (was ~32°) and
-      // slide off-axis so the sun isn't centered on first paint —
-      // reads more cinematic, less map-of-the-solar-system.
-      camera={{ position: [10, 7, 22], fov: 55, near: 0.1, far: 600 }}
+      // Sprint K.5b: pulled camera back further (was [10,7,22]) so the
+      // sun stops dominating the frame and planets get breathing room.
+      camera={{ position: [16, 9, 32], fov: 55, near: 0.1, far: 600 }}
       gl={{
-        // ACES Filmic gives a noticeably more cinematic HDR-flavored
-        // result than the default linear toneMapping — bright bloom
-        // doesn't blow out, and dark sides of planets stay readable.
         toneMapping: ACESFilmicToneMapping,
-        toneMappingExposure: 0.95,
+        // Slightly lower exposure — overall scene reads more like
+        // deep space, less like a stage lit by a spotlight.
+        toneMappingExposure: 0.85,
       }}
       onPointerMissed={() => {
         selectSession(null);
@@ -56,14 +54,13 @@ export function Scene(): JSX.Element {
       }}
     >
       <color attach="background" args={['#05060c']} />
-      <fog attach="fog" args={['#080a14', 100, 320]} />
       {/*
-        Lighting overhaul (Sprint K visual): drop ambient very low so
-        day/night sides actually read on planets, and let a real point
-        light at the sun do the work. Distance falloff keeps outer
-        planets dimmer than inner ones — same as real space.
+        Sprint K.5b: fog far-clip pushed out (was 100→320, now 140→500)
+        so the deep-distance nebula sprites aren't muddied by haze. The
+        nebula carries the background color now, not the fog tint.
       */}
-      <ambientLight intensity={0.06} />
+      <fog attach="fog" args={['#0a0d1f', 140, 500]} />
+      <ambientLight intensity={0.12} />
       {/*
         Real Milky Way panorama as a giant inside-out sphere skybox.
         Falls back gracefully (Suspense boundary) to the procedural
@@ -96,12 +93,18 @@ export function Scene(): JSX.Element {
         (the sun) without lighting up regular UI text overlays via <Html>.
       */}
       <EffectComposer multisampling={4}>
+        {/*
+          Sprint K.5b: pulled bloom way back. Threshold up (only the
+          sun & truly hot emissives bloom), intensity down (less
+          sun-glare on the rest of the scene), radius tighter so the
+          glow doesn't bleed across half the screen.
+        */}
         <Bloom
-          intensity={1.5}
-          luminanceThreshold={0.42}
-          luminanceSmoothing={0.25}
+          intensity={0.85}
+          luminanceThreshold={0.7}
+          luminanceSmoothing={0.2}
           mipmapBlur
-          radius={0.85}
+          radius={0.55}
         />
       </EffectComposer>
     </Canvas>

@@ -12,23 +12,23 @@ import { useSolixStore } from '../store/index.js';
 
 const SUN_TEXTURE_URL = '/textures/sun.jpg';
 
-// Bumped from 1.7 in Sprint K.5 — visually a bigger central feature.
-// All corona/halo radii scale from this.
-const SUN_RADIUS = 2.3;
+// Sprint K.5b: scaled back from 2.3 (felt like the sun was eating the
+// screen) to 1.4. The sun should be the gravitational center, not the
+// only thing you can see.
+const SUN_RADIUS = 1.4;
 
 export function Sun(): JSX.Element {
   return (
     <group>
       {/*
-        Sprint K lighting overhaul: stronger sun, steeper falloff. Inner
-        planets get bright, outer planets fade naturally — ambient is
-        nearly zero now so this is the only real lightsource. decay=2 is
-        physically correct inverse-square.
+        Sun's pointLight: meaningful illumination on inner planets,
+        steeper falloff so outer planets keep the cool nebula tint of
+        the background. decay=2 is physically correct inverse-square.
       */}
       <pointLight
         position={[0, 0, 0]}
-        intensity={28}
-        distance={140}
+        intensity={18}
+        distance={70}
         decay={2}
         color="#ffd486"
       />
@@ -37,7 +37,6 @@ export function Sun(): JSX.Element {
       </Suspense>
       <SunHaloes />
       <SolarProminences />
-      <LensFlare />
     </group>
   );
 }
@@ -106,31 +105,32 @@ function SunHaloes(): JSX.Element {
     <>
       {/* Hot inner shell — closest to the surface, brightest tone */}
       <mesh ref={haloRef}>
-        <sphereGeometry args={[SUN_RADIUS * 1.15, 32, 32]} />
+        <sphereGeometry args={[SUN_RADIUS * 1.08, 32, 32]} />
         <meshBasicMaterial
           color="#fff7c2"
           transparent
-          opacity={0.32}
+          opacity={0.22}
           toneMapped={false}
         />
       </mesh>
-      {/* Mid corona */}
+      {/* Mid corona — pulled in, smaller bleed */}
       <mesh>
-        <sphereGeometry args={[SUN_RADIUS * 1.41, 32, 32]} />
+        <sphereGeometry args={[SUN_RADIUS * 1.22, 32, 32]} />
         <meshBasicMaterial
           color="#ffae3c"
           transparent
-          opacity={0.16}
+          opacity={0.10}
           toneMapped={false}
         />
       </mesh>
-      {/* Outer haze — large, faint, pulsing slow */}
+      {/* Outer haze — pulled in to ~1.5x radius (was 2x). The sun
+          glows; it doesn't paint the whole scene orange. */}
       <mesh ref={outerRef}>
-        <sphereGeometry args={[SUN_RADIUS * 1.96, 32, 32]} />
+        <sphereGeometry args={[SUN_RADIUS * 1.5, 32, 32]} />
         <meshBasicMaterial
           color="#f97316"
           transparent
-          opacity={0.06}
+          opacity={0.04}
           toneMapped={false}
         />
       </mesh>
@@ -238,73 +238,6 @@ function SolarProminences(): JSX.Element {
   );
 }
 
-/**
- * Sprint K.5: lens-flare billboards centered on the sun. Four additive
- * sprites of varying tint (white core, gold, soft purple, faint blue)
- * sized roughly 0.4 / 0.7 / 0.3 / 0.5 of the sun radius. They bloom
- * with the corona to read as a real-camera flare.
- */
-function makeFlareTexture(color: string): CanvasTexture | null {
-  if (typeof document === 'undefined') return null;
-  const size = 256;
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return null;
-  const g = ctx.createRadialGradient(
-    size / 2,
-    size / 2,
-    0,
-    size / 2,
-    size / 2,
-    size / 2,
-  );
-  g.addColorStop(0, color);
-  g.addColorStop(0.25, color.replace(/[\d.]+\)$/, '0.4)'));
-  g.addColorStop(1, color.replace(/[\d.]+\)$/, '0)'));
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, size, size);
-  return new CanvasTexture(canvas);
-}
-
-interface FlareSpec {
-  size: number;
-  color: string;
-  opacity: number;
-}
-
-const FLARES: FlareSpec[] = [
-  { size: SUN_RADIUS * 4.5, color: 'rgba(255,255,235,1)', opacity: 0.55 },
-  { size: SUN_RADIUS * 8.0, color: 'rgba(255,200,120,1)', opacity: 0.30 },
-  { size: SUN_RADIUS * 3.6, color: 'rgba(220,180,255,1)', opacity: 0.20 },
-  { size: SUN_RADIUS * 6.2, color: 'rgba(180,210,255,1)', opacity: 0.18 },
-];
-
-function LensFlare(): JSX.Element {
-  const textures = useMemo(
-    () => FLARES.map((f) => makeFlareTexture(f.color)),
-    [],
-  );
-
-  return (
-    <>
-      {FLARES.map((spec, i) => {
-        const tex = textures[i];
-        if (!tex) return null;
-        return (
-          <sprite key={i} position={[0, 0, 0]} scale={[spec.size, spec.size, 1]}>
-            <spriteMaterial
-              map={tex}
-              transparent
-              depthWrite={false}
-              blending={AdditiveBlending}
-              opacity={spec.opacity}
-              toneMapped={false}
-            />
-          </sprite>
-        );
-      })}
-    </>
-  );
-}
+// Lens flare removed in Sprint K.5b — too aggressive against bloom,
+// turned the whole screen orange. The corona shells alone read as a
+// star against the new toned-down bloom.
