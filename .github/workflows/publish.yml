@@ -25,7 +25,18 @@ jobs:
         with:
           node-version: '20'
           cache: 'pnpm'
-          registry-url: 'https://registry.npmjs.org'
+
+      - name: Verify NPM_TOKEN is configured
+        run: |
+          if [ -z "${NPM_TOKEN}" ]; then
+            echo "::error::NPM_TOKEN repository secret is empty or not set."
+            echo "::error::Add it at: https://github.com/shmulikdav/SolariX/settings/secrets/actions"
+            echo "::error::It must be a Repository secret (not an Environment secret)."
+            exit 1
+          fi
+          echo "NPM_TOKEN length: ${#NPM_TOKEN} (expecting ~40 chars for a granular token)"
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Install
         run: pnpm install --frozen-lockfile
@@ -33,13 +44,26 @@ jobs:
       - name: Typecheck
         run: pnpm -r typecheck
 
+      - name: Fetch web textures
+        # Best-effort: package still works without textures (UI falls back
+        # to procedural rendering), but the bespoke advisor planets need
+        # the CC-licensed textures to look right.
+        run: pnpm --filter @solix/web prepare-assets || echo "::warning::Texture fetch failed; package will ship with procedural fallback"
+
       - name: Build (server, shared, web, cli)
         run: pnpm -r build
 
       - name: Inspect tarball
-        run: cd packages/cli && npm pack --dry-run
+        working-directory: packages/cli
+        run: npm pack --dry-run
 
       - name: Publish
-        run: cd packages/cli && npm publish --provenance --access public
+        # Write the auth token explicitly into a project-local .npmrc so
+        # there's no ambiguity about whether setup-node's config reached
+        # this step. Then publish from packages/cli.
+        working-directory: packages/cli
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > .npmrc
+          npm publish --provenance --access public
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
