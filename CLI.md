@@ -349,14 +349,62 @@ hooks silent, etc.
 ### `solix uninstall`
 
 Restores `~/.claude/settings.json` from the most recent
-`.solix.bak.<ts>` backup. Does **not** touch your Solix DB or skill
-folders.
+`.solix.bak.<ts>` backup. Also removes the optional `claude` shell
+shim if present (see `solix install-shim`). Does **not** touch your
+Solix DB or skill folders.
 
 ```sh
 solix uninstall
 ```
 
 To wipe everything: `rm -rf ~/.solix/` after running uninstall.
+
+---
+
+## 8b. Bidirectional chat — `solix run` + `solix install-shim`
+
+By default the Solix UI is read-only for externally-launched
+`claude` sessions (the chat composer says "type in your terminal").
+These two sub-commands unlock UI → terminal prompt sending via a
+PTY wrapper.
+
+### `solix run [...args]`
+
+Wraps a `claude` session under a pseudo-terminal so the Solix server
+can write into its stdin. Pass any args you'd normally pass to
+`claude`.
+
+```sh
+solix run                          # interactive REPL (transparent)
+solix run -p "fix the typo"        # one-shot --print
+solix run --resume <session-id>    # resume a paused conversation
+```
+
+For each wrapped session:
+
+- A Unix socket is opened at `~/.solix/wrappers/<wrapperId>.sock`
+- The wrapper POSTs `/api/wrappers/register` with id + socket + cwd
+- The next `session_start` hook in that cwd claims it; the session
+  row gets `wrapper_socket_path` set
+- The SidePanel chat composer becomes write-enabled, with a small
+  `wrapped` badge in the header
+- On exit, the socket is removed and the wrapper unregisters
+
+Don't type in your terminal while clicking Send in the UI —
+characters interleave. Pick one channel per turn.
+
+### `solix install-shim`
+
+Adds a marked block to your `~/.zshrc` (or `~/.bashrc`):
+
+```sh
+# >>> solix shim >>>
+alias claude='solix run'
+# <<< solix shim <<<
+```
+
+After `exec $SHELL`, every `claude` invocation goes through the
+wrapper transparently. `solix uninstall` removes the block.
 
 ---
 

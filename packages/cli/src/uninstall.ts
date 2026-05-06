@@ -1,5 +1,6 @@
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { CLAUDE_BACKUP, CLAUDE_SETTINGS, HOOKS_DIR } from './paths.js';
+import { uninstallShim } from './install-shim.js';
 
 interface HookEntry {
   matcher: string;
@@ -12,6 +13,10 @@ interface ClaudeSettings {
 }
 
 export function uninstall(): void {
+  // Always try to remove the shell shim first — independent of the
+  // hooks state. A user could have one but not the other.
+  uninstallShim();
+
   if (existsSync(CLAUDE_BACKUP)) {
     copyFileSync(CLAUDE_BACKUP, CLAUDE_SETTINGS);
     console.log(`[solix] restored settings.json from backup`);

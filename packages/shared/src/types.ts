@@ -36,6 +36,10 @@ export interface Session {
    * (Sprint I), the worktree path is stored here. List view renders a
    * branch chip from it. */
   worktreePath?: string;
+  /** When the user ran `solix run` (Sprint J) instead of bare `claude`,
+   * the wrapper's Unix-socket path is stored here. The SidePanel chat
+   * composer becomes write-enabled for sessions where this is set. */
+  wrapperSocketPath?: string;
 }
 
 export type MissionStatus = 'active' | 'completed' | 'failed' | 'cancelled';

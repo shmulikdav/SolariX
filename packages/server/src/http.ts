@@ -23,6 +23,7 @@ import {
   readAdvisorAgentMd,
   setAdvisorEnabled,
 } from './state/advisors.js';
+import { registerWrapper, unregisterWrapper } from './state/wrappers.js';
 import { buildContextEnvelope } from './state/context.js';
 import {
   getSkill,
@@ -333,6 +334,31 @@ export function createHttpApp(opts: {
   });
 
   app.get('/api/galaxy/imports', (c) => c.json(listImportHistory(opts.db)));
+
+  // ──── solix run wrappers (Sprint J) ────────────────────────────────
+  // Wrappers POST here when they spawn a wrapped claude session. The
+  // SessionStart hook later claims the registration by cwd to mark
+  // the session as bidirectional in the SidePanel composer.
+  app.post('/api/wrappers/register', async (c) => {
+    const body = (await c.req.json().catch(() => null)) as
+      | { wrapperId?: string; socketPath?: string; cwd?: string }
+      | null;
+    if (!body?.wrapperId || !body.socketPath || !body.cwd) {
+      return c.json({ error: 'wrapperId, socketPath, cwd required' }, 400);
+    }
+    registerWrapper({
+      wrapperId: body.wrapperId,
+      socketPath: body.socketPath,
+      cwd: body.cwd,
+      registeredAt: Date.now(),
+    });
+    return c.json({ ok: true });
+  });
+
+  app.post('/api/wrappers/:id/unregister', (c) => {
+    unregisterWrapper(c.req.param('id'));
+    return c.json({ ok: true });
+  });
 
   // Preflight check used by the NewTaskModal to warn before the user
   // clicks Launch. Cached for the process lifetime — installing claude

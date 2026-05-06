@@ -23,6 +23,7 @@ interface SessionRow {
   kind: SessionKind | null;
   advisor_role: string | null;
   worktree_path: string | null;
+  wrapper_socket_path: string | null;
   current_mission_id: string | null;
   last_completed_mission_id: string | null;
   created_at: number;
@@ -50,6 +51,7 @@ function rowToSession(row: SessionRow): Session {
     orbitSlot: row.orbit_slot,
     name: row.name ?? undefined,
     worktreePath: row.worktree_path ?? undefined,
+    wrapperSocketPath: row.wrapper_socket_path ?? undefined,
   };
 }
 
@@ -76,6 +78,7 @@ export interface CreateSessionInput {
   kind?: SessionKind;
   advisorRole?: string;
   worktreePath?: string;
+  wrapperSocketPath?: string;
 }
 
 export function upsertSession(db: DB, input: CreateSessionInput): Session {
@@ -108,9 +111,9 @@ export function upsertSession(db: DB, input: CreateSessionInput): Session {
     `INSERT INTO sessions (
        id, pid, project_id, parent_session_id, origin, model, status,
        context_usage_pct, orbit_slot, cwd, name, kind, advisor_role,
-       worktree_path, created_at, updated_at
+       worktree_path, wrapper_socket_path, created_at, updated_at
      )
-     VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, NULL, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, NULL, ?, ?, ?, ?, ?, ?)`,
   ).run(
     input.id,
     input.pid,
@@ -124,6 +127,7 @@ export function upsertSession(db: DB, input: CreateSessionInput): Session {
     kind,
     input.advisorRole ?? null,
     input.worktreePath ?? null,
+    input.wrapperSocketPath ?? null,
     ts,
     ts,
   );
@@ -144,6 +148,7 @@ export function upsertSession(db: DB, input: CreateSessionInput): Session {
     contextUsagePct: 0,
     orbitSlot,
     worktreePath: input.worktreePath,
+    wrapperSocketPath: input.wrapperSocketPath,
   };
 }
 

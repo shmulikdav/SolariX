@@ -343,6 +343,41 @@ Common causes (paired with the troubleshooting table in `CLI.md`):
 
 ---
 
+### 12.5. "I want to type prompts in the UI for sessions I started in my terminal"
+
+By default Solix can only **read** what an externally-launched
+`claude` session is doing — the chat tab in the SidePanel is
+read-only. To enable bidirectional chat (UI → terminal), launch the
+session under Solix's PTY wrapper instead of bare `claude`.
+
+```sh
+# Per-session: wrap explicitly
+solix run                          # interactive REPL, just like claude
+solix run -p "Refactor README"     # one-shot, like claude --print
+
+# Permanent: alias claude → solix run via your shell rc
+solix install-shim
+exec $SHELL                        # reload, then `claude` is wrapped
+```
+
+In the UI, wrapped sessions show a small `wrapped` badge in the
+SidePanel header. The chat composer is enabled — type a prompt,
+Cmd/Ctrl+Enter, the text lands in your terminal as if you'd typed
+it. claude responds normally and the response streams into Solix.
+
+Mechanism: `solix run` spawns claude under a pseudo-terminal
+(node-pty), opens a Unix socket at `~/.solix/wrappers/<id>.sock`,
+and registers it with the Solix server. The server forwards UI
+prompts to the socket; the wrapper writes them to claude's PTY
+stdin.
+
+**Limitation**: don't type in the terminal while the UI is sending a
+prompt — characters interleave. Pick one channel per turn.
+
+To remove: `solix uninstall` strips the shim block from your shell rc.
+
+---
+
 ### 13. "Buttons in the Solix UI feel stuck — clicks don't register"
 
 If clicking the view toggle (`🪐 Galaxy` / `≡ List` / `◎ Missions`) or

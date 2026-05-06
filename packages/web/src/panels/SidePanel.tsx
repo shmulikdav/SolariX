@@ -49,6 +49,12 @@ export function SidePanel(): JSX.Element | null {
   if (!session) return null;
 
   const isInternal = session.origin === 'internal';
+  // Sprint J: external sessions started via `solix run` have a wrapper
+  // Unix socket the server can write to. From the UI's perspective,
+  // they're functionally equivalent to internal sessions for the
+  // composer — we ship prompts via sendPromptToSession either way.
+  const isWrapped = Boolean(session.wrapperSocketPath);
+  const composerEnabled = isInternal || isWrapped;
 
   const onSend = (): void => {
     if (!composer.trim()) return;
@@ -72,6 +78,14 @@ export function SidePanel(): JSX.Element | null {
           >
             {String(session.model)} · {statusLabel(session.status)}
             {session.origin === 'external' ? ' · external' : ' · internal'}
+            {isWrapped && (
+              <span
+                className="ml-1.5 px-1.5 py-0.5 rounded text-[9px] uppercase tracking-wide border border-solix-accent/50 text-solix-accent"
+                title="Wrapped by `solix run` — UI prompts go to your terminal."
+              >
+                wrapped
+              </span>
+            )}
           </div>
         </div>
         <button
@@ -142,33 +156,46 @@ export function SidePanel(): JSX.Element | null {
 
       {tab === 'chat' && (
         <div className="px-3 py-3 border-t border-solix-border">
-          {isInternal ? (
-            <div className="flex gap-2">
-              <textarea
-                value={composer}
-                onChange={(e) => setComposer(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                    e.preventDefault();
-                    onSend();
+          {composerEnabled ? (
+            <>
+              <div className="flex gap-2">
+                <textarea
+                  value={composer}
+                  onChange={(e) => setComposer(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                      e.preventDefault();
+                      onSend();
+                    }
+                  }}
+                  placeholder={
+                    isWrapped
+                      ? 'Type a prompt — it goes straight into your terminal claude (Cmd/Ctrl+Enter)'
+                      : 'Send a prompt to this session… (Cmd/Ctrl+Enter)'
                   }
-                }}
-                placeholder="Send a prompt to this session… (Cmd/Ctrl+Enter)"
-                rows={2}
-                className="flex-1 text-sm bg-black/40 border border-solix-border rounded p-2 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-solix-accent resize-none"
-              />
-              <button
-                onClick={onSend}
-                disabled={!composer.trim()}
-                className="px-3 py-2 rounded bg-solix-accent/20 border border-solix-accent text-solix-accent text-sm hover:bg-solix-accent/30 disabled:opacity-40"
-              >
-                Send
-              </button>
-            </div>
+                  rows={2}
+                  className="flex-1 text-sm bg-black/40 border border-solix-border rounded p-2 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-solix-accent resize-none"
+                />
+                <button
+                  onClick={onSend}
+                  disabled={!composer.trim()}
+                  className="px-3 py-2 rounded bg-solix-accent/20 border border-solix-accent text-solix-accent text-sm hover:bg-solix-accent/30 disabled:opacity-40"
+                >
+                  Send
+                </button>
+              </div>
+              {isWrapped && (
+                <div className="text-[10px] text-slate-500 italic mt-1.5">
+                  Wrapped by <code>solix run</code>. Don't type in the terminal
+                  while sending from here, or characters will interleave.
+                </div>
+              )}
+            </>
           ) : (
             <div className="text-xs text-slate-500">
-              External session — keep typing in your terminal. The chat above
-              streams from the transcript.
+              External session — keep typing in your terminal. To send prompts
+              from here instead, restart the session with{' '}
+              <code className="bg-black/40 px-1 rounded">solix run</code>.
             </div>
           )}
         </div>

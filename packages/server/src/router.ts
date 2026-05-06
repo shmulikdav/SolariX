@@ -26,6 +26,7 @@ import {
 } from './state/advisors.js';
 import { buildContextEnvelope } from './state/context.js';
 import { recordAudit } from './state/audit.js';
+import { claimWrapperForCwd, writeToWrapperSocket } from './state/wrappers.js';
 import type { Launcher } from './launcher.js';
 import type { TranscriptWatcherManager } from './state/transcript.js';
 
@@ -118,6 +119,11 @@ export class EventRouter {
     // launcher recorded its path under the spawn cwd. Persisting it here
     // means List view can render a "branch" chip without re-shelling git.
     const worktreePath = this.launcher?.worktreePathForInternalCwd(event.cwd);
+    // If the user ran `solix run` (Sprint J wrapper) instead of bare
+    // `claude`, a wrapper registration with this cwd will be in the
+    // ephemeral registry. Claim it now so the SidePanel composer
+    // becomes write-enabled for this session.
+    const wrapper = claimWrapperForCwd(event.cwd);
     const session = upsertSession(this.db, {
       id: sessionId,
       pid: event.pid,
@@ -134,6 +140,7 @@ export class EventRouter {
       kind: advisorRole ? 'advisor' : 'user',
       advisorRole,
       worktreePath,
+      wrapperSocketPath: wrapper?.socketPath,
     });
     this.broadcaster.broadcast({ type: 'session_upsert', session });
     // Start tailing the session's transcript so the Chat tab streams in real
@@ -489,6 +496,40 @@ export class EventRouter {
   }
 
   sendPromptToSession(sessionId: string, text: string): boolean {
+    const session = getSession(this.db, sessionId);
+    if (!session) return false;
+
+    // Sprint J: external sessions started via `solix run` carry the
+    // wrapper's Unix socket path. Forward the prompt over the socket
+    // so the wrapper can write it into the underlying claude PTY.
+    if (session.wrapperSocketPath) {
+      const ok = writeToWrapperSocket(session.wrapperSocketPath, text);
+      if (ok) {
+        // Echo the user's prompt into the chat so the SidePanel
+        // shows it immediately, before claude streams its reply.
+        this.broadcaster.broadcast({
+          type: 'chat_delta',
+          sessionId,
+          delta: {
+            messageId: `u-${Date.now()}`,
+            role: 'user',
+            content: text,
+            ts: Date.now(),
+            done: true,
+          },
+        });
+      } else {
+        this.broadcaster.broadcast({
+          type: 'toast',
+          level: 'warn',
+          message:
+            'Wrapper socket unreachable — the `solix run` process may have exited.',
+        });
+      }
+      return ok;
+    }
+
+    // Internal sessions go through the launcher (existing behavior).
     if (!this.launcher) return false;
     return this.launcher.sendPromptToInternal(sessionId, text);
   }

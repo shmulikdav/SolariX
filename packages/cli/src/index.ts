@@ -16,6 +16,8 @@ import {
   publishGalaxyCmd,
 } from './galaxy.js';
 import { install } from './install.js';
+import { installShim } from './install-shim.js';
+import { runWrapped } from './run.js';
 import { installSkillCmd, listSkillsCmd } from './skills.js';
 import { start } from './start.js';
 import { uninstall } from './uninstall.js';
@@ -50,6 +52,28 @@ program
   .description('Restore ~/.claude/settings.json from backup')
   .action(() => {
     uninstall();
+  });
+
+program
+  .command('run')
+  .description(
+    'Wrap a claude session under a PTY so the Solix UI can send prompts to it. ' +
+      'Pass any args you would normally pass to claude.',
+  )
+  .allowUnknownOption(true)
+  .helpOption(false)
+  .action(async (_opts, cmd: Command) => {
+    await runWrapped(cmd.args ?? []);
+  });
+
+program
+  .command('install-shim')
+  .description(
+    "Add `alias claude='solix run'` to your shell rc so every claude " +
+      'session is wrapped automatically.',
+  )
+  .action(() => {
+    installShim();
   });
 
 program
