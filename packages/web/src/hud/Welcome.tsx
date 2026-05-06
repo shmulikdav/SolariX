@@ -55,7 +55,7 @@ export function Welcome({
     .sort((a, b) => a.codename.localeCompare(b.codename));
 
   return (
-    <div className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none">
+    <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none">
       <div className="pointer-events-auto max-w-xl w-full mx-4 rounded-xl border border-solix-accent/40 bg-solix-panel/95 backdrop-blur-md shadow-2xl">
         <div className="px-6 pt-5 pb-3 border-b border-solix-border">
           <div className="text-xs uppercase tracking-widest text-solix-accent">
@@ -150,6 +150,29 @@ export function Welcome({
           />
         </div>
 
+        <div className="px-6 pb-3 pt-1">
+          <div className="text-[10px] uppercase tracking-widest text-slate-500 mb-1.5">
+            Keyboard shortcuts
+          </div>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-slate-400">
+            <Kbd k="V">cycle Galaxy → List → Missions</Kbd>
+            <Kbd k="G">toggle Galaxy panel</Kbd>
+            <Kbd k="L">new task</Kbd>
+            <Kbd k="T">timeline</Kbd>
+            <Kbd k="M">jump to Missions</Kbd>
+            <Kbd k="Y">approve top decision</Kbd>
+            <Kbd k="N">deny top decision</Kbd>
+            <Kbd k="Space">play / pause orbits</Kbd>
+            <Kbd k="?">re-open this help</Kbd>
+            <Kbd k="Esc">close panels / exit playback</Kbd>
+          </div>
+          <div className="text-[10px] text-slate-500 italic mt-2">
+            If clicks feel stuck, a third-party screen overlay (note-taker,
+            recorder) may be intercepting. Quit it temporarily, or use the
+            shortcuts above.
+          </div>
+        </div>
+
         <div className="px-6 py-3 border-t border-solix-border flex items-center gap-2">
           <button
             onClick={() => {
@@ -169,6 +192,23 @@ export function Welcome({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function Kbd({
+  k,
+  children,
+}: {
+  k: string;
+  children: React.ReactNode;
+}): JSX.Element {
+  return (
+    <div className="flex items-center gap-2">
+      <kbd className="shrink-0 px-1.5 py-0.5 rounded bg-black/50 border border-solix-border text-[10px] font-mono text-slate-300">
+        {k}
+      </kbd>
+      <span className="truncate">{children}</span>
     </div>
   );
 }

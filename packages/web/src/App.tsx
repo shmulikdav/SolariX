@@ -53,6 +53,14 @@ export default function App(): JSX.Element {
         setGalaxyOpen(false);
         setNewTaskOpen(false);
         setHelpOpen(false);
+        // Esc also exits Timeline Playback — the only mode where the rest of
+        // the UI feels frozen because state is derived from past events.
+        // Cheap escape hatch when the "× Live" button isn't clickable for
+        // any reason (e.g. a third-party window overlay).
+        if (state.playback.active) {
+          state.exitPlayback();
+          setTimelineOpen(false);
+        }
       } else if (!isTextField && e.key === '?') {
         setHelpOpen((v) => !v);
       } else if (!isTextField && (e.key === 'g' || e.key === 'G')) {

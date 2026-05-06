@@ -343,7 +343,37 @@ Common causes (paired with the troubleshooting table in `CLI.md`):
 
 ---
 
-### 13. "I want to remove Solix completely"
+### 13. "Buttons in the Solix UI feel stuck — clicks don't register"
+
+If clicking the view toggle (`🪐 Galaxy` / `≡ List` / `◎ Missions`) or
+the timeline's `× Live` does nothing, the most common culprit isn't
+Solix — it's a **third-party screen overlay app** intercepting clicks.
+Common offenders on macOS:
+
+- **Granola** ("Take notes for you?" pill at the top of the screen)
+- **Loom**, **CleanShot X**, **Shottr** with auto-detected regions
+- Some menu-bar AI assistants that float a recording dot
+
+How to tell: hover the pill / overlay — if it's solid pixels in the
+top portion of your screen, it's eating clicks even on parts that
+look transparent.
+
+Workarounds:
+
+| Fix | When |
+|---|---|
+| **Use keyboard shortcuts** | Always works. `V` cycles views, `Esc` exits playback / closes panels, `T` toggles timeline, `?` re-opens help. |
+| **Quit the overlay app** | Cmd+Q from its menu bar. Re-launch when done. |
+| **Move Solix to a different monitor** | If the overlay is locked to one screen. |
+| **Use the regular browser tab** | Instead of the installed PWA — sometimes overlays target standalone apps differently. |
+
+V1.1.1+ also makes Solix's TopBar `z-40`, so panels and the timeline
+no longer cover navigation. But OS-level overlays sit above
+everything in the browser; only quitting them gets clicks back.
+
+---
+
+### 14. "I want to remove Solix completely"
 
 ```sh
 solix uninstall   # restores ~/.claude/settings.json from backup

@@ -17,6 +17,7 @@ export function TopBar({
   const planets = useSolixStore(selectPlanets);
   const viewMode = useSolixStore((s) => s.viewMode);
   const playbackActive = useSolixStore((s) => s.playback.active);
+  const exitPlayback = useSolixStore((s) => s.exitPlayback);
 
   const counts = planets.reduce(
     (acc, s) => {
@@ -34,7 +35,7 @@ export function TopBar({
   );
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-4 z-20">
+    <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-4 z-40">
       <div className="pointer-events-auto flex items-center gap-2 sm:gap-3">
         <div className="text-xl font-bold tracking-widest text-solix-accent">
           SOLIX
@@ -52,9 +53,15 @@ export function TopBar({
           {connected ? 'CONNECTED' : 'OFFLINE'}
         </div>
         {playbackActive && (
-          <div className="ml-2 px-2 py-1 rounded text-[10px] border border-solix-accent text-solix-accent solix-pulse">
-            ▸ PLAYBACK
-          </div>
+          <button
+            onClick={exitPlayback}
+            className="ml-2 px-2 py-1 rounded text-[10px] border border-solix-accent text-solix-accent solix-pulse hover:bg-solix-accent/15 cursor-pointer flex items-center gap-1.5"
+            title="Exit Timeline Playback (Esc)"
+            aria-label="Exit playback"
+          >
+            <span>▸ PLAYBACK</span>
+            <span className="opacity-70">· exit ✕</span>
+          </button>
         )}
       </div>
 
