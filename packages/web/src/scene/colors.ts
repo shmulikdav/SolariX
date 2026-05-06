@@ -19,22 +19,27 @@ export function statusEmissive(status: SessionStatus): {
   color: string;
   intensity: number;
 } {
+  // Sprint K.5: capped intensities so the planet body doesn't bloom
+  // into a glowing ball under the v1.3.0 lighting (bloom intensity 1.5,
+  // threshold 0.42). The atmosphere rim + pulse animations carry the
+  // visual signal — the sphere itself stays a sphere.
   switch (status) {
     case 'active':
-      return { color: '#fde68a', intensity: 0.9 };
+      return { color: '#fde68a', intensity: 0.30 };
     case 'awaiting_permission':
-      return { color: '#ef4444', intensity: 1.0 };
+      // Slightly above bloom threshold so the red still flares through.
+      return { color: '#ef4444', intensity: 0.50 };
     case 'awaiting_input':
-      return { color: '#f59e0b', intensity: 0.7 };
+      return { color: '#f59e0b', intensity: 0.25 };
     case 'plan_review':
-      return { color: '#a78bfa', intensity: 0.5 };
+      return { color: '#a78bfa', intensity: 0.20 };
     case 'error':
-      return { color: '#dc2626', intensity: 0.6 };
+      return { color: '#dc2626', intensity: 0.30 };
     case 'spawning':
-      return { color: '#ffffff', intensity: 0.4 };
+      return { color: '#ffffff', intensity: 0.20 };
     case 'idle':
     default:
-      return { color: '#1e293b', intensity: 0.1 };
+      return { color: '#1e293b', intensity: 0.05 };
   }
 }
 

@@ -15,6 +15,9 @@ import { CometLayer } from './Comets.js';
 import { AdvisorRing } from './AdvisorRing.js';
 import { AsteroidBelt } from './AsteroidBelt.js';
 import { ProjectLabels } from './ProjectLabels.js';
+import { Nebula } from './Nebula.js';
+import { ShootingStars } from './ShootingStars.js';
+import { ClickRipple } from './ClickRipple.js';
 import { attachControls, detachControls } from './cameraControls.js';
 import { BackSide, type Mesh } from 'three';
 
@@ -35,7 +38,10 @@ export function Scene(): JSX.Element {
   return (
     <Canvas
       shadows={false}
-      camera={{ position: [0, 14, 22], fov: 55, near: 0.1, far: 600 }}
+      // Sprint K.5 composition: tilt to ~18° vertical (was ~32°) and
+      // slide off-axis so the sun isn't centered on first paint —
+      // reads more cinematic, less map-of-the-solar-system.
+      camera={{ position: [10, 7, 22], fov: 55, near: 0.1, far: 600 }}
       gl={{
         // ACES Filmic gives a noticeably more cinematic HDR-flavored
         // result than the default linear toneMapping — bright bloom
@@ -66,7 +72,11 @@ export function Scene(): JSX.Element {
       <Suspense fallback={<Stars radius={180} depth={80} count={6000} factor={4} saturation={0.4} fade speed={0} />}>
         <MilkyWaySkybox />
       </Suspense>
+      {/* Sprint K.5: nebula color in the deep distance so the void
+          isn't flat-black; shooting stars for atmospheric motion. */}
+      <Nebula />
       <Starfield />
+      <ShootingStars />
       <Sun />
       <AdvisorRing />
       <AsteroidBelt />
@@ -77,6 +87,7 @@ export function Scene(): JSX.Element {
         <Planet key={p.id} session={p} />
       ))}
       <CometLayer />
+      <ClickRipple />
       <ProjectLabels />
       <ControlsBridge />
       {/*
