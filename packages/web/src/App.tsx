@@ -1,8 +1,6 @@
-import { useEffect, useState } from 'react';
-import { Scene } from './scene/Scene.js';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { ListView } from './hud/ListView.js';
 import { MissionView } from './hud/MissionView.js';
-import { TimelineDrawer } from './hud/TimelineDrawer.js';
 import { TopBar } from './hud/TopBar.js';
 import { Toasts } from './hud/Toasts.js';
 import { Welcome } from './hud/Welcome.js';
@@ -20,10 +18,24 @@ import {
 import { SidePanel } from './panels/SidePanel.js';
 import { AdvisorPanel } from './panels/AdvisorPanel.js';
 import { SkillPanel } from './panels/SkillPanel.js';
-import { GalaxyPanel } from './panels/GalaxyPanel.js';
 import { NewTaskModal } from './panels/NewTaskModal.js';
 import { useSolixStore } from './store/index.js';
 import { startWsClient } from './ws/client.js';
+
+// Sprint K code-split: the 3D galaxy scene pulls three.js, drei, and
+// postprocessing — together the largest chunk of the bundle. Lazy-load
+// it so a user who lands directly on List view doesn't pay that cost.
+// Same for the Timeline drawer (only opened on demand) and the Galaxy
+// panel (which has its own fetch + state).
+const Scene = lazy(() =>
+  import('./scene/Scene.js').then((m) => ({ default: m.Scene })),
+);
+const TimelineDrawer = lazy(() =>
+  import('./hud/TimelineDrawer.js').then((m) => ({ default: m.TimelineDrawer })),
+);
+const GalaxyPanel = lazy(() =>
+  import('./panels/GalaxyPanel.js').then((m) => ({ default: m.GalaxyPanel })),
+);
 
 export default function App(): JSX.Element {
   const [galaxyOpen, setGalaxyOpen] = useState(false);
@@ -113,18 +125,23 @@ export default function App(): JSX.Element {
       <SidePanel />
       <AdvisorPanel />
       <SkillPanel />
-      <GalaxyPanel
-        open={galaxyOpen}
-        onClose={() => setGalaxyOpen(false)}
-      />
+      {galaxyOpen && (
+        <Suspense fallback={null}>
+          <GalaxyPanel open={galaxyOpen} onClose={() => setGalaxyOpen(false)} />
+        </Suspense>
+      )}
       <NewTaskModal
         open={newTaskOpen}
         onClose={() => setNewTaskOpen(false)}
       />
-      <TimelineDrawer
-        open={timelineOpen}
-        onClose={() => setTimelineOpen(false)}
-      />
+      {timelineOpen && (
+        <Suspense fallback={null}>
+          <TimelineDrawer
+            open={timelineOpen}
+            onClose={() => setTimelineOpen(false)}
+          />
+        </Suspense>
+      )}
       <SceneControls />
       <Welcome
         onOpenGalaxy={() => setGalaxyOpen(true)}
@@ -145,7 +162,24 @@ function ViewSurface(): JSX.Element {
   const viewMode = useSolixStore((s) => s.viewMode);
   if (viewMode === 'list') return <ListView />;
   if (viewMode === 'missions') return <MissionView />;
-  return <Scene />;
+  // The 3D galaxy chunk is loaded on demand. Show a quiet loader so
+  // the screen doesn't go blank during the ~hundreds-of-ms first
+  // paint while three.js downloads.
+  return (
+    <Suspense fallback={<SceneLoading />}>
+      <Scene />
+    </Suspense>
+  );
+}
+
+function SceneLoading(): JSX.Element {
+  return (
+    <div className="absolute inset-0 flex items-center justify-center bg-solix-bg z-0">
+      <div className="text-xs text-slate-500 uppercase tracking-widest solix-pulse">
+        loading galaxy…
+      </div>
+    </div>
+  );
 }
 
 function EmptyHint(): JSX.Element | null {

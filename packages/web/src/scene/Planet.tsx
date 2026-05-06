@@ -193,20 +193,34 @@ export function Planet({ session }: PlanetProps): JSX.Element {
   };
 
   const planetSize = 0.55;
+  // Sprint K: each user planet gets a small deterministic axial tilt,
+  // derived from session.id. Visual variety without breaking the
+  // metaphor — we never want two planets to look identical.
+  const axialTiltX = useMemo(() => hashTiltDeg(session.id, 18) * (Math.PI / 180), [session.id]);
+  const axialTiltZ = useMemo(() => hashTiltDeg(session.id + '-z', 12) * (Math.PI / 180), [session.id]);
 
   return (
     <group ref={groupRef}>
-      <mesh ref={planetRef} onClick={onClick} castShadow>
-        <sphereGeometry args={[planetSize, 32, 32]} />
-        <meshStandardMaterial
-          ref={materialRef}
-          color={baseColor}
-          emissive={baseColor}
-          emissiveIntensity={0.1}
-          roughness={0.6}
-          metalness={0.3}
-        />
-      </mesh>
+      <group rotation={[axialTiltX, 0, axialTiltZ]}>
+        <mesh ref={planetRef} onClick={onClick} castShadow>
+          <sphereGeometry args={[planetSize, 32, 32]} />
+          {/*
+            roughness/metalness tuned so the steeper sun-falloff lighting
+            from Sprint K reads as proper day/night on the sphere.
+            emissiveIntensity stays low (0.06) — just enough to keep the
+            night side from going jet black, but not so much that the
+            shape disappears.
+          */}
+          <meshStandardMaterial
+            ref={materialRef}
+            color={baseColor}
+            emissive={baseColor}
+            emissiveIntensity={0.06}
+            roughness={0.78}
+            metalness={0.12}
+          />
+        </mesh>
+      </group>
 
       {/*
         Atmosphere rim — Fresnel glow at the silhouette in the planet's
@@ -305,6 +319,22 @@ export function Planet({ session }: PlanetProps): JSX.Element {
       </Html>
     </group>
   );
+}
+
+/**
+ * Deterministic small tilt in degrees from a string key. Same id always
+ * produces the same tilt so a planet doesn't jump every render. Range
+ * is centered on 0, half on each side, so most planets stay close to
+ * upright with occasional notably-tilted ones.
+ */
+function hashTiltDeg(key: string, range: number): number {
+  let h = 0;
+  for (let i = 0; i < key.length; i++) {
+    h = (h * 31 + key.charCodeAt(i)) | 0;
+  }
+  // Map to [-range/2, +range/2].
+  const t = ((h >>> 0) % 1000) / 1000; // [0, 1)
+  return (t - 0.5) * range;
 }
 
 export function PlanetOrbitRing({

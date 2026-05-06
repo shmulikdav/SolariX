@@ -8,11 +8,18 @@ const SUN_TEXTURE_URL = '/textures/sun.jpg';
 export function Sun(): JSX.Element {
   return (
     <group>
+      {/*
+        Sprint K lighting overhaul: stronger sun, steeper falloff. Inner
+        planets get bright, outer planets fade naturally — ambient is
+        nearly zero now so this is the only real lightsource. decay=2 is
+        physically correct inverse-square.
+      */}
       <pointLight
         position={[0, 0, 0]}
-        intensity={2.4}
-        distance={120}
-        color="#fde68a"
+        intensity={28}
+        distance={140}
+        decay={2}
+        color="#ffd486"
       />
       <Suspense fallback={<SunFallback />}>
         <SunBody />
@@ -62,33 +69,53 @@ function SunFallback(): JSX.Element {
 }
 
 /**
- * Two stacked translucent shells around the sun — the outer one breathes
- * in/out subtly. With bloom on, this reads as a corona.
+ * Three stacked translucent shells around the sun — the inner one
+ * breathes in/out subtly. With bloom + ACES tonemapping on, this
+ * reads as a proper corona with hot edge and faint outer haze.
  */
 function SunHaloes(): JSX.Element {
   const haloRef = useRef<Mesh>(null);
+  const outerRef = useRef<Mesh>(null);
 
   useFrame(() => {
+    const t = performance.now() * 0.001;
     if (haloRef.current) {
-      const t = performance.now() * 0.001;
       const s = 1 + Math.sin(t * 1.3) * 0.04;
       haloRef.current.scale.set(s, s, s);
+    }
+    if (outerRef.current) {
+      // Slower, larger breath on the outer shell — gives the sun the
+      // organic "alive" feel we want without distracting motion.
+      const s = 1 + Math.sin(t * 0.6 + 1) * 0.025;
+      outerRef.current.scale.set(s, s, s);
     }
   });
 
   return (
     <>
+      {/* Hot inner shell — closest to the surface, brightest tone */}
       <mesh ref={haloRef}>
-        <sphereGeometry args={[2.1, 32, 32]} />
+        <sphereGeometry args={[1.95, 32, 32]} />
         <meshBasicMaterial
-          color="#f97316"
+          color="#fff7c2"
           transparent
-          opacity={0.18}
+          opacity={0.32}
           toneMapped={false}
         />
       </mesh>
+      {/* Mid corona */}
       <mesh>
-        <sphereGeometry args={[2.7, 32, 32]} />
+        <sphereGeometry args={[2.4, 32, 32]} />
+        <meshBasicMaterial
+          color="#ffae3c"
+          transparent
+          opacity={0.16}
+          toneMapped={false}
+        />
+      </mesh>
+      {/* Outer haze — large, faint, pulsing slow */}
+      <mesh ref={outerRef}>
+        <sphereGeometry args={[3.3, 32, 32]} />
         <meshBasicMaterial
           color="#f97316"
           transparent

@@ -2,6 +2,7 @@ import { Suspense, useEffect, useRef, type ComponentRef } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, Stars, useTexture } from '@react-three/drei';
 import { EffectComposer, Bloom } from '@react-three/postprocessing';
+import { ACESFilmicToneMapping } from 'three';
 import {
   selectAdvisorPlanets,
   selectPlanets,
@@ -35,6 +36,13 @@ export function Scene(): JSX.Element {
     <Canvas
       shadows={false}
       camera={{ position: [0, 14, 22], fov: 55, near: 0.1, far: 600 }}
+      gl={{
+        // ACES Filmic gives a noticeably more cinematic HDR-flavored
+        // result than the default linear toneMapping — bright bloom
+        // doesn't blow out, and dark sides of planets stay readable.
+        toneMapping: ACESFilmicToneMapping,
+        toneMappingExposure: 0.95,
+      }}
       onPointerMissed={() => {
         selectSession(null);
         selectAdvisor(null);
@@ -42,8 +50,14 @@ export function Scene(): JSX.Element {
       }}
     >
       <color attach="background" args={['#05060c']} />
-      <fog attach="fog" args={['#080a14', 60, 280]} />
-      <ambientLight intensity={0.18} />
+      <fog attach="fog" args={['#080a14', 100, 320]} />
+      {/*
+        Lighting overhaul (Sprint K visual): drop ambient very low so
+        day/night sides actually read on planets, and let a real point
+        light at the sun do the work. Distance falloff keeps outer
+        planets dimmer than inner ones — same as real space.
+      */}
+      <ambientLight intensity={0.06} />
       {/*
         Real Milky Way panorama as a giant inside-out sphere skybox.
         Falls back gracefully (Suspense boundary) to the procedural
@@ -72,10 +86,11 @@ export function Scene(): JSX.Element {
       */}
       <EffectComposer multisampling={4}>
         <Bloom
-          intensity={1.1}
-          luminanceThreshold={0.55}
-          luminanceSmoothing={0.2}
+          intensity={1.5}
+          luminanceThreshold={0.42}
+          luminanceSmoothing={0.25}
           mipmapBlur
+          radius={0.85}
         />
       </EffectComposer>
     </Canvas>
