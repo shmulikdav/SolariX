@@ -1,5 +1,10 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
+
+// Injected at build time by tsup from packages/cli/package.json. The
+// previous hardcoded '1.0.0' literal was a bug — `solix --version`
+// always lied no matter what version you installed.
+declare const __SOLIX_VERSION__: string;
 import {
   disableAdvisorCmd,
   enableAdvisorCmd,
@@ -27,7 +32,7 @@ const program = new Command();
 program
   .name('solix')
   .description('Solix — a solar-system command center for Claude Code agents')
-  .version('1.0.0');
+  .version(__SOLIX_VERSION__);
 
 program
   .command('start', { isDefault: true })

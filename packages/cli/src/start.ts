@@ -6,12 +6,14 @@ export interface StartOptions {
   noOpen?: boolean;
 }
 
+// Standard FIGlet font, S O L I X. The previous banner accidentally
+// drew an "M" as the last letter (SOLIM) — corrected here.
 const BANNER = `
    ____   ___  _     ___ __  __
-  / ___| / _ \\| |   |_ _|  \\/  |
-  \\___ \\| | | | |    | || |\\/| |
-   ___) | |_| | |___ | || |  | |
-  |____/ \\___/|_____|___|_|  |_|
+  / ___| / _ \\| |   |_ _|\\ \\/ /
+  \\___ \\| | | | |    | |  \\  /
+   ___) | |_| | |___ | |  /  \\
+  |____/ \\___/|_____|___|/_/\\_\\
 
   a solar-system command center for Claude Code
 `;

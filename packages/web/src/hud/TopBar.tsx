@@ -37,8 +37,16 @@ export function TopBar({
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-4 z-40">
       <div className="pointer-events-auto flex items-center gap-2 sm:gap-3">
-        <div className="text-xl font-bold tracking-widest text-solix-accent">
-          SOLIX
+        <div className="flex items-baseline gap-1.5">
+          <div className="text-xl font-bold tracking-widest text-solix-accent">
+            SOLIX
+          </div>
+          <span
+            className="text-[10px] font-mono text-slate-500"
+            title={`Solix v${__SOLIX_VERSION__} — built into this UI bundle`}
+          >
+            v{__SOLIX_VERSION__}
+          </span>
         </div>
         <div className="hidden md:block text-xs text-slate-400">
           a solar-system command center

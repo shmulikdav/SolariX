@@ -1,8 +1,21 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+// Read the CLI package's version at build time so the web bundle can
+// display it (lets users see at a glance which version is rendering,
+// vs guessing from `solix --version` + browser cache state).
+const cliPkg = JSON.parse(
+  readFileSync(resolve(__dirname, '../cli/package.json'), 'utf8'),
+) as { version: string };
+const SOLIX_VERSION = cliPkg.version;
 
 export default defineConfig({
+  define: {
+    __SOLIX_VERSION__: JSON.stringify(SOLIX_VERSION),
+  },
   plugins: [
     react(),
     VitePWA({
