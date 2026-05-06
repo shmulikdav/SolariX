@@ -35,6 +35,41 @@ async function probeHealth(port: number): Promise<CheckResult> {
   }
 }
 
+interface WrapperRecord {
+  wrapperId: string;
+  cwd: string;
+}
+
+async function probeWrappers(port: number): Promise<CheckResult> {
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/api/wrappers`, {
+      signal: AbortSignal.timeout(800),
+    });
+    if (!res.ok) {
+      return {
+        ok: true,
+        label: 'Active solix run wrappers',
+        detail: 'server too old to report (pre-1.2.1)',
+      };
+    }
+    const records = (await res.json()) as WrapperRecord[];
+    return {
+      ok: true,
+      label: 'Active solix run wrappers',
+      detail:
+        records.length === 0
+          ? 'none registered'
+          : `${records.length} active`,
+    };
+  } catch {
+    return {
+      ok: true,
+      label: 'Active solix run wrappers',
+      detail: 'unknown — server unreachable',
+    };
+  }
+}
+
 export async function doctor(): Promise<void> {
   const port = Number(process.env.SOLIX_PORT ?? 4242);
   const checks: CheckResult[] = [];
@@ -130,6 +165,7 @@ export async function doctor(): Promise<void> {
   });
 
   checks.push(await probeHealth(port));
+  checks.push(await probeWrappers(port));
 
   console.log('\nSolix Diagnostics\n');
   let allOk = true;

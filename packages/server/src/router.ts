@@ -4,6 +4,7 @@ import type { DB } from './db.js';
 import type { Broadcaster } from './broadcaster.js';
 import { ensureProject } from './state/projects.js';
 import {
+  clearSessionWrapper,
   getSession,
   setSessionContextUsage,
   setSessionMission,
@@ -26,7 +27,11 @@ import {
 } from './state/advisors.js';
 import { buildContextEnvelope } from './state/context.js';
 import { recordAudit } from './state/audit.js';
-import { claimWrapperForCwd, writeToWrapperSocket } from './state/wrappers.js';
+import {
+  bindWrapperToSession,
+  claimWrapperForCwd,
+  writeToWrapperSocket,
+} from './state/wrappers.js';
 import type { Launcher } from './launcher.js';
 import type { TranscriptWatcherManager } from './state/transcript.js';
 
@@ -142,6 +147,10 @@ export class EventRouter {
       worktreePath,
       wrapperSocketPath: wrapper?.socketPath,
     });
+    // Once the session row exists we can record the wrapperId →
+    // sessionId binding. On unregister we use it to clear the
+    // session's wrapper_socket_path.
+    if (wrapper) bindWrapperToSession(wrapper.wrapperId, session.id);
     this.broadcaster.broadcast({ type: 'session_upsert', session });
     // Start tailing the session's transcript so the Chat tab streams in real
     // time. Skipped for moons (subagents) — they share the parent's transcript.
@@ -519,11 +528,17 @@ export class EventRouter {
           },
         });
       } else {
+        // Socket file is gone or unwritable — wrapper exited without
+        // unregistering cleanly (kill -9, crash, etc.). Clear the
+        // stored path so future sends don't keep failing silently,
+        // and tell the user.
+        const cleared = clearSessionWrapper(this.db, sessionId);
+        if (cleared)
+          this.broadcaster.broadcast({ type: 'session_upsert', session: cleared });
         this.broadcaster.broadcast({
           type: 'toast',
           level: 'warn',
-          message:
-            'Wrapper socket unreachable — the `solix run` process may have exited.',
+          message: `Wrapper for ${session.name ?? session.id.slice(0, 8)} exited — chat is now read-only. Restart with \`solix run\`.`,
         });
       }
       return ok;
@@ -538,6 +553,12 @@ export class EventRouter {
    * client connection sees what's already waiting on the server. */
   pendingPermissions(): PendingPermission[] {
     return [...this.permissions.values()];
+  }
+
+  /** Public re-broadcast helper for cases where state mutates outside
+   * the hook flow (e.g. wrapper unregister clearing the socket path). */
+  broadcastSessionUpsert(session: import('@solix/shared').Session): void {
+    this.broadcaster.broadcast({ type: 'session_upsert', session });
   }
 
   broadcastGalaxyImported(manifest: GalaxyManifest): void {

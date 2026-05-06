@@ -23,7 +23,13 @@ import {
   readAdvisorAgentMd,
   setAdvisorEnabled,
 } from './state/advisors.js';
-import { registerWrapper, unregisterWrapper } from './state/wrappers.js';
+import {
+  cleanupOrphanedSockets,
+  listWrappers,
+  registerWrapper,
+  unregisterWrapper,
+} from './state/wrappers.js';
+import { clearSessionWrapper } from './state/sessions.js';
 import { buildContextEnvelope } from './state/context.js';
 import {
   getSkill,
@@ -356,9 +362,17 @@ export function createHttpApp(opts: {
   });
 
   app.post('/api/wrappers/:id/unregister', (c) => {
-    unregisterWrapper(c.req.param('id'));
+    const sessionId = unregisterWrapper(c.req.param('id'));
+    if (sessionId) {
+      const cleared = clearSessionWrapper(opts.db, sessionId);
+      if (cleared) {
+        opts.router.broadcastSessionUpsert(cleared);
+      }
+    }
     return c.json({ ok: true });
   });
+
+  app.get('/api/wrappers', (c) => c.json(listWrappers()));
 
   // Preflight check used by the NewTaskModal to warn before the user
   // clicks Launch. Cached for the process lifetime — installing claude

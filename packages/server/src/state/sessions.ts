@@ -182,6 +182,20 @@ export function setSessionMission(
   return getSession(db, sessionId);
 }
 
+/** Sprint J.1: when a wrapper unregisters (claude exited), clear the
+ * stored socket path so the SidePanel composer reverts to read-only
+ * and `sendPromptToSession` doesn't keep targeting a dead socket. */
+export function clearSessionWrapper(
+  db: DB,
+  sessionId: string,
+): Session | null {
+  const ts = now();
+  db.prepare(
+    `UPDATE sessions SET wrapper_socket_path = NULL, updated_at = ? WHERE id = ?`,
+  ).run(ts, sessionId);
+  return getSession(db, sessionId);
+}
+
 export function setSessionContextUsage(
   db: DB,
   sessionId: string,

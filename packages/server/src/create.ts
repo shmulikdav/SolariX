@@ -8,6 +8,7 @@ import { attachWs } from './ws.js';
 import { seedAdvisors } from './state/advisors.js';
 import { discoverSkills } from './state/skills.js';
 import { TranscriptWatcherManager } from './state/transcript.js';
+import { cleanupOrphanedSockets } from './state/wrappers.js';
 
 export interface SolixServerOptions {
   port?: number;
@@ -29,6 +30,17 @@ export async function createSolixServer(
   const db = getDb();
   seedAdvisors(db);
   discoverSkills(db);
+  // Stale `solix run` wrappers (from a previous server lifetime) leave
+  // their .sock files behind. Clear them up front so the directory
+  // doesn't grow unbounded across restarts. Also null any stored
+  // wrapper_socket_path on sessions — wrappers don't survive a restart.
+  const cleared = cleanupOrphanedSockets();
+  if (cleared > 0) {
+    console.log(`[solix] cleaned up ${cleared} orphaned wrapper socket(s)`);
+  }
+  db.prepare(
+    `UPDATE sessions SET wrapper_socket_path = NULL WHERE wrapper_socket_path IS NOT NULL`,
+  ).run();
   const broadcaster = new Broadcaster();
   const launcher = new Launcher(db, broadcaster);
   const transcripts = new TranscriptWatcherManager(db, broadcaster);

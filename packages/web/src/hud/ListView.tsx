@@ -325,6 +325,14 @@ export function ListView(): JSX.Element {
                                 advisor
                               </span>
                             )}
+                            {row.session.wrapperSocketPath && (
+                              <span
+                                className="text-[9px] uppercase tracking-wide text-solix-accent"
+                                title="Wrapped by `solix run` — UI composer is enabled"
+                              >
+                                wrapped
+                              </span>
+                            )}
                             {row.session.worktreePath && (
                               <span
                                 className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-solix-accent/40 text-solix-accent"

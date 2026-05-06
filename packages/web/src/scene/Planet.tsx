@@ -278,6 +278,14 @@ export function Planet({ session }: PlanetProps): JSX.Element {
             title={GLOSSARY[session.status] ?? undefined}
           >
             {String(session.model)} · {statusLabel(session.status)}
+            {session.wrapperSocketPath && (
+              <span
+                className="ml-1.5 text-[9px] uppercase tracking-wide text-solix-accent"
+                title="Wrapped by `solix run` — UI prompts route to this terminal"
+              >
+                · wrapped
+              </span>
+            )}
           </div>
           <div
             className="opacity-70"
