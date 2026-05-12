@@ -325,6 +325,14 @@ export function ListView(): JSX.Element {
                                 advisor
                               </span>
                             )}
+                            {row.session.origin === 'agentview' && (
+                              <span
+                                className="text-[9px] uppercase tracking-wide text-cyan-300"
+                                title="Background session managed by Anthropic's Agent View"
+                              >
+                                agent
+                              </span>
+                            )}
                             {row.session.wrapperSocketPath && (
                               <span
                                 className="text-[9px] uppercase tracking-wide text-solix-accent"
@@ -361,8 +369,19 @@ export function ListView(): JSX.Element {
                             reasons={row.healthReasons}
                           />
                         </td>
-                        <td className="px-3 py-2 text-xs text-slate-300 truncate max-w-xs">
-                          {row.mission ? (
+                        <td
+                          className="px-3 py-2 text-xs text-slate-300 truncate max-w-xs"
+                          title={
+                            row.session.agentViewSummary ??
+                            row.mission?.shortName ??
+                            undefined
+                          }
+                        >
+                          {row.session.agentViewSummary ? (
+                            <span className="text-slate-100 italic">
+                              {row.session.agentViewSummary}
+                            </span>
+                          ) : row.mission ? (
                             <>
                               <span className="text-slate-100">
                                 {row.mission.shortName}
