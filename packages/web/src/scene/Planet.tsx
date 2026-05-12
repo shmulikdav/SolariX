@@ -292,6 +292,14 @@ export function Planet({ session }: PlanetProps): JSX.Element {
             title={GLOSSARY[session.status] ?? undefined}
           >
             {String(session.model)} · {statusLabel(session.status)}
+            {session.origin === 'agentview' && (
+              <span
+                className="ml-1.5 text-[9px] uppercase tracking-wide text-cyan-300"
+                title="Background session managed by Anthropic's Agent View"
+              >
+                · agent
+              </span>
+            )}
             {session.wrapperSocketPath && (
               <span
                 className="ml-1.5 text-[9px] uppercase tracking-wide text-solix-accent"
@@ -301,6 +309,11 @@ export function Planet({ session }: PlanetProps): JSX.Element {
               </span>
             )}
           </div>
+          {session.agentViewSummary && (
+            <div className="opacity-80 italic text-[10px] max-w-[200px] truncate" title={session.agentViewSummary}>
+              {session.agentViewSummary}
+            </div>
+          )}
           <div
             className="opacity-70"
             title={

@@ -77,7 +77,11 @@ export function SidePanel(): JSX.Element | null {
             title={GLOSSARY[session.status] ?? undefined}
           >
             {String(session.model)} · {statusLabel(session.status)}
-            {session.origin === 'external' ? ' · external' : ' · internal'}
+            {session.origin === 'external'
+              ? ' · external'
+              : session.origin === 'agentview'
+                ? ' · agent view'
+                : ' · internal'}
             {isWrapped && (
               <span
                 className="ml-1.5 px-1.5 py-0.5 rounded text-[9px] uppercase tracking-wide border border-solix-accent/50 text-solix-accent"
@@ -86,7 +90,54 @@ export function SidePanel(): JSX.Element | null {
                 wrapped
               </span>
             )}
+            {session.agentViewId && (
+              <span
+                className="ml-1.5 font-mono text-[9px] text-cyan-300/80"
+                title={`Agent View id: ${session.agentViewId}`}
+              >
+                {session.agentViewId.slice(0, 8)}
+              </span>
+            )}
           </div>
+          {session.prUrl && (
+            <a
+              href={session.prUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-1 inline-flex items-center gap-1.5 text-[11px] text-slate-300 hover:text-white border border-solix-border rounded px-2 py-0.5"
+              title={`Open ${session.prUrl}`}
+            >
+              <span>PR</span>
+              <span className="text-slate-500 truncate max-w-[200px]">
+                {session.prUrl.replace(/^https?:\/\//, '')}
+              </span>
+              {session.prCheckStatus && (
+                <span
+                  className={
+                    session.prCheckStatus === 'success'
+                      ? 'text-solix-ok'
+                      : session.prCheckStatus === 'failure'
+                        ? 'text-solix-danger'
+                        : 'text-amber-300'
+                  }
+                >
+                  {session.prCheckStatus === 'success'
+                    ? '✓'
+                    : session.prCheckStatus === 'failure'
+                      ? '✗'
+                      : '⏳'}
+                </span>
+              )}
+            </a>
+          )}
+          {session.agentViewSummary && (
+            <div
+              className="mt-1 text-[11px] text-slate-400 italic line-clamp-2"
+              title={session.agentViewSummary}
+            >
+              {session.agentViewSummary}
+            </div>
+          )}
         </div>
         <button
           onClick={() => selectSession(null)}
