@@ -10,7 +10,13 @@ export type SessionStatus =
 
 export type Model = 'opus' | 'sonnet' | 'haiku' | 'default' | string;
 
-export type SessionOrigin = 'external' | 'internal';
+/** How a session was started.
+ *  - external: user ran `claude` themselves; we observe via hooks
+ *  - internal: Solix's launcher spawned `claude --print` directly
+ *  - agentview: dispatched via Anthropic's Agent View daemon (Sprint L);
+ *    Solix observes via the on-disk roster + state.json files
+ */
+export type SessionOrigin = 'external' | 'internal' | 'agentview';
 
 export type SessionKind = 'user' | 'advisor';
 
@@ -40,6 +46,19 @@ export interface Session {
    * the wrapper's Unix-socket path is stored here. The SidePanel chat
    * composer becomes write-enabled for sessions where this is set. */
   wrapperSocketPath?: string;
+  /** Agent View bridge (Sprint L). When this session is a background
+   * session managed by Anthropic's `claude agents` supervisor daemon,
+   * its short id (e.g. "7c5dcf5d") goes here. */
+  agentViewId?: string;
+  /** Auto-generated one-line summary from Agent View's Haiku-class
+   * model (refreshes ~every 15s while working). Surfaces in the
+   * Mission column / Planet hover label when present. */
+  agentViewSummary?: string;
+  /** PR URL if the Agent View session opened a pull request. */
+  prUrl?: string;
+  /** CI status of the PR. Lets the SidePanel render ✓ / ✗ / ⏳ next
+   * to the PR chip without re-querying GitHub. */
+  prCheckStatus?: 'pending' | 'success' | 'failure' | 'neutral';
 }
 
 export type MissionStatus = 'active' | 'completed' | 'failed' | 'cancelled';

@@ -168,6 +168,11 @@ export function getDb(): DB {
   ensureColumn(db, 'sessions', 'advisor_role', 'advisor_role TEXT');
   ensureColumn(db, 'sessions', 'worktree_path', 'worktree_path TEXT');
   ensureColumn(db, 'sessions', 'wrapper_socket_path', 'wrapper_socket_path TEXT');
+  // Sprint L — Agent View bridge.
+  ensureColumn(db, 'sessions', 'agent_view_id', 'agent_view_id TEXT');
+  ensureColumn(db, 'sessions', 'agent_view_summary', 'agent_view_summary TEXT');
+  ensureColumn(db, 'sessions', 'pr_url', 'pr_url TEXT');
+  ensureColumn(db, 'sessions', 'pr_check_status', 'pr_check_status TEXT');
   ensureColumn(db, 'advisors', 'texture_pack', 'texture_pack TEXT');
   ensureColumn(db, 'missions', 'error_summary', 'error_summary TEXT');
   _db = db;

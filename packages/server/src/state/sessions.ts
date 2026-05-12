@@ -24,6 +24,10 @@ interface SessionRow {
   advisor_role: string | null;
   worktree_path: string | null;
   wrapper_socket_path: string | null;
+  agent_view_id: string | null;
+  agent_view_summary: string | null;
+  pr_url: string | null;
+  pr_check_status: string | null;
   current_mission_id: string | null;
   last_completed_mission_id: string | null;
   created_at: number;
@@ -52,6 +56,16 @@ function rowToSession(row: SessionRow): Session {
     name: row.name ?? undefined,
     worktreePath: row.worktree_path ?? undefined,
     wrapperSocketPath: row.wrapper_socket_path ?? undefined,
+    agentViewId: row.agent_view_id ?? undefined,
+    agentViewSummary: row.agent_view_summary ?? undefined,
+    prUrl: row.pr_url ?? undefined,
+    prCheckStatus:
+      (row.pr_check_status as
+        | 'pending'
+        | 'success'
+        | 'failure'
+        | 'neutral'
+        | null) ?? undefined,
   };
 }
 
@@ -79,6 +93,10 @@ export interface CreateSessionInput {
   advisorRole?: string;
   worktreePath?: string;
   wrapperSocketPath?: string;
+  agentViewId?: string;
+  agentViewSummary?: string;
+  prUrl?: string;
+  prCheckStatus?: 'pending' | 'success' | 'failure' | 'neutral';
 }
 
 export function upsertSession(db: DB, input: CreateSessionInput): Session {
@@ -111,9 +129,11 @@ export function upsertSession(db: DB, input: CreateSessionInput): Session {
     `INSERT INTO sessions (
        id, pid, project_id, parent_session_id, origin, model, status,
        context_usage_pct, orbit_slot, cwd, name, kind, advisor_role,
-       worktree_path, wrapper_socket_path, created_at, updated_at
+       worktree_path, wrapper_socket_path,
+       agent_view_id, agent_view_summary, pr_url, pr_check_status,
+       created_at, updated_at
      )
-     VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, NULL, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     input.id,
     input.pid,
@@ -128,6 +148,10 @@ export function upsertSession(db: DB, input: CreateSessionInput): Session {
     input.advisorRole ?? null,
     input.worktreePath ?? null,
     input.wrapperSocketPath ?? null,
+    input.agentViewId ?? null,
+    input.agentViewSummary ?? null,
+    input.prUrl ?? null,
+    input.prCheckStatus ?? null,
     ts,
     ts,
   );
@@ -149,7 +173,53 @@ export function upsertSession(db: DB, input: CreateSessionInput): Session {
     orbitSlot,
     worktreePath: input.worktreePath,
     wrapperSocketPath: input.wrapperSocketPath,
+    agentViewId: input.agentViewId,
+    agentViewSummary: input.agentViewSummary,
+    prUrl: input.prUrl,
+    prCheckStatus: input.prCheckStatus,
   };
+}
+
+/**
+ * Sprint L: lightweight setter for Agent View bridge updates. The
+ * Agent View watcher polls roster + state.json; when state changes
+ * (status, summary, PR fields), it calls this rather than going
+ * through upsertSession (which expects a full session record).
+ */
+export function setAgentViewFields(
+  db: DB,
+  sessionId: string,
+  fields: {
+    status?: SessionStatus;
+    agentViewSummary?: string | null;
+    prUrl?: string | null;
+    prCheckStatus?: 'pending' | 'success' | 'failure' | 'neutral' | null;
+  },
+): Session | null {
+  const ts = now();
+  const updates: string[] = ['updated_at = ?'];
+  const values: unknown[] = [ts];
+  if (fields.status !== undefined) {
+    updates.push('status = ?');
+    values.push(fields.status);
+  }
+  if (fields.agentViewSummary !== undefined) {
+    updates.push('agent_view_summary = ?');
+    values.push(fields.agentViewSummary);
+  }
+  if (fields.prUrl !== undefined) {
+    updates.push('pr_url = ?');
+    values.push(fields.prUrl);
+  }
+  if (fields.prCheckStatus !== undefined) {
+    updates.push('pr_check_status = ?');
+    values.push(fields.prCheckStatus);
+  }
+  values.push(sessionId);
+  db.prepare(
+    `UPDATE sessions SET ${updates.join(', ')} WHERE id = ?`,
+  ).run(...values);
+  return getSession(db, sessionId);
 }
 
 export function setSessionStatus(

@@ -63,6 +63,13 @@ export type ClientMessage =
        * `worktreeBaseRef` (defaults to HEAD). */
       worktreeBranch?: string;
       worktreeBaseRef?: string;
+      /** Sprint L: when true, dispatch via Anthropic's Agent View
+       * (`claude --bg`) so the session becomes a background session
+       * managed by the supervisor daemon. Solix's bridge mirrors it
+       * back automatically. Requires Claude Code v2.1.139+. */
+      useAgentView?: boolean;
+      /** Optional subagent name to dispatch (`@code-reviewer ...`). */
+      agentName?: string;
     }
   | { type: 'terminate_session'; sessionId: string }
   | { type: 'invoke_advisor'; advisorId: string; targetSessionId?: string; prompt?: string }
