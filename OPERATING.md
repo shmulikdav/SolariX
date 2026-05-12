@@ -343,6 +343,44 @@ Common causes (paired with the troubleshooting table in `CLI.md`):
 
 ---
 
+### 12.4. "I want my Solix planets to mirror `claude agents`"
+
+Claude Code 2.1.139+ ships **Agent View** — a TUI for managing
+background sessions, accessed with `claude agents`. Solix
+automatically mirrors every Agent View session as a planet, no
+configuration required.
+
+```sh
+# In one terminal
+solix start
+
+# In any other terminal
+claude agents
+# Dispatch a session — type a prompt and Enter.
+# Within ~1 second, a planet for that session appears in Solix.
+```
+
+Conversely, when you launch a task from Solix's `+ Task` modal,
+Solix dispatches it via `claude --bg` so it shows up in both Solix
+and `claude agents`. Toggle this in the modal: the
+`agent view: on/off` link under the version line. When off, Solix
+falls back to the older `claude --print` path.
+
+Each Agent View session in Solix gets:
+
+- A small cyan `agent` chip in the List view and on the planet's
+  hover label
+- The Haiku-generated one-line summary Anthropic produces (refreshes
+  ~every 15 s while working) — replaces the mission shortName in
+  the Mission column
+- A PR chip in the SidePanel header with CI status (✓/✗/⏳) when the
+  session opens a pull request
+
+Verify your local install supports Agent View with `solix doctor` —
+look for the "Agent View available" check.
+
+---
+
 ### 12.5. "I want to type prompts in the UI for sessions I started in my terminal"
 
 By default Solix can only **read** what an externally-launched

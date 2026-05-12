@@ -126,6 +126,13 @@ left off.
 `start` is the **default** sub-command — running plain `solix` is
 equivalent.
 
+**Agent View bridge (v1.5.0+)**: if Claude Code 2.1.139+ is on PATH,
+`solix start` automatically watches `~/.claude/daemon/roster.json`
+and `~/.claude/jobs/<id>/state.json`. Any background session
+managed by `claude agents` shows up as a planet in Solix
+automatically; sessions you launch from Solix's `+ Task` (with the
+"agent view" toggle on) round-trip the other way. No config needed.
+
 ---
 
 ## 3. Seeding the demo
