@@ -200,7 +200,12 @@ interface SolixState {
     cwd: string,
     model: string,
     initialPrompt?: string,
-    opts?: { worktreeBranch?: string; worktreeBaseRef?: string },
+    opts?: {
+      worktreeBranch?: string;
+      worktreeBaseRef?: string;
+      useAgentView?: boolean;
+      agentName?: string;
+    },
   ) => void;
   selectedSessionIds: Set<string>;
   toggleSessionSelection: (id: string) => void;
@@ -527,6 +532,8 @@ export const useSolixStore = create<SolixState>((set, get) => ({
       initialPrompt,
       worktreeBranch: opts?.worktreeBranch,
       worktreeBaseRef: opts?.worktreeBaseRef,
+      useAgentView: opts?.useAgentView,
+      agentName: opts?.agentName,
     });
   },
 

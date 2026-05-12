@@ -33,8 +33,15 @@ export function NewTaskModal({
   const [worktreeBranch, setWorktreeBranch] = useState('');
   const [worktreeBaseRef, setWorktreeBaseRef] = useState('');
   const [preflight, setPreflight] = useState<
-    { claudeAvailable: boolean; version?: string } | null
+    {
+      claudeAvailable: boolean;
+      version?: string;
+      agentViewAvailable: boolean;
+    } | null
   >(null);
+  // When Agent View is available locally we default to dispatching
+  // through it — the new session shows up in `claude agents` too.
+  const [useAgentView, setUseAgentView] = useState(true);
 
   // Check whether `claude` is on the server's PATH so we can warn before
   // the user fills out the form. Cached server-side; safe to refetch.
@@ -78,11 +85,17 @@ export function NewTaskModal({
     const finalModel =
       advisor && model === 'default' ? advisor.defaultModel : model;
     const trimmedBranch = worktreeBranch.trim();
+    const dispatchViaAgentView =
+      useAgentView && preflight?.agentViewAvailable === true;
     launchTask(trimmedCwd, finalModel, finalPrompt, {
-      worktreeBranch: trimmedBranch || undefined,
-      worktreeBaseRef: trimmedBranch
-        ? worktreeBaseRef.trim() || undefined
-        : undefined,
+      worktreeBranch: dispatchViaAgentView ? undefined : trimmedBranch || undefined,
+      worktreeBaseRef: dispatchViaAgentView
+        ? undefined
+        : trimmedBranch
+          ? worktreeBaseRef.trim() || undefined
+          : undefined,
+      useAgentView: dispatchViaAgentView,
+      agentName: advisor?.codename.toLowerCase(),
     });
     setPrompt('');
     setAdvisorId(null);
@@ -103,8 +116,21 @@ export function NewTaskModal({
               Launch a Claude Code session
             </div>
             <div className="text-xs text-slate-400 mt-1">
-              Solix will spawn <code>claude --print</code> in this folder. A
-              new planet appears the moment it starts.
+              {preflight?.agentViewAvailable && useAgentView ? (
+                <>
+                  Dispatches via{' '}
+                  <code className="bg-black/40 px-1 rounded">claude --bg</code>{' '}
+                  — the session shows up in both Solix and{' '}
+                  <code className="bg-black/40 px-1 rounded">claude agents</code>.
+                </>
+              ) : (
+                <>
+                  Solix will spawn <code className="bg-black/40 px-1 rounded">
+                    claude --print
+                  </code>{' '}
+                  in this folder. A new planet appears the moment it starts.
+                </>
+              )}
             </div>
             {preflight && !preflight.claudeAvailable && (
               <div className="mt-2 text-[11px] text-solix-danger border border-solix-danger/40 bg-solix-danger/10 rounded px-2 py-1">
@@ -116,6 +142,23 @@ export function NewTaskModal({
             {preflight?.claudeAvailable && preflight.version && (
               <div className="mt-1 text-[10px] text-slate-500 font-mono">
                 claude detected · {preflight.version}
+                {preflight.agentViewAvailable && (
+                  <>
+                    {' '}
+                    ·{' '}
+                    <button
+                      onClick={() => setUseAgentView((v) => !v)}
+                      className={`underline decoration-dotted ${
+                        useAgentView
+                          ? 'text-solix-accent'
+                          : 'text-slate-500 hover:text-slate-300'
+                      }`}
+                      title="Toggle dispatch through Anthropic's Agent View"
+                    >
+                      {useAgentView ? 'agent view: on' : 'agent view: off'}
+                    </button>
+                  </>
+                )}
               </div>
             )}
           </div>
