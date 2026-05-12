@@ -2,6 +2,26 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+
+/**
+ * Agent View shipped in Claude Code v2.1.139. Parse the version string
+ * (e.g. "2.1.139" or "2.1.139 (Claude Code)") and compare numerically.
+ * Returns false if the version can't be parsed.
+ */
+function isAgentViewVersion(version: string | undefined): boolean {
+  if (!version) return false;
+  const match = version.match(/(\d+)\.(\d+)\.(\d+)/);
+  if (!match) return false;
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  const patch = Number(match[3]);
+  // Agent View shipped in Claude Code 2.1.139.
+  if (major > 2) return true;
+  if (major < 2) return false;
+  if (minor > 1) return true;
+  if (minor < 1) return false;
+  return patch >= 139;
+}
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { HookEvent } from '@solix/shared';
@@ -341,7 +361,7 @@ export function createHttpApp(opts: {
 
   app.get('/api/galaxy/imports', (c) => c.json(listImportHistory(opts.db)));
 
-  // ──── solix run wrappers (Sprint J) ────────────────────────────────
+  // ──── solix run wrappers (Sprint J) ────────────────────────
   // Wrappers POST here when they spawn a wrapped claude session. The
   // SessionStart hook later claims the registration by cwd to mark
   // the session as bidirectional in the SidePanel composer.
@@ -377,8 +397,11 @@ export function createHttpApp(opts: {
   // Preflight check used by the NewTaskModal to warn before the user
   // clicks Launch. Cached for the process lifetime — installing claude
   // requires a server restart anyway.
-  let preflightCache: { claudeAvailable: boolean; version?: string } | null =
-    null;
+  let preflightCache: {
+    claudeAvailable: boolean;
+    version?: string;
+    agentViewAvailable: boolean;
+  } | null = null;
   app.get('/api/system/preflight', (c) => {
     if (preflightCache) return c.json(preflightCache);
     try {
@@ -387,15 +410,17 @@ export function createHttpApp(opts: {
         encoding: 'utf8',
       });
       if (res.status === 0) {
+        const version = (res.stdout ?? '').trim() || undefined;
         preflightCache = {
           claudeAvailable: true,
-          version: (res.stdout ?? '').trim() || undefined,
+          version,
+          agentViewAvailable: isAgentViewVersion(version),
         };
       } else {
-        preflightCache = { claudeAvailable: false };
+        preflightCache = { claudeAvailable: false, agentViewAvailable: false };
       }
     } catch {
-      preflightCache = { claudeAvailable: false };
+      preflightCache = { claudeAvailable: false, agentViewAvailable: false };
     }
     return c.json(preflightCache);
   });

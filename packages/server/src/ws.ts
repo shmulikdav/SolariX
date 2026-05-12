@@ -106,6 +106,8 @@ function handleClientMessage(
         initialPrompt: msg.initialPrompt,
         worktreeBranch: msg.worktreeBranch,
         worktreeBaseRef: msg.worktreeBaseRef,
+        useAgentView: msg.useAgentView,
+        agentName: msg.agentName,
       });
       break;
     case 'invoke_advisor':

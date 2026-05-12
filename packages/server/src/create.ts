@@ -9,6 +9,7 @@ import { seedAdvisors } from './state/advisors.js';
 import { discoverSkills } from './state/skills.js';
 import { TranscriptWatcherManager } from './state/transcript.js';
 import { cleanupOrphanedSockets } from './state/wrappers.js';
+import { startAgentViewBridge } from './state/agentview.js';
 
 export interface SolixServerOptions {
   port?: number;
@@ -59,11 +60,18 @@ export async function createSolixServer(
     broadcaster,
   });
 
+  // Sprint L: bridge to Anthropic's Agent View. Reads ~/.claude/daemon
+  // + ~/.claude/jobs to mirror background sessions managed by the
+  // claude-agents supervisor into Solix. No-op if Agent View isn't
+  // installed locally.
+  const stopAgentViewBridge = startAgentViewBridge({ db, broadcaster });
+
   return {
     port,
     hostname,
     close: () =>
       new Promise<void>((resolve) => {
+        stopAgentViewBridge();
         transcripts.shutdownAll();
         launcher.shutdownAll();
         server.close(() => resolve());

@@ -70,6 +70,53 @@ async function probeWrappers(port: number): Promise<CheckResult> {
   }
 }
 
+interface PreflightResponse {
+  claudeAvailable: boolean;
+  version?: string;
+  agentViewAvailable?: boolean;
+}
+
+async function probeAgentView(port: number): Promise<CheckResult> {
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/api/system/preflight`, {
+      signal: AbortSignal.timeout(1500),
+    });
+    if (!res.ok) {
+      return {
+        ok: true,
+        label: 'Agent View available',
+        detail: 'server too old to report',
+      };
+    }
+    const data = (await res.json()) as PreflightResponse;
+    if (!data.claudeAvailable) {
+      return {
+        ok: false,
+        label: 'Agent View available',
+        detail: 'claude not on PATH',
+      };
+    }
+    if (data.agentViewAvailable) {
+      return {
+        ok: true,
+        label: 'Agent View available',
+        detail: `yes (${data.version ?? 'unknown version'})`,
+      };
+    }
+    return {
+      ok: true,
+      label: 'Agent View available',
+      detail: `no — need Claude Code 2.1.139+ (have ${data.version ?? '?'})`,
+    };
+  } catch {
+    return {
+      ok: true,
+      label: 'Agent View available',
+      detail: 'unknown — server unreachable',
+    };
+  }
+}
+
 export async function doctor(): Promise<void> {
   const port = Number(process.env.SOLIX_PORT ?? 4242);
   const checks: CheckResult[] = [];
@@ -166,6 +213,7 @@ export async function doctor(): Promise<void> {
 
   checks.push(await probeHealth(port));
   checks.push(await probeWrappers(port));
+  checks.push(await probeAgentView(port));
 
   console.log('\nSolix Diagnostics\n');
   let allOk = true;
