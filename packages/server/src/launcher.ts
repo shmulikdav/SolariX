@@ -276,8 +276,25 @@ export class Launcher {
     initialPrompt: string;
     worktreeBranch?: string;
     worktreeBaseRef?: string;
+    /** Sprint L: when true (and Agent View is available locally),
+     * dispatch via `claude --bg` so the resulting background session
+     * shows up in both Solix and `claude agents`. Solix's Agent View
+     * watcher picks it up from ~/.claude/jobs within ~1 second. */
+    useAgentView?: boolean;
+    /** Optional subagent name from the Agent View mention syntax
+     * (`@code-reviewer fix typos` → agentName: 'code-reviewer'). */
+    agentName?: string;
   }): { ok: boolean; sessionId?: string } {
     if (!opts.initialPrompt.trim()) return { ok: false };
+
+    if (opts.useAgentView) {
+      return this.dispatchAgentView({
+        cwd: opts.cwd,
+        model: opts.model,
+        initialPrompt: opts.initialPrompt,
+        agentName: opts.agentName,
+      });
+    }
 
     let spawnCwd = opts.cwd;
     let worktreePath: string | undefined;
@@ -336,6 +353,75 @@ export class Launcher {
       isFollowUp: false,
       worktreePath,
     });
+  }
+
+  /**
+   * Sprint L: dispatch via Anthropic's Agent View daemon. Runs
+   * `claude --bg "<prompt>"` so the session is hosted by the
+   * supervisor and picked up by Solix's filesystem watcher within ~1s.
+   * Returns the short id parsed from claude's output line:
+   *   backgrounded · 7c5dcf5d
+   */
+  private dispatchAgentView(opts: {
+    cwd: string;
+    model?: Model;
+    initialPrompt: string;
+    agentName?: string;
+  }): { ok: boolean; sessionId?: string } {
+    if (FAKE_CLAUDE) {
+      this.broadcaster.broadcast({
+        type: 'toast',
+        level: 'info',
+        message: '(SOLIX_FAKE_CLAUDE=1) Agent View dispatch skipped',
+      });
+      return { ok: true };
+    }
+    if (!existsSync(opts.cwd)) {
+      this.broadcaster.broadcast({
+        type: 'toast',
+        level: 'error',
+        message: `Agent View dispatch failed: cwd does not exist (${opts.cwd})`,
+      });
+      return { ok: false };
+    }
+    const args: string[] = [];
+    if (opts.agentName) args.push('--agent', opts.agentName);
+    if (opts.model) args.push('--model', String(opts.model));
+    args.push('--bg', opts.initialPrompt);
+
+    let child: ChildProcess;
+    try {
+      child = spawn('claude', args, {
+        cwd: opts.cwd,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        detached: false,
+      });
+    } catch (err) {
+      this.broadcaster.broadcast({
+        type: 'toast',
+        level: 'error',
+        message: `claude --bg spawn failed: ${(err as Error).message}`,
+      });
+      return { ok: false };
+    }
+
+    let stdout = '';
+    child.stdout?.setEncoding('utf8').on('data', (c: string) => (stdout += c));
+    child.on('exit', () => {
+      // Parse "backgrounded · <id>" out of the output. The watcher
+      // will pick up the new ~/.claude/jobs/<id>/state.json within
+      // ~50ms, so we don't need to upsert anything manually here.
+      const match = stdout.match(/backgrounded[^a-z0-9]+([a-f0-9]{6,16})/i);
+      const shortId = match?.[1];
+      this.broadcaster.broadcast({
+        type: 'toast',
+        level: 'info',
+        message: shortId
+          ? `Dispatched to Agent View · ${shortId}`
+          : 'Dispatched to Agent View',
+      });
+    });
+    return { ok: true };
   }
 
   sendPromptToInternal(sessionId: string, text: string): boolean {

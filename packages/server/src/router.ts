@@ -485,6 +485,8 @@ export class EventRouter {
     initialPrompt?: string;
     worktreeBranch?: string;
     worktreeBaseRef?: string;
+    useAgentView?: boolean;
+    agentName?: string;
   }): { ok: boolean; sessionId?: string } {
     if (!this.launcher) return { ok: false };
     if (!opts.initialPrompt?.trim()) {
@@ -501,6 +503,8 @@ export class EventRouter {
       initialPrompt: opts.initialPrompt,
       worktreeBranch: opts.worktreeBranch,
       worktreeBaseRef: opts.worktreeBaseRef,
+      useAgentView: opts.useAgentView,
+      agentName: opts.agentName,
     });
   }
 
