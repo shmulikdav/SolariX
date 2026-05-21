@@ -20,6 +20,7 @@ interface MissionRow {
   tool_call_count: number;
   files_touched_json: string;
   error_summary: string | null;
+  goal_id: string | null;
 }
 
 function rowToMission(row: MissionRow): Mission {
@@ -48,6 +49,7 @@ function rowToMission(row: MissionRow): Mission {
     },
     filesTouched,
     errorSummary: row.error_summary ?? undefined,
+    goalId: row.goal_id ?? undefined,
   };
 }
 
@@ -82,14 +84,15 @@ export function startMission(
   db: DB,
   sessionId: string,
   prompt: string,
+  goalId?: string,
 ): Mission {
   const id = nanoid();
   const ts = now();
   const shortName = shortNameFromPrompt(prompt);
   db.prepare(
-    `INSERT INTO missions (id, session_id, prompt, short_name, status, started_at, files_touched_json)
-     VALUES (?, ?, ?, ?, 'active', ?, '[]')`,
-  ).run(id, sessionId, prompt, shortName, ts);
+    `INSERT INTO missions (id, session_id, prompt, short_name, status, started_at, files_touched_json, goal_id)
+     VALUES (?, ?, ?, ?, 'active', ?, '[]', ?)`,
+  ).run(id, sessionId, prompt, shortName, ts, goalId ?? null);
 
   return {
     id,
@@ -100,7 +103,21 @@ export function startMission(
     status: 'active',
     metrics: { subagentCount: 0, toolCallCount: 0 },
     filesTouched: [],
+    goalId,
   };
+}
+
+/** Sprint M — roll a message's token count into the mission's total.
+ * Populates the previously-unused missions.total_tokens column. */
+export function addMissionTokens(
+  db: DB,
+  missionId: string,
+  tokens: number,
+): void {
+  if (tokens <= 0) return;
+  db.prepare(
+    `UPDATE missions SET total_tokens = COALESCE(total_tokens, 0) + ? WHERE id = ?`,
+  ).run(Math.round(tokens), missionId);
 }
 
 export function completeMission(

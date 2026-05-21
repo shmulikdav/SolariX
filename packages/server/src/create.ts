@@ -10,6 +10,8 @@ import { discoverSkills } from './state/skills.js';
 import { TranscriptWatcherManager } from './state/transcript.js';
 import { cleanupOrphanedSockets } from './state/wrappers.js';
 import { startAgentViewBridge } from './state/agentview.js';
+import { listDueSchedules, markScheduleRun } from './state/schedules.js';
+import { now } from './util.js';
 
 export interface SolixServerOptions {
   port?: number;
@@ -66,11 +68,36 @@ export async function createSolixServer(
   // installed locally.
   const stopAgentViewBridge = startAgentViewBridge({ db, broadcaster });
 
+  // Sprint M — heartbeat scheduler. Every ~30s, fire any enabled schedule
+  // whose next_run_at has passed by launching it through the normal internal
+  // launch path, then advance its next_run_at.
+  const scheduleTimer = setInterval(() => {
+    try {
+      const due = listDueSchedules(db, now());
+      for (const s of due) {
+        if (!s.cwd) continue;
+        launcher.launch({ cwd: s.cwd, initialPrompt: s.prompt });
+        const updated = markScheduleRun(db, s.id);
+        if (updated) {
+          broadcaster.broadcast({ type: 'schedule_upsert', schedule: updated });
+          broadcaster.broadcast({
+            type: 'toast',
+            level: 'info',
+            message: `Heartbeat fired: ${s.name ?? s.prompt.slice(0, 32)}`,
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('[scheduler] tick failed:', (err as Error).message);
+    }
+  }, 30_000);
+
   return {
     port,
     hostname,
     close: () =>
       new Promise<void>((resolve) => {
+        clearInterval(scheduleTimer);
         stopAgentViewBridge();
         transcripts.shutdownAll();
         launcher.shutdownAll();

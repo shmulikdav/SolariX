@@ -50,6 +50,13 @@ import {
   unregisterWrapper,
 } from './state/wrappers.js';
 import { clearSessionWrapper } from './state/sessions.js';
+import {
+  createSchedule,
+  deleteSchedule,
+  listSchedules,
+  setScheduleEnabled,
+} from './state/schedules.js';
+import { createGoal, deleteGoal, listGoals } from './state/goals.js';
 import { buildContextEnvelope } from './state/context.js';
 import {
   getSkill,
@@ -394,6 +401,70 @@ export function createHttpApp(opts: {
 
   app.get('/api/wrappers', (c) => c.json(listWrappers()));
 
+  // ──── Sprint M: heartbeats (scheduled tasks) ────────────────────
+  app.get('/api/schedules', (c) => c.json(listSchedules(opts.db)));
+
+  app.post('/api/schedules', async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      cwd?: string;
+      prompt?: string;
+      cadence?: string;
+      name?: string;
+    };
+    if (!body.cwd || !body.prompt || !body.cadence) {
+      return c.json({ error: 'cwd, prompt, cadence required' }, 400);
+    }
+    const schedule = createSchedule(opts.db, {
+      cwd: body.cwd,
+      prompt: body.prompt,
+      cadence: body.cadence,
+      name: body.name,
+    });
+    opts.router.broadcastScheduleUpsert(schedule);
+    return c.json(schedule);
+  });
+
+  app.post('/api/schedules/:id/toggle', async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as { enabled?: boolean };
+    const s = setScheduleEnabled(opts.db, c.req.param('id'), Boolean(body.enabled));
+    if (!s) return c.json({ error: 'not found' }, 404);
+    opts.router.broadcastScheduleUpsert(s);
+    return c.json(s);
+  });
+
+  app.delete('/api/schedules/:id', (c) => {
+    const id = c.req.param('id');
+    const ok = deleteSchedule(opts.db, id);
+    if (ok) opts.router.broadcastScheduleRemove(id);
+    return c.json({ ok });
+  });
+
+  // ──── Sprint M: goals (constellations) ──────────────────────
+  app.get('/api/goals', (c) => c.json(listGoals(opts.db)));
+
+  app.post('/api/goals', async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      name?: string;
+      description?: string;
+      color?: string;
+    };
+    if (!body.name) return c.json({ error: 'name required' }, 400);
+    const goal = createGoal(opts.db, {
+      name: body.name,
+      description: body.description,
+      color: body.color,
+    });
+    opts.router.broadcastGoalUpsert(goal);
+    return c.json(goal);
+  });
+
+  app.delete('/api/goals/:id', (c) => {
+    const id = c.req.param('id');
+    const ok = deleteGoal(opts.db, id);
+    if (ok) opts.router.broadcastGoalRemove(id);
+    return c.json({ ok });
+  });
+
   // Preflight check used by the NewTaskModal to warn before the user
   // clicks Launch. Cached for the process lifetime — installing claude
   // requires a server restart anyway.
@@ -557,7 +628,8 @@ const MIME: Record<string, string> = {
   '.woff': 'font/woff',
   '.woff2': 'font/woff2',
   '.map': 'application/json',
-};
+}
+;
 
 function mimeFor(filePath: string): string {
   return MIME[extname(filePath).toLowerCase()] ?? 'application/octet-stream';
