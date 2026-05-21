@@ -6,7 +6,9 @@ import { ensureProject } from './state/projects.js';
 import {
   clearSessionWrapper,
   getSession,
+  setSessionBudget,
   setSessionContextUsage,
+  setSessionGoal,
   setSessionMission,
   setSessionStatus,
   upsertSession,
@@ -124,6 +126,9 @@ export class EventRouter {
     // launcher recorded its path under the spawn cwd. Persisting it here
     // means List view can render a "branch" chip without re-shelling git.
     const worktreePath = this.launcher?.worktreePathForInternalCwd(event.cwd);
+    // Sprint M: budget cap + goal recorded at launch (keyed by cwd).
+    const launchBudget = this.launcher?.budgetForInternalCwd(event.cwd);
+    const launchGoal = this.launcher?.goalForInternalCwd(event.cwd);
     // If the user ran `solix run` (Sprint J wrapper) instead of bare
     // `claude`, a wrapper registration with this cwd will be in the
     // ephemeral registry. Claim it now so the SidePanel composer
@@ -151,7 +156,16 @@ export class EventRouter {
     // sessionId binding. On unregister we use it to clear the
     // session's wrapper_socket_path.
     if (wrapper) bindWrapperToSession(wrapper.wrapperId, session.id);
-    this.broadcaster.broadcast({ type: 'session_upsert', session });
+    // Persist the launch-time budget/goal so the planet shows a budget ring
+    // and joins its goal constellation from the first frame.
+    let enriched = session;
+    if (launchBudget != null) {
+      enriched = setSessionBudget(this.db, session.id, launchBudget) ?? enriched;
+    }
+    if (launchGoal) {
+      enriched = setSessionGoal(this.db, session.id, launchGoal) ?? enriched;
+    }
+    this.broadcaster.broadcast({ type: 'session_upsert', session: enriched });
     // Start tailing the session's transcript so the Chat tab streams in real
     // time. Skipped for moons (subagents) — they share the parent's transcript.
     if (!session.parentSessionId) {
@@ -178,7 +192,7 @@ export class EventRouter {
       });
     }
 
-    const mission = startMission(this.db, sessionId, prompt);
+    const mission = startMission(this.db, sessionId, prompt, session.currentGoalId);
     const updated = setSessionMission(this.db, sessionId, mission.id);
     const active = updated
       ? setSessionStatus(this.db, sessionId, 'active')
@@ -487,6 +501,8 @@ export class EventRouter {
     worktreeBaseRef?: string;
     useAgentView?: boolean;
     agentName?: string;
+    budgetUsd?: number;
+    goalId?: string;
   }): { ok: boolean; sessionId?: string } {
     if (!this.launcher) return { ok: false };
     if (!opts.initialPrompt?.trim()) {
@@ -505,6 +521,27 @@ export class EventRouter {
       worktreeBaseRef: opts.worktreeBaseRef,
       useAgentView: opts.useAgentView,
       agentName: opts.agentName,
+      budgetUsd: opts.budgetUsd,
+      goalId: opts.goalId,
+    });
+  }
+
+  /** Sprint M — raise (or clear) a session's budget cap. Clears any standing
+   * budget breach by re-broadcasting the current cost against the new cap. */
+  raiseBudget(sessionId: string, budgetUsd: number): void {
+    const session = setSessionBudget(this.db, sessionId, budgetUsd);
+    if (!session) return;
+    this.broadcaster.broadcast({ type: 'session_upsert', session });
+    this.broadcaster.broadcast({
+      type: 'cost_update',
+      sessionId,
+      costUsd: session.costUsd,
+      budgetUsd: session.budgetUsd,
+    });
+    this.broadcaster.broadcast({
+      type: 'toast',
+      level: 'info',
+      message: `Budget raised to $${budgetUsd.toFixed(2)} for ${session.name ?? sessionId.slice(0, 8)}`,
     });
   }
 
@@ -563,6 +600,20 @@ export class EventRouter {
    * the hook flow (e.g. wrapper unregister clearing the socket path). */
   broadcastSessionUpsert(session: import('@solix/shared').Session): void {
     this.broadcaster.broadcast({ type: 'session_upsert', session });
+  }
+
+  // Sprint M — broadcast helpers for schedule/goal CRUD driven by HTTP/CLI.
+  broadcastScheduleUpsert(schedule: import('@solix/shared').ScheduledTask): void {
+    this.broadcaster.broadcast({ type: 'schedule_upsert', schedule });
+  }
+  broadcastScheduleRemove(scheduleId: string): void {
+    this.broadcaster.broadcast({ type: 'schedule_remove', scheduleId });
+  }
+  broadcastGoalUpsert(goal: import('@solix/shared').Goal): void {
+    this.broadcaster.broadcast({ type: 'goal_upsert', goal });
+  }
+  broadcastGoalRemove(goalId: string): void {
+    this.broadcaster.broadcast({ type: 'goal_remove', goalId });
   }
 
   broadcastGalaxyImported(manifest: GalaxyManifest): void {

@@ -7,7 +7,13 @@ import type { Model } from '@solix/shared';
 import type { DB } from './db.js';
 import type { Broadcaster } from './broadcaster.js';
 import { ensureProject } from './state/projects.js';
-import { upsertSession, setSessionStatus } from './state/sessions.js';
+import {
+  getSession,
+  setSessionBudget,
+  setSessionGoal,
+  setSessionStatus,
+  upsertSession,
+} from './state/sessions.js';
 import {
   getAdvisor,
   setAdvisorPinned,
@@ -28,6 +34,10 @@ interface InternalTaskRecord {
   // When the user launched into a Solix-managed worktree, the worktree path
   // is stored here so the SessionStart hook can persist it on the session.
   worktreePath?: string;
+  // Sprint M: budget cap + goal recorded at launch so the SessionStart hook
+  // can persist them onto the session row (keyed by cwd, like worktreePath).
+  budgetUsd?: number;
+  goalId?: string;
 }
 
 interface WorktreeResult {
@@ -284,6 +294,9 @@ export class Launcher {
     /** Optional subagent name from the Agent View mention syntax
      * (`@code-reviewer fix typos` → agentName: 'code-reviewer'). */
     agentName?: string;
+    /** Sprint M: per-session budget cap (USD) + goal to roll up to. */
+    budgetUsd?: number;
+    goalId?: string;
   }): { ok: boolean; sessionId?: string } {
     if (!opts.initialPrompt.trim()) return { ok: false };
 
@@ -330,6 +343,8 @@ export class Launcher {
         model: opts.model,
         initialPrompt: opts.initialPrompt,
         worktreePath,
+        budgetUsd: opts.budgetUsd,
+        goalId: opts.goalId,
       });
     }
     if (!existsSync(spawnCwd)) {
@@ -352,6 +367,8 @@ export class Launcher {
       args,
       isFollowUp: false,
       worktreePath,
+      budgetUsd: opts.budgetUsd,
+      goalId: opts.goalId,
     });
   }
 
@@ -447,6 +464,18 @@ export class Launcher {
       });
       return false;
     }
+    // Sprint M — soft pause: refuse further prompts once an internal session
+    // has blown its budget cap, until the cap is raised. (We can't stop an
+    // external process, but we can stop feeding this one more work.)
+    const full = getSession(this.db, sessionId);
+    if (full?.budgetUsd != null && full.costUsd >= full.budgetUsd) {
+      this.broadcaster.broadcast({
+        type: 'toast',
+        level: 'warn',
+        message: `Budget reached for ${full.name ?? sessionId.slice(0, 8)} ($${full.costUsd.toFixed(2)}/$${full.budgetUsd.toFixed(2)}). Raise the cap to continue.`,
+      });
+      return false;
+    }
     if (FAKE_CLAUDE) {
       this.broadcaster.broadcast({
         type: 'chat_delta',
@@ -480,12 +509,30 @@ export class Launcher {
     return undefined;
   }
 
+  /** Sprint M — budget cap recorded at launch for a cwd, if any. */
+  budgetForInternalCwd(cwd: string): number | undefined {
+    for (const rec of this.internalTasks.values()) {
+      if (rec.cwd === cwd && rec.budgetUsd != null) return rec.budgetUsd;
+    }
+    return undefined;
+  }
+
+  /** Sprint M — goal recorded at launch for a cwd, if any. */
+  goalForInternalCwd(cwd: string): string | undefined {
+    for (const rec of this.internalTasks.values()) {
+      if (rec.cwd === cwd && rec.goalId) return rec.goalId;
+    }
+    return undefined;
+  }
+
   private spawnPrint(opts: {
     sessionId: string;
     cwd: string;
     args: string[];
     isFollowUp: boolean;
     worktreePath?: string;
+    budgetUsd?: number;
+    goalId?: string;
   }): { ok: boolean; sessionId?: string } {
     let child: ChildProcess;
     try {
@@ -509,6 +556,8 @@ export class Launcher {
       this.internalTasks.set(opts.sessionId, {
         cwd: opts.cwd,
         worktreePath: opts.worktreePath,
+        budgetUsd: opts.budgetUsd,
+        goalId: opts.goalId,
       });
     }
 
@@ -567,6 +616,8 @@ export class Launcher {
     model?: Model;
     initialPrompt: string;
     worktreePath?: string;
+    budgetUsd?: number;
+    goalId?: string;
   }): { ok: boolean; sessionId: string } {
     const project = ensureProject(this.db, opts.cwd);
     const sessionId = `task-${nanoid(8)}`;
@@ -580,6 +631,8 @@ export class Launcher {
       model: opts.model ?? 'sonnet',
       worktreePath: opts.worktreePath,
     });
+    if (opts.budgetUsd != null) setSessionBudget(this.db, sessionId, opts.budgetUsd);
+    if (opts.goalId) setSessionGoal(this.db, sessionId, opts.goalId);
     const active = setSessionStatus(this.db, sessionId, 'active');
     if (active)
       this.broadcaster.broadcast({ type: 'session_upsert', session: active });
