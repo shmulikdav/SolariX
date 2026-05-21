@@ -14,6 +14,7 @@ export function NewTaskModal({
 }: NewTaskModalProps): JSX.Element | null {
   const projects = useSolixStore((s) => s.projects);
   const advisorsMap = useSolixStore((s) => s.advisors);
+  const goalsMap = useSolixStore((s) => s.goals);
   const launchTask = useSolixStore((s) => s.launchTask);
 
   const projectList = Object.values(projects).sort(
@@ -32,6 +33,9 @@ export function NewTaskModal({
   const [prompt, setPrompt] = useState('');
   const [worktreeBranch, setWorktreeBranch] = useState('');
   const [worktreeBaseRef, setWorktreeBaseRef] = useState('');
+  const [budget, setBudget] = useState('');
+  const [goalId, setGoalId] = useState<string | null>(null);
+  const goalList = Object.values(goalsMap);
   const [preflight, setPreflight] = useState<
     {
       claudeAvailable: boolean;
@@ -87,6 +91,8 @@ export function NewTaskModal({
     const trimmedBranch = worktreeBranch.trim();
     const dispatchViaAgentView =
       useAgentView && preflight?.agentViewAvailable === true;
+    const budgetNum = parseFloat(budget);
+    const budgetUsd = Number.isFinite(budgetNum) && budgetNum > 0 ? budgetNum : undefined;
     launchTask(trimmedCwd, finalModel, finalPrompt, {
       worktreeBranch: dispatchViaAgentView ? undefined : trimmedBranch || undefined,
       worktreeBaseRef: dispatchViaAgentView
@@ -96,12 +102,34 @@ export function NewTaskModal({
           : undefined,
       useAgentView: dispatchViaAgentView,
       agentName: advisor?.codename.toLowerCase(),
+      budgetUsd,
+      goalId: goalId ?? undefined,
     });
     setPrompt('');
     setAdvisorId(null);
     setWorktreeBranch('');
     setWorktreeBaseRef('');
+    setBudget('');
+    setGoalId(null);
     onClose();
+  };
+
+  const onNewGoal = async (): Promise<void> => {
+    const name = window.prompt('New goal name:');
+    if (!name?.trim()) return;
+    try {
+      const res = await fetch('/api/goals', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name: name.trim() }),
+      });
+      if (res.ok) {
+        const g = (await res.json()) as { id: string };
+        setGoalId(g.id);
+      }
+    } catch {
+      /* offline; ignore */
+    }
   };
 
   return (
@@ -288,6 +316,63 @@ export function NewTaskModal({
               </div>
             )}
           </label>
+
+          <div className="flex gap-3">
+            <label className="block flex-1">
+              <div className="text-[10px] uppercase tracking-wide text-slate-400 mb-1">
+                Budget{' '}
+                <span className="text-slate-600 normal-case">(USD, optional)</span>
+              </div>
+              <input
+                value={budget}
+                onChange={(e) => setBudget(e.target.value)}
+                inputMode="decimal"
+                placeholder="e.g. 2.00"
+                className="w-full text-sm font-mono bg-black/40 border border-solix-border rounded p-2 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-solix-accent"
+              />
+            </label>
+            <label className="block flex-1">
+              <div className="text-[10px] uppercase tracking-wide text-slate-400 mb-1">
+                Goal{' '}
+                <span className="text-slate-600 normal-case">(optional)</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  onClick={() => setGoalId(null)}
+                  className={`text-xs px-2.5 py-1.5 rounded border ${
+                    goalId === null
+                      ? 'bg-solix-accent/20 border-solix-accent text-solix-accent'
+                      : 'border-solix-border text-slate-300 hover:bg-solix-border/30'
+                  }`}
+                >
+                  none
+                </button>
+                {goalList.map((g) => (
+                  <button
+                    key={g.id}
+                    onClick={() => setGoalId(g.id)}
+                    className={`text-xs px-2.5 py-1.5 rounded border flex items-center gap-1.5 ${
+                      goalId === g.id
+                        ? 'border-solix-accent text-slate-100 bg-solix-accent/15'
+                        : 'border-solix-border text-slate-300 hover:bg-solix-border/30'
+                    }`}
+                  >
+                    <span
+                      className="inline-block w-2 h-2 rounded-full"
+                      style={{ background: g.color }}
+                    />
+                    {g.name}
+                  </button>
+                ))}
+                <button
+                  onClick={onNewGoal}
+                  className="text-xs px-2.5 py-1.5 rounded border border-dashed border-solix-border text-slate-400 hover:text-slate-100"
+                >
+                  + new
+                </button>
+              </div>
+            </label>
+          </div>
 
           <label className="block">
             <div className="text-[10px] uppercase tracking-wide text-slate-400 mb-1">

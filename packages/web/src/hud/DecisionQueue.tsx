@@ -17,18 +17,24 @@ import { suggestForPermission } from '../suggestions.js';
  */
 export function DecisionQueue(): JSX.Element {
   const pending = useSolixStore((s) => s.pendingPermissions);
+  const budgetAlerts = useSolixStore((s) => s.budgetAlerts);
   const sessions = useSolixStore((s) => s.sessions);
   const missions = useSolixStore((s) => s.missions);
   const resolve = useSolixStore((s) => s.resolvePermission);
+  const raiseBudget = useSolixStore((s) => s.raiseBudget);
+  const dismissBudgetAlert = useSolixStore((s) => s.dismissBudgetAlert);
   const selectSession = useSolixStore((s) => s.selectSession);
 
   const items = Object.values(pending).sort(
     (a, b) => b.receivedAt - a.receivedAt,
   );
+  const alerts = Object.values(budgetAlerts).sort(
+    (a, b) => b.receivedAt - a.receivedAt,
+  );
   const [collapsed, setCollapsed] = useState(false);
 
   // When a new item arrives, force-expand the queue so the user sees it.
-  const count = items.length;
+  const count = items.length + alerts.length;
   useEffect(() => {
     if (count > 0) setCollapsed(false);
   }, [count]);
@@ -71,6 +77,27 @@ export function DecisionQueue(): JSX.Element {
       </div>
 
       {!collapsed &&
+        alerts.map((a) => (
+          <BudgetCard
+            key={`budget-${a.sessionId}`}
+            name={
+              sessions[a.sessionId]?.name ?? a.sessionId.slice(0, 8)
+            }
+            costUsd={a.costUsd}
+            budgetUsd={a.budgetUsd}
+            onRaise={() => {
+              const next = window.prompt(
+                `New budget cap (USD) for this agent — current $${a.budgetUsd.toFixed(2)}, spent $${a.costUsd.toFixed(2)}:`,
+                (a.budgetUsd * 2).toFixed(2),
+              );
+              const n = next ? parseFloat(next) : NaN;
+              if (Number.isFinite(n) && n > 0) raiseBudget(a.sessionId, n);
+            }}
+            onDismiss={() => dismissBudgetAlert(a.sessionId)}
+          />
+        ))}
+
+      {!collapsed &&
         items.map((p) => {
           const session = sessions[p.sessionId];
           const mission =
@@ -90,6 +117,56 @@ export function DecisionQueue(): JSX.Element {
             />
           );
         })}
+    </div>
+  );
+}
+
+function BudgetCard({
+  name,
+  costUsd,
+  budgetUsd,
+  onRaise,
+  onDismiss,
+}: {
+  name: string;
+  costUsd: number;
+  budgetUsd: number;
+  onRaise: () => void;
+  onDismiss: () => void;
+}): JSX.Element {
+  return (
+    <div className="pointer-events-auto rounded border border-solix-danger bg-solix-danger/10 p-3 backdrop-blur shadow-lg">
+      <div className="flex items-center justify-between">
+        <div className="text-xs uppercase tracking-wide text-solix-danger">
+          {name}
+        </div>
+        <div className="text-[10px] uppercase tracking-widest text-solix-danger/80">
+          budget
+        </div>
+      </div>
+      <div className="mt-2 text-sm text-slate-100">
+        Budget reached
+        <span className="ml-1 font-mono text-xs text-slate-300">
+          ${costUsd.toFixed(2)} / ${budgetUsd.toFixed(2)}
+        </span>
+      </div>
+      <div className="mt-1 text-[11px] text-slate-400 leading-snug">
+        Solix-launched agents won't be sent more prompts until you raise the cap.
+      </div>
+      <div className="mt-3 flex gap-1.5">
+        <button
+          onClick={onRaise}
+          className="flex-1 py-1.5 rounded bg-solix-ok/20 border border-solix-ok text-solix-ok text-xs hover:bg-solix-ok/30"
+        >
+          Raise cap
+        </button>
+        <button
+          onClick={onDismiss}
+          className="px-2.5 py-1.5 rounded border border-solix-border text-slate-300 text-xs hover:text-white hover:bg-solix-border/30"
+        >
+          Dismiss
+        </button>
+      </div>
     </div>
   );
 }
