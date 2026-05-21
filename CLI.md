@@ -171,9 +171,14 @@ Re-run safely; the seeder is idempotent enough for a refresh.
 
 ## 4. Managing advisors
 
-The crew (Compass, Forge, Lumen, Argus, Sentinel + opt-in roles)
-ship in `packages/agents`. They're stored in your DB on first server
-boot, then managed via these commands or the AdvisorPanel in the UI.
+The crew — 14 advisors total (Compass, Forge, Lumen, Argus, Sentinel
+enabled by default; Mira, Echo, Helios, Vale, Atlas, Cinder, Delta,
+Spire, Ledger opt-in) — ships in `packages/agents`. They're stored in
+your DB on first server boot, then managed via these commands or, as of
+**v1.7.0**, from the UI: opt-in advisors show as dim **ghost planets** in
+the galaxy, and the **✦ Crew** panel (press **C**) lists all of them with
+one-click Enable / Disable / Pin. Enabling from the UI updates instantly;
+`solix advisors enable <id>` now also pushes the change to open browsers.
 
 ### `solix advisors list`
 

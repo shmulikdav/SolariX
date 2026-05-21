@@ -117,7 +117,7 @@ Hook scripts have three load-bearing properties:
 
 ## Advisors — the built-in crew
 
-Solix ships 10 advisor agents installed into `~/.claude/agents/`:
+Solix ships 14 advisor agents installed into `~/.claude/agents/`:
 
 | # | Codename | Role | Default |
 |---|---|---|---|
@@ -131,6 +131,10 @@ Solix ships 10 advisor agents installed into `~/.claude/agents/`:
 | 8 | Helios | Performance Engineer | opt-in |
 | 9 | Vale | Release Engineer | opt-in |
 | 10 | Atlas | Skill Curator | opt-in |
+| 11 | Cinder | Debugger / Incident | opt-in |
+| 12 | Delta | Data / DB Engineer | opt-in |
+| 13 | Spire | Architect | opt-in |
+| 14 | Ledger | FinOps / Cost | opt-in |
 
 ```sh
 solix advisors list
@@ -140,8 +144,12 @@ solix advisors pin compass     # always-on planet (uses real claude binary;
 solix advisors unpin compass
 ```
 
-In the browser, click an advisor in the inner ring to open its panel: read
-its system prompt, hand it a brief, and Invoke it on the focused planet.
+**In the browser (v1.7.0+):** opt-in advisors now appear as dim **ghost
+planets** on a faint outer ring — click one and press **＋ Add to crew** to
+enable it. Or press **C** (or the **✦ Crew** button) to open the **crew
+roster**: every advisor, grouped active vs available, with one-click
+Enable / Disable / Pin. Click an advisor in the inner ring to read its
+system prompt, hand it a brief, and Invoke it on the focused planet.
 
 ## Skills — the asteroid belt
 
