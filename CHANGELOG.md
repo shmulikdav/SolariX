@@ -1,0 +1,89 @@
+# Changelog
+
+All notable changes to Solix (`@shmulikdav/solix`) are documented here.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.7.0] — 2026-05-21
+
+**Sprint N — Crew roster: discover & enable opt-in advisors, plus four new advisor types.**
+
+The five opt-in advisors that shipped disabled were invisible and unreachable
+from the UI — the only way to turn one on was the CLI. This release surfaces
+them and grows the lineup to **14**.
+
+### Added
+- **Ghost planets** — opt-in (disabled) advisors now render as dim, pulsing
+  planets on a faint outer ring. Click one to open its panel and press
+  **＋ Add to crew** to enable it; it moves into the live inner ring (and the
+  `+ Task` picker) without a reload.
+- **Crew roster panel** — a new panel (TopBar **✦ Crew** button or press **C**)
+  listing every advisor grouped **Active crew** vs **Available (opt-in)**, each
+  with one-click Enable / Disable / Pin / Details. Header shows
+  `N active · M available`.
+- **Four new advisor types** (all opt-in, auto-seeded on next `solix start`):
+  - **Cinder** ⚑ — Debugger / Incident (sonnet): triages failures from stack
+    traces, logs, and failing tests.
+  - **Delta** ⛁ — Data / DB Engineer (sonnet): schema, migrations, queries,
+    data integrity.
+  - **Spire** △ — Architect (opus): system design and trade-offs, distinct
+    from Forge who builds.
+  - **Ledger** ₵ — FinOps / Cost (haiku): watches spend against per-session
+    budgets and suggests cheaper models.
+
+### Changed
+- New `set_advisor_enabled` WebSocket message routes through the server router,
+  which broadcasts `advisor_upsert` live. Enabling/disabling from the UI updates
+  instantly, and `solix advisors enable <id>` now also pushes the change to open
+  browsers.
+- README advisor table expanded to 14 rows; `CLI.md` and `OPERATING.md` document
+  UI-based discovery of opt-in advisors.
+
+### Fixed
+- Restored the correct Compass glyph (`⌖` U+2316) in the advisor manifest.
+
+## [1.6.0] — 2026-05-21
+
+**Sprint M — Cost rings, Heartbeats, and Goal constellations.**
+
+Three additive systems for running agents at scale: spend visibility, scheduled
+tasks, and goal grouping.
+
+### Added
+- **Cost rings & budgets** — per-session spend is estimated live from the token
+  usage Claude reports (model pricing × tokens) and drawn as a budget ring that
+  fills sky → amber → red as it approaches the cap. Set a per-task **Budget
+  (USD)** in the `+ Task` modal; a breach raises a card in the Decision Queue
+  (**Raise cap** / **Dismiss**) and soft-pauses Solix-launched sessions. Costs
+  are estimates, not billing figures.
+- **Heartbeats** — recurring scheduled tasks via `solix schedule`
+  (`add` / `list` / `enable` / `disable` / `remove`) on a `30m` / `2h` / `1d`
+  cadence. Each enabled schedule renders as a pulsing node and launches a normal
+  session when due (server checks every ~30s).
+- **Goal constellations** — named objectives via `solix goal`
+  (`add` / `list` / `remove`). Pick a goal in the `+ Task` modal (or create one
+  inline); planets working toward the same goal are linked by constellation
+  lines in the goal's color, and the SidePanel shows a goal chip.
+
+### Changed
+- New `@solix/shared` pricing module (`MODEL_PRICING`, `costForUsage`,
+  `totalTokens`).
+- New WebSocket messages (`cost_update`, `budget_alert`, `schedule_*`,
+  `goal_*`), client messages (`raise_budget`, `dismiss_budget_alert`), and
+  `launch_session` fields (`budgetUsd`, `goalId`).
+- New SQLite columns (`cost_usd`, `budget_usd`, `current_goal_id`,
+  `missions.goal_id`, `scheduled_tasks.cwd/name`) and a `goals` table, all via
+  idempotent migrations.
+
+## [1.5.0] and earlier
+
+- **1.5.0** — Agent View bridge: auto-syncs with Claude Code 2.1.139+ background
+  sessions; tasks launched from Solix round-trip into `claude agents`.
+
+For releases before this changelog was introduced, see the
+[Git history](https://github.com/shmulikdav/SolariX/commits/main) and
+[GitHub releases](https://github.com/shmulikdav/SolariX/releases).
+
+[1.7.0]: https://github.com/shmulikdav/SolariX/releases/tag/v1.7.0
+[1.6.0]: https://github.com/shmulikdav/SolariX/releases/tag/v1.6.0
