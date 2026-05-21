@@ -207,6 +207,8 @@ interface SolixState {
   invokeAdvisor: (advisorId: string, prompt?: string) => void;
   pinAdvisor: (advisorId: string) => void;
   unpinAdvisor: (advisorId: string) => void;
+  enableAdvisor: (advisorId: string) => void;
+  disableAdvisor: (advisorId: string) => void;
   sendPromptTo: (sessionId: string, text: string) => void;
   launchTask: (
     cwd: string,
@@ -587,6 +589,14 @@ export const useSolixStore = create<SolixState>((set, get) => ({
     get().send({ type: 'unpin_advisor', advisorId });
   },
 
+  enableAdvisor: (advisorId) => {
+    get().send({ type: 'set_advisor_enabled', advisorId, enabled: true });
+  },
+
+  disableAdvisor: (advisorId) => {
+    get().send({ type: 'set_advisor_enabled', advisorId, enabled: false });
+  },
+
   sendPromptTo: (sessionId, text) => {
     if (!text.trim()) return;
     get().send({ type: 'send_prompt', sessionId, text });
@@ -764,6 +774,17 @@ export function selectVisibleToolCalls(state: SolixState): RecentToolCall[] {
 
 export function selectEnabledAdvisors(state: SolixState): Advisor[] {
   return Object.values(state.advisors).filter((a) => a.enabled);
+}
+
+export function selectOptInAdvisors(state: SolixState): Advisor[] {
+  return Object.values(state.advisors).filter((a) => !a.enabled);
+}
+
+export function selectAllAdvisors(state: SolixState): Advisor[] {
+  return Object.values(state.advisors).sort((a, b) => {
+    if (a.enabled !== b.enabled) return a.enabled ? -1 : 1;
+    return a.codename.localeCompare(b.codename);
+  });
 }
 
 export function selectSkillsArray(state: SolixState): Skill[] {

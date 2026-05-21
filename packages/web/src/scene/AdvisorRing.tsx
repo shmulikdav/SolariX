@@ -14,11 +14,13 @@ import {
 import type { Advisor } from '@solix/shared';
 import {
   selectEnabledAdvisors,
+  selectOptInAdvisors,
   useSolixStore,
 } from '../store/index.js';
 import { AtmosphereRim } from './AtmosphereRim.js';
 
 const RING_RADIUS = 3.3;
+const GHOST_RING_RADIUS = 4.3;
 const PLANET_SIZE = 0.34; // slightly bigger so textures read at this orbit
 
 interface TexturePackSpec {
@@ -316,29 +318,138 @@ function ProceduralBody({
   );
 }
 
+/**
+ * Sprint N — "ghost" planet for an opt-in (disabled) advisor. Dim, untextured,
+ * slowly drifting on a faint outer ring. Clicking it opens the AdvisorPanel
+ * (which offers an Enable button), so the opt-in crew is discoverable in the
+ * galaxy instead of hidden.
+ */
+function GhostAdvisorPlanet({
+  advisor,
+  index,
+  total,
+}: AdvisorPlanetProps): JSX.Element {
+  const groupRef = useRef<Group>(null);
+  const matRef = useRef<MeshStandardMaterial>(null);
+  const phase = useMemo(
+    () => (index / Math.max(1, total)) * Math.PI * 2,
+    [index, total],
+  );
+  const angleRef = useRef(phase);
+  const select = useSolixStore((s) => s.selectAdvisor);
+  const isSelected = useSolixStore((s) => s.selectedAdvisorId === advisor.id);
+  const baseColor = useMemo(() => new Color(advisor.color), [advisor.color]);
+
+  useFrame((state, delta) => {
+    if (useSolixStore.getState().motionEnabled) {
+      angleRef.current += delta * 0.1;
+    }
+    const angle = angleRef.current;
+    if (groupRef.current) {
+      groupRef.current.position.set(
+        Math.cos(angle) * GHOST_RING_RADIUS,
+        0,
+        Math.sin(angle) * GHOST_RING_RADIUS,
+      );
+    }
+    if (matRef.current) {
+      // gentle breathing so ghosts read as "available, dormant"
+      const t = state.clock.getElapsedTime();
+      const pulse = 0.5 + 0.5 * Math.sin(t * 1.1 + phase);
+      matRef.current.opacity = (isSelected ? 0.6 : 0.28) + pulse * 0.12;
+    }
+  });
+
+  const onClick = (e: ThreeEvent<MouseEvent>): void => {
+    e.stopPropagation();
+    select(advisor.id);
+  };
+
+  return (
+    <group ref={groupRef}>
+      <mesh onClick={onClick}>
+        <sphereGeometry args={[PLANET_SIZE * 0.8, 20, 20]} />
+        <meshStandardMaterial
+          ref={matRef}
+          color={baseColor}
+          emissive={baseColor}
+          emissiveIntensity={0.15}
+          roughness={0.7}
+          metalness={0.2}
+          transparent
+          opacity={0.3}
+          wireframe
+        />
+      </mesh>
+      <Html
+        center
+        distanceFactor={9}
+        style={{ pointerEvents: 'none', userSelect: 'none' }}
+        position={[0, PLANET_SIZE + 0.28, 0]}
+      >
+        <div
+          className={`px-1.5 py-0.5 rounded text-[9px] whitespace-nowrap border ${
+            isSelected
+              ? 'bg-cyan-400/20 border-cyan-300 text-cyan-100'
+              : 'bg-black/40 border-white/10 text-slate-400'
+          }`}
+        >
+          <span className="mr-1">{advisor.glyph}</span>
+          {advisor.codename}
+          <span className="ml-1 opacity-60">· opt-in</span>
+        </div>
+      </Html>
+    </group>
+  );
+}
+
 export function AdvisorRing(): JSX.Element | null {
   const enabled = useSolixStore(selectEnabledAdvisors);
-  if (!enabled.length) return null;
+  const optIn = useSolixStore(selectOptInAdvisors);
+  if (!enabled.length && !optIn.length) return null;
 
   return (
     <group>
-      <mesh rotation={[Math.PI / 2, 0, 0]}>
-        <ringGeometry
-          args={[RING_RADIUS - 0.03, RING_RADIUS + 0.03, 128]}
-        />
-        <meshBasicMaterial
-          color="#fbbf24"
-          transparent
-          opacity={0.12}
-          side={DoubleSide}
-        />
-      </mesh>
+      {enabled.length > 0 && (
+        <mesh rotation={[Math.PI / 2, 0, 0]}>
+          <ringGeometry
+            args={[RING_RADIUS - 0.03, RING_RADIUS + 0.03, 128]}
+          />
+          <meshBasicMaterial
+            color="#fbbf24"
+            transparent
+            opacity={0.12}
+            side={DoubleSide}
+          />
+        </mesh>
+      )}
+      {optIn.length > 0 && (
+        <mesh rotation={[Math.PI / 2, 0, 0]}>
+          <ringGeometry
+            args={[GHOST_RING_RADIUS - 0.02, GHOST_RING_RADIUS + 0.02, 128]}
+          />
+          <meshBasicMaterial
+            color="#475569"
+            transparent
+            opacity={0.1}
+            side={DoubleSide}
+          />
+        </mesh>
+      )}
       {enabled.map((advisor, i) => (
         <AdvisorPlanet
           key={advisor.id}
           advisor={advisor}
           index={i}
           total={enabled.length}
+        />
+      ))}
+      {optIn.map((advisor, i) => (
+        <GhostAdvisorPlanet
+          key={advisor.id}
+          advisor={advisor}
+          index={i}
+          total={optIn.length}
         />
       ))}
     </group>
