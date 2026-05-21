@@ -195,6 +195,14 @@ solix advisors disable mira
 `enable` does NOT spawn a process. To make Mira always-on, also run
 `solix advisors pin mira`.
 
+**From the UI (v1.7.0+):** you don't need the CLI to discover opt-in
+advisors anymore. They render as dim **ghost planets** on a faint outer
+ring — click one and press **＋ Add to crew**. Or press **C** (the
+**✦ Crew** button) for the full roster: all 14 advisors grouped active vs
+available, each with Enable / Disable / Pin. There are 9 opt-in advisors:
+Mira (QA), Echo (Docs), Helios (Perf), Vale (Release), Atlas (Skills),
+Cinder (Debugger), Delta (Data/DB), Spire (Architect), Ledger (FinOps).
+
 ---
 
 ### 6. "I want to install a Claude Code skill into a project"
