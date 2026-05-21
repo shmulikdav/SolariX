@@ -19,6 +19,8 @@ export function AdvisorPanel(): JSX.Element | null {
   const invokeAdvisor = useSolixStore((s) => s.invokeAdvisor);
   const pinAdvisor = useSolixStore((s) => s.pinAdvisor);
   const unpinAdvisor = useSolixStore((s) => s.unpinAdvisor);
+  const enableAdvisor = useSolixStore((s) => s.enableAdvisor);
+  const disableAdvisor = useSolixStore((s) => s.disableAdvisor);
 
   const [prompt, setPrompt] = useState('');
   const [preview, setPreview] = useState<EnvelopePreview | null>(null);
@@ -69,6 +71,11 @@ export function AdvisorPanel(): JSX.Element | null {
             {advisor.pinned && (
               <span className="text-[10px] uppercase tracking-wider text-amber-300 border border-amber-300/40 rounded px-1.5 py-0.5">
                 pinned
+              </span>
+            )}
+            {!advisor.enabled && (
+              <span className="text-[10px] uppercase tracking-wider text-cyan-300 border border-cyan-300/40 rounded px-1.5 py-0.5">
+                opt-in
               </span>
             )}
           </div>
@@ -154,30 +161,55 @@ export function AdvisorPanel(): JSX.Element | null {
         )}
       </div>
 
-      <div className="px-4 py-3 border-t border-solix-border flex gap-2">
-        <button
-          onClick={onInvoke}
-          className="flex-1 py-2 rounded bg-solix-accent/20 border border-solix-accent text-solix-accent text-sm hover:bg-solix-accent/30"
-        >
-          Invoke
-        </button>
-        {advisor.pinned ? (
+      {!advisor.enabled ? (
+        <div className="px-4 py-3 border-t border-solix-border flex flex-col gap-2">
           <button
-            onClick={() => unpinAdvisor(advisor.id)}
-            className="px-3 py-2 rounded bg-amber-500/15 border border-amber-400/50 text-amber-200 text-sm hover:bg-amber-500/25"
+            onClick={() => enableAdvisor(advisor.id)}
+            className="w-full py-2 rounded bg-cyan-500/20 border border-cyan-400/60 text-cyan-100 text-sm hover:bg-cyan-500/30"
+            title="Add this advisor to your crew (renders in the inner ring, selectable in + Task)"
           >
-            Unpin
+            ＋ Add to crew
           </button>
-        ) : (
           <button
-            onClick={() => pinAdvisor(advisor.id)}
-            className="px-3 py-2 rounded bg-amber-500/10 border border-amber-400/30 text-amber-200/80 text-sm hover:bg-amber-500/20"
-            title="Spawn an always-on session for this advisor"
+            onClick={onInvoke}
+            className="w-full py-1.5 rounded border border-solix-border text-slate-300 text-xs hover:text-white hover:bg-solix-border/30"
           >
-            Pin
+            Invoke once without adding
           </button>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="px-4 py-3 border-t border-solix-border flex gap-2">
+          <button
+            onClick={onInvoke}
+            className="flex-1 py-2 rounded bg-solix-accent/20 border border-solix-accent text-solix-accent text-sm hover:bg-solix-accent/30"
+          >
+            Invoke
+          </button>
+          {advisor.pinned ? (
+            <button
+              onClick={() => unpinAdvisor(advisor.id)}
+              className="px-3 py-2 rounded bg-amber-500/15 border border-amber-400/50 text-amber-200 text-sm hover:bg-amber-500/25"
+            >
+              Unpin
+            </button>
+          ) : (
+            <button
+              onClick={() => pinAdvisor(advisor.id)}
+              className="px-3 py-2 rounded bg-amber-500/10 border border-amber-400/30 text-amber-200/80 text-sm hover:bg-amber-500/20"
+              title="Spawn an always-on session for this advisor"
+            >
+              Pin
+            </button>
+          )}
+          <button
+            onClick={() => disableAdvisor(advisor.id)}
+            className="px-3 py-2 rounded border border-solix-border text-slate-400 text-sm hover:text-white hover:bg-solix-border/30"
+            title="Remove from crew (keeps it available as opt-in)"
+          >
+            Disable
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -5,6 +5,7 @@ interface TopBarProps {
   onNewTask?: () => void;
   onOpenTimeline?: () => void;
   onOpenHelp?: () => void;
+  onOpenCrew?: () => void;
 }
 
 export function TopBar({
@@ -12,6 +13,7 @@ export function TopBar({
   onNewTask,
   onOpenTimeline,
   onOpenHelp,
+  onOpenCrew,
 }: TopBarProps = {}): JSX.Element {
   const connected = useSolixStore((s) => s.connected);
   const planets = useSolixStore(selectPlanets);
@@ -98,6 +100,15 @@ export function TopBar({
             title="Launch a new Claude Code task (L)"
           >
             + Task
+          </button>
+        )}
+        {onOpenCrew && (
+          <button
+            onClick={onOpenCrew}
+            className="px-2 py-1 rounded bg-amber-500/15 border border-amber-400/40 text-amber-200 hover:bg-amber-500/25"
+            title="Crew: view and enable advisors (C)"
+          >
+            ✦ Crew
           </button>
         )}
         {onOpenGalaxy && (

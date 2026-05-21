@@ -36,12 +36,16 @@ const TimelineDrawer = lazy(() =>
 const GalaxyPanel = lazy(() =>
   import('./panels/GalaxyPanel.js').then((m) => ({ default: m.GalaxyPanel })),
 );
+const CrewPanel = lazy(() =>
+  import('./panels/CrewPanel.js').then((m) => ({ default: m.CrewPanel })),
+);
 
 export default function App(): JSX.Element {
   const [galaxyOpen, setGalaxyOpen] = useState(false);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [crewOpen, setCrewOpen] = useState(false);
 
   useEffect(() => {
     startWsClient();
@@ -65,6 +69,7 @@ export default function App(): JSX.Element {
         setGalaxyOpen(false);
         setNewTaskOpen(false);
         setHelpOpen(false);
+        setCrewOpen(false);
         // Esc also exits Timeline Playback — the only mode where the rest of
         // the UI feels frozen because state is derived from past events.
         // Cheap escape hatch when the "× Live" button isn't clickable for
@@ -77,6 +82,8 @@ export default function App(): JSX.Element {
         setHelpOpen((v) => !v);
       } else if (!isTextField && (e.key === 'g' || e.key === 'G')) {
         setGalaxyOpen((v) => !v);
+      } else if (!isTextField && (e.key === 'c' || e.key === 'C')) {
+        setCrewOpen((v) => !v);
       } else if (!isTextField && (e.key === 'l' || e.key === 'L')) {
         setNewTaskOpen(true);
       } else if (!isTextField && (e.key === '+' || e.key === '=')) {
@@ -120,6 +127,7 @@ export default function App(): JSX.Element {
         onNewTask={() => setNewTaskOpen(true)}
         onOpenTimeline={() => setTimelineOpen(true)}
         onOpenHelp={() => setHelpOpen(true)}
+        onOpenCrew={() => setCrewOpen(true)}
       />
       <DecisionQueue />
       <SidePanel />
@@ -128,6 +136,11 @@ export default function App(): JSX.Element {
       {galaxyOpen && (
         <Suspense fallback={null}>
           <GalaxyPanel open={galaxyOpen} onClose={() => setGalaxyOpen(false)} />
+        </Suspense>
+      )}
+      {crewOpen && (
+        <Suspense fallback={null}>
+          <CrewPanel open={crewOpen} onClose={() => setCrewOpen(false)} />
         </Suspense>
       )}
       <NewTaskModal
