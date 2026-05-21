@@ -327,6 +327,44 @@ solix galaxy install backend-team
 
 ---
 
+## 6b. Heartbeats — `solix schedule` (v1.6.0+)
+
+Recurring tasks that fire on a cadence. Each enabled schedule renders as a
+pulsing cyan node in the galaxy; when it fires it launches a normal session.
+
+```sh
+solix schedule add "review open PRs" --cwd ~/projects/app --every 2h --name "PR sweep"
+solix schedule list
+solix schedule disable <id>     # keep it, stop firing
+solix schedule enable <id>
+solix schedule remove <id>
+```
+
+Cadence is a simple interval: `30m`, `2h`, or `1d`. (Full cron is future
+work.) The server checks for due schedules every ~30 s. Requires `solix
+start` to be running.
+
+## 6c. Goals — `solix goal` (v1.6.0+)
+
+Named objectives that missions roll up to. Planets working toward the same
+goal are linked by constellation lines in the goal's color.
+
+```sh
+solix goal add "Ship v2" --description "Q3 release"
+solix goal list
+solix goal remove <id>          # detaches it from sessions/missions
+```
+
+Pick a goal for a task in the `+ Task` modal (or create one inline). The
+SidePanel shows the goal chip for any session tagged with one.
+
+> **Budgets / cost:** there's no CLI for budgets — set a per-task cap (USD)
+> in the `+ Task` modal. Solix estimates spend from the token usage Claude
+> reports and draws a budget ring on the planet; a breach raises a card in
+> the Decision Queue. Costs are estimates, not billing figures.
+
+---
+
 ## 7. Diagnostics
 
 ### `solix doctor`

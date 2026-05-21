@@ -416,6 +416,46 @@ To remove: `solix uninstall` strips the shim block from your shell rc.
 
 ---
 
+### 12.6. "I want to cap what an agent can spend" (v1.6.0+)
+
+Open `+ Task` (press `L`), set a **Budget** in USD, and launch. Solix
+estimates spend from the token usage Claude reports in the transcript and
+draws a **budget ring** around the planet that fills amber → red as it
+approaches the cap. When the cap is hit:
+
+- a red **budget** card appears in the Decision Queue (top-right),
+- for Solix-launched sessions, no further prompts are sent until you
+  **Raise cap**,
+- the SidePanel shows `$spent / $cap`.
+
+Costs are estimates (model pricing × reported tokens), not billing-grade.
+Externally-launched `claude` sessions are flagged but can't be force-stopped.
+
+### 12.7. "I want a task to run on a schedule" (v1.6.0+)
+
+```sh
+solix schedule add "summarize new issues" --cwd ~/projects/app --every 1d --name "daily triage"
+solix schedule list
+```
+
+Each enabled schedule shows as a pulsing node in the galaxy with its next
+run time. When it fires (server checks every ~30 s) it launches a normal
+session you can watch like any other. Cadence is `30m` / `2h` / `1d`.
+Disable without deleting: `solix schedule disable <id>`.
+
+### 12.8. "I want to group related agents under a goal" (v1.6.0+)
+
+```sh
+solix goal add "Ship v2"
+```
+
+Then pick that goal in the `+ Task` modal (or create one inline with **+
+new**). Planets working toward the same goal are linked by constellation
+lines in the goal's color, and each shows the goal chip in its SidePanel.
+Removing a goal detaches it from its sessions/missions cleanly.
+
+---
+
 ### 13. "Buttons in the Solix UI feel stuck — clicks don't register"
 
 If clicking the view toggle (`🪐 Galaxy` / `≡ List` / `◎ Missions`) or
