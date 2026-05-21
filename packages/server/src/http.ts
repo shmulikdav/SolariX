@@ -41,7 +41,6 @@ import {
   getAdvisor,
   listAdvisors,
   readAdvisorAgentMd,
-  setAdvisorEnabled,
 } from './state/advisors.js';
 import {
   cleanupOrphanedSockets,
@@ -205,12 +204,12 @@ export function createHttpApp(opts: {
   });
 
   app.post('/api/advisors/:id/enable', (c) => {
-    const a = setAdvisorEnabled(opts.db, c.req.param('id'), true);
+    const a = opts.router.setAdvisorEnabled(c.req.param('id'), true);
     return c.json({ ok: Boolean(a), advisor: a });
   });
 
   app.post('/api/advisors/:id/disable', (c) => {
-    const a = setAdvisorEnabled(opts.db, c.req.param('id'), false);
+    const a = opts.router.setAdvisorEnabled(c.req.param('id'), false);
     return c.json({ ok: Boolean(a), advisor: a });
   });
 
@@ -628,8 +627,7 @@ const MIME: Record<string, string> = {
   '.woff': 'font/woff',
   '.woff2': 'font/woff2',
   '.map': 'application/json',
-}
-;
+};
 
 function mimeFor(filePath: string): string {
   return MIME[extname(filePath).toLowerCase()] ?? 'application/octet-stream';

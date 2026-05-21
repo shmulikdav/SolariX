@@ -135,6 +135,9 @@ function handleClientMessage(
     case 'unpin_advisor':
       ctx.router.unpinAdvisor(msg.advisorId);
       break;
+    case 'set_advisor_enabled':
+      ctx.router.setAdvisorEnabled(msg.advisorId, msg.enabled);
+      break;
     default:
       break;
   }
