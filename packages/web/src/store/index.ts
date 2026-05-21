@@ -3,8 +3,10 @@ import type {
   Advisor,
   ChatDelta,
   ClientMessage,
+  Goal,
   Mission,
   Project,
+  ScheduledTask,
   ServerMessage,
   Session,
   Skill,
@@ -26,6 +28,13 @@ export interface RecentToolCall extends ToolCall {
 }
 
 export interface ChatEntry extends ChatDelta {
+  receivedAt: number;
+}
+
+export interface BudgetAlert {
+  sessionId: string;
+  costUsd: number;
+  budgetUsd: number;
   receivedAt: number;
 }
 
@@ -173,6 +182,9 @@ interface SolixState {
   missions: Record<string, Mission>;
   advisors: Record<string, Advisor>;
   skills: Record<string, Skill>;
+  schedules: Record<string, ScheduledTask>;
+  goals: Record<string, Goal>;
+  budgetAlerts: Record<string, BudgetAlert>;
   recentToolCalls: RecentToolCall[];
   pendingPermissions: Record<string, PendingPermission>;
   // Per-session chat log, in arrival order. Capped at 200 entries per session.
@@ -205,8 +217,12 @@ interface SolixState {
       worktreeBaseRef?: string;
       useAgentView?: boolean;
       agentName?: string;
+      budgetUsd?: number;
+      goalId?: string;
     },
   ) => void;
+  raiseBudget: (sessionId: string, budgetUsd: number) => void;
+  dismissBudgetAlert: (sessionId: string) => void;
   selectedSessionIds: Set<string>;
   toggleSessionSelection: (id: string) => void;
   clearSessionSelection: () => void;
@@ -273,6 +289,9 @@ export const useSolixStore = create<SolixState>((set, get) => ({
   missions: {},
   advisors: {},
   skills: {},
+  schedules: {},
+  goals: {},
+  budgetAlerts: {},
   chatBySessionId: {},
   recentToolCalls: [],
   pendingPermissions: {},
@@ -299,7 +318,11 @@ export const useSolixStore = create<SolixState>((set, get) => ({
         for (const a of msg.advisors) advisors[a.id] = a;
         const skills: Record<string, Skill> = {};
         for (const sk of msg.skills) skills[sk.id] = sk;
-        set({ projects, sessions, missions, advisors, skills });
+        const schedules: Record<string, ScheduledTask> = {};
+        for (const sc of msg.schedules) schedules[sc.id] = sc;
+        const goals: Record<string, Goal> = {};
+        for (const g of msg.goals) goals[g.id] = g;
+        set({ projects, sessions, missions, advisors, skills, schedules, goals });
         break;
       }
       case 'advisor_upsert': {
@@ -419,6 +442,69 @@ export const useSolixStore = create<SolixState>((set, get) => ({
         });
         break;
       }
+      case 'cost_update': {
+        set((s) => {
+          const session = s.sessions[msg.sessionId];
+          if (!session) return s;
+          return {
+            sessions: {
+              ...s.sessions,
+              [msg.sessionId]: {
+                ...session,
+                costUsd: msg.costUsd,
+                budgetUsd: msg.budgetUsd ?? session.budgetUsd,
+              },
+            },
+          };
+        });
+        break;
+      }
+      case 'budget_alert': {
+        const alert: BudgetAlert = {
+          sessionId: msg.sessionId,
+          costUsd: msg.costUsd,
+          budgetUsd: msg.budgetUsd,
+          receivedAt: Date.now(),
+        };
+        set((s) => ({
+          budgetAlerts: { ...s.budgetAlerts, [msg.sessionId]: alert },
+        }));
+        const session = get().sessions[msg.sessionId];
+        void notify({
+          title: `${session?.name ?? msg.sessionId.slice(0, 8)} hit its budget`,
+          body: `$${msg.costUsd.toFixed(2)} / $${msg.budgetUsd.toFixed(2)}`,
+          tag: `solix-budget-${msg.sessionId}`,
+          whenHidden: true,
+        });
+        chime();
+        break;
+      }
+      case 'schedule_upsert': {
+        set((s) => ({
+          schedules: { ...s.schedules, [msg.schedule.id]: msg.schedule },
+        }));
+        break;
+      }
+      case 'schedule_remove': {
+        set((s) => {
+          const next = { ...s.schedules };
+          delete next[msg.scheduleId];
+          return { schedules: next };
+        });
+        break;
+      }
+      case 'goal_upsert': {
+        set((s) => ({ goals: { ...s.goals, [msg.goal.id]: msg.goal } }));
+        break;
+      }
+      case 'goal_remove': {
+        set((s) => {
+          const next = { ...s.goals };
+          delete next[msg.goalId];
+          return { goals: next };
+        });
+        break;
+      }
       case 'chat_delta': {
         const entry: ChatEntry = { ...msg.delta, receivedAt: Date.now() };
         set((s) => {
@@ -534,6 +620,26 @@ export const useSolixStore = create<SolixState>((set, get) => ({
       worktreeBaseRef: opts?.worktreeBaseRef,
       useAgentView: opts?.useAgentView,
       agentName: opts?.agentName,
+      budgetUsd: opts?.budgetUsd,
+      goalId: opts?.goalId,
+    });
+  },
+
+  raiseBudget: (sessionId, budgetUsd) => {
+    get().send({ type: 'raise_budget', sessionId, budgetUsd });
+    // Optimistically clear the alert; the server confirms via cost_update.
+    set((s) => {
+      const next = { ...s.budgetAlerts };
+      delete next[sessionId];
+      return { budgetAlerts: next };
+    });
+  },
+  dismissBudgetAlert: (sessionId) => {
+    get().send({ type: 'dismiss_budget_alert', sessionId });
+    set((s) => {
+      const next = { ...s.budgetAlerts };
+      delete next[sessionId];
+      return { budgetAlerts: next };
     });
   },
 
@@ -662,6 +768,14 @@ export function selectEnabledAdvisors(state: SolixState): Advisor[] {
 
 export function selectSkillsArray(state: SolixState): Skill[] {
   return Object.values(state.skills);
+}
+
+export function selectEnabledSchedules(state: SolixState): ScheduledTask[] {
+  return Object.values(state.schedules).filter((s) => s.enabled);
+}
+
+export function selectGoalsArray(state: SolixState): Goal[] {
+  return Object.values(state.goals);
 }
 
 /**

@@ -24,6 +24,14 @@ import { install } from './install.js';
 import { installShim } from './install-shim.js';
 import { runWrapped } from './run.js';
 import { installSkillCmd, listSkillsCmd } from './skills.js';
+import {
+  addScheduleCmd,
+  disableScheduleCmd,
+  enableScheduleCmd,
+  listSchedulesCmd,
+  removeScheduleCmd,
+} from './schedule.js';
+import { addGoalCmd, listGoalsCmd, removeGoalCmd } from './goals.js';
 import { start } from './start.js';
 import { uninstall } from './uninstall.js';
 
@@ -202,6 +210,82 @@ galaxy
   .description('Pull and install a galaxy from the configured registry')
   .action(async (slug: string) => {
     await installFromRegistryCmd(slug);
+  });
+
+const schedule = program
+  .command('schedule')
+  .description('Manage recurring "heartbeat" tasks (Sprint M)');
+
+schedule
+  .command('list', { isDefault: true })
+  .description('List all scheduled tasks')
+  .action(async () => {
+    await listSchedulesCmd();
+  });
+
+schedule
+  .command('add <prompt>')
+  .description('Schedule a recurring task')
+  .option('--cwd <dir>', 'working directory (default: current dir)')
+  .option('--every <cadence>', 'cadence: 30m, 2h, 1d', '1h')
+  .option('--name <name>', 'short label for the galaxy node')
+  .action(
+    async (
+      prompt: string,
+      opts: { cwd?: string; every?: string; name?: string },
+    ) => {
+      await addScheduleCmd(prompt, opts);
+    },
+  );
+
+schedule
+  .command('enable <id>')
+  .description('Enable a schedule')
+  .action(async (id: string) => {
+    await enableScheduleCmd(id);
+  });
+
+schedule
+  .command('disable <id>')
+  .description('Disable a schedule (keeps it, stops firing)')
+  .action(async (id: string) => {
+    await disableScheduleCmd(id);
+  });
+
+schedule
+  .command('remove <id>')
+  .description('Delete a schedule')
+  .action(async (id: string) => {
+    await removeScheduleCmd(id);
+  });
+
+const goal = program
+  .command('goal')
+  .description('Manage goals that missions roll up to (Sprint M)');
+
+goal
+  .command('list', { isDefault: true })
+  .description('List all goals')
+  .action(async () => {
+    await listGoalsCmd();
+  });
+
+goal
+  .command('add <name>')
+  .description('Create a goal')
+  .option('--description <desc>', 'optional description')
+  .option('--color <hex>', 'optional hex color for the constellation')
+  .action(
+    async (name: string, opts: { description?: string; color?: string }) => {
+      await addGoalCmd(name, opts);
+    },
+  );
+
+goal
+  .command('remove <id>')
+  .description('Delete a goal (detaches it from sessions/missions)')
+  .action(async (id: string) => {
+    await removeGoalCmd(id);
   });
 
 program.parseAsync(process.argv).catch((err: unknown) => {

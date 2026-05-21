@@ -10,6 +10,8 @@ import { listActiveSessions } from './state/sessions.js';
 import { listMissions } from './state/missions.js';
 import { listAdvisors } from './state/advisors.js';
 import { listSkills } from './state/skills.js';
+import { listSchedules } from './state/schedules.js';
+import { listGoals } from './state/goals.js';
 
 export interface WsContext {
   db: DB;
@@ -44,6 +46,8 @@ export function attachWs(server: HttpServer, ctx: WsContext): WebSocketServer {
       missions: listMissions(ctx.db, { limit: 100 }),
       advisors: listAdvisors(ctx.db),
       skills: listSkills(ctx.db),
+      schedules: listSchedules(ctx.db),
+      goals: listGoals(ctx.db),
     };
     ctx.broadcaster.send(ws, snapshot);
 
@@ -108,7 +112,15 @@ function handleClientMessage(
         worktreeBaseRef: msg.worktreeBaseRef,
         useAgentView: msg.useAgentView,
         agentName: msg.agentName,
+        budgetUsd: msg.budgetUsd,
+        goalId: msg.goalId,
       });
+      break;
+    case 'raise_budget':
+      ctx.router.raiseBudget(msg.sessionId, msg.budgetUsd);
+      break;
+    case 'dismiss_budget_alert':
+      // Client-side only — the store removes the alert. No server state.
       break;
     case 'invoke_advisor':
       ctx.router.invokeAdvisor(
