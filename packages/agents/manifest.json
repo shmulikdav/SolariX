@@ -7,7 +7,7 @@
       "codename": "Compass",
       "name": "Product Manager",
       "description": "Reviews missions, maintains a backlog, surfaces feature ideas. The product navigator.",
-      "glyph": "⍖",
+      "glyph": "⌖",
       "color": "#a855f7",
       "defaultModel": "opus",
       "agentMd": "compass.md",
