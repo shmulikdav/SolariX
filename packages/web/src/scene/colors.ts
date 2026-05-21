@@ -43,6 +43,16 @@ export function statusEmissive(status: SessionStatus): {
   }
 }
 
+/**
+ * Sprint M — color for the budget ring as spend approaches the cap.
+ * Accent below 75%, amber 75–100%, red at/over the cap.
+ */
+export function costColor(pct: number): string {
+  if (pct >= 100) return '#dc2626';
+  if (pct >= 75) return '#f59e0b';
+  return '#38bdf8';
+}
+
 export function statusLabel(status: SessionStatus): string {
   switch (status) {
     case 'active':

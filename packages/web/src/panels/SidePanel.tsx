@@ -9,6 +9,7 @@ type Tab = 'chat' | 'missions' | 'files';
 export function SidePanel(): JSX.Element | null {
   const selectedId = useSolixStore((s) => s.selectedSessionId);
   const sessions = useSolixStore((s) => s.sessions);
+  const goals = useSolixStore((s) => s.goals);
   const missions = useSolixStore((s) => s.missions);
   const chatBySessionId = useSolixStore((s) => s.chatBySessionId);
   const selectSession = useSolixStore((s) => s.selectSession);
@@ -55,6 +56,11 @@ export function SidePanel(): JSX.Element | null {
   // composer — we ship prompts via sendPromptToSession either way.
   const isWrapped = Boolean(session.wrapperSocketPath);
   const composerEnabled = isInternal || isWrapped;
+  const goal = session.currentGoalId ? goals[session.currentGoalId] : undefined;
+  const budgetPct =
+    session.budgetUsd && session.budgetUsd > 0
+      ? Math.min(100, (session.costUsd / session.budgetUsd) * 100)
+      : null;
 
   const onSend = (): void => {
     if (!composer.trim()) return;
@@ -136,6 +142,47 @@ export function SidePanel(): JSX.Element | null {
               title={session.agentViewSummary}
             >
               {session.agentViewSummary}
+            </div>
+          )}
+          {goal && (
+            <div className="mt-1 inline-flex items-center gap-1.5 text-[11px]">
+              <span
+                className="inline-block w-2 h-2 rounded-full"
+                style={{ background: goal.color }}
+              />
+              <span className="text-slate-300">{goal.name}</span>
+            </div>
+          )}
+          {(session.budgetUsd != null || session.costUsd > 0) && (
+            <div className="mt-1.5">
+              <div className="flex items-center justify-between text-[11px] text-slate-400">
+                <span>cost</span>
+                <span className="font-mono">
+                  ${session.costUsd.toFixed(2)}
+                  {session.budgetUsd != null && (
+                    <span className="text-slate-500">
+                      {' '}
+                      / ${session.budgetUsd.toFixed(2)}
+                    </span>
+                  )}
+                </span>
+              </div>
+              {budgetPct != null && (
+                <div className="mt-1 h-1.5 rounded-full bg-slate-800 overflow-hidden">
+                  <div
+                    className="h-full"
+                    style={{
+                      width: `${budgetPct}%`,
+                      background:
+                        budgetPct >= 100
+                          ? '#dc2626'
+                          : budgetPct >= 75
+                            ? '#f59e0b'
+                            : '#38bdf8',
+                    }}
+                  />
+                </div>
+              )}
             </div>
           )}
         </div>

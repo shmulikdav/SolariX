@@ -4,7 +4,7 @@ import { Html } from '@react-three/drei';
 import { Color, Group, Mesh, MathUtils, MeshStandardMaterial } from 'three';
 import type { Session } from '@solix/shared';
 import { useSolixStore, selectMoons } from '../store/index.js';
-import { modelColor, statusEmissive, statusLabel } from './colors.js';
+import { costColor, modelColor, statusEmissive, statusLabel } from './colors.js';
 import {
   moonOrbitRadius,
   moonOrbitSpeed,
@@ -199,6 +199,19 @@ export function Planet({ session }: PlanetProps): JSX.Element {
   const axialTiltX = useMemo(() => hashTiltDeg(session.id, 18) * (Math.PI / 180), [session.id]);
   const axialTiltZ = useMemo(() => hashTiltDeg(session.id + '-z', 12) * (Math.PI / 180), [session.id]);
 
+  // Sprint M — budget ring. A faint full "track" with a colored arc that
+  // fills as spend approaches the cap. Only present when a budget is set.
+  const hasBudget = session.budgetUsd != null && session.budgetUsd > 0;
+  const budgetPct = hasBudget
+    ? Math.min(100, (session.costUsd / (session.budgetUsd as number)) * 100)
+    : 0;
+  // Quantize so we only rebuild the arc geometry on whole-percent changes.
+  const budgetStep = Math.round(budgetPct);
+  const budgetArc = useMemo(
+    () => Math.max(0.0001, budgetStep / 100) * Math.PI * 2,
+    [budgetStep],
+  );
+
   return (
     <group ref={groupRef}>
       <group rotation={[axialTiltX, 0, axialTiltZ]}>
@@ -253,6 +266,28 @@ export function Planet({ session }: PlanetProps): JSX.Element {
           <ringGeometry args={[planetSize * 1.25, planetSize * 1.35, 64]} />
           <meshBasicMaterial color="#fbbf24" transparent opacity={0.7} side={2} />
         </mesh>
+      )}
+
+      {hasBudget && (
+        <group rotation={[Math.PI / 2, 0, 0]}>
+          {/* faint full track */}
+          <mesh>
+            <ringGeometry args={[planetSize * 2.05, planetSize * 2.3, 64]} />
+            <meshBasicMaterial color="#1e293b" transparent opacity={0.35} side={2} />
+          </mesh>
+          {/* colored fill arc, starting at top, growing clockwise */}
+          <mesh>
+            <ringGeometry
+              args={[planetSize * 2.05, planetSize * 2.3, 64, 1, Math.PI / 2, budgetArc]}
+            />
+            <meshBasicMaterial
+              color={costColor(budgetPct)}
+              transparent
+              opacity={0.9}
+              side={2}
+            />
+          </mesh>
+        </group>
       )}
 
       {moons.map((moon, i) => (

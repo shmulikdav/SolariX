@@ -18,6 +18,8 @@ import { ProjectLabels } from './ProjectLabels.js';
 import { Nebula } from './Nebula.js';
 import { ShootingStars } from './ShootingStars.js';
 import { ClickRipple } from './ClickRipple.js';
+import { Heartbeats } from './Heartbeats.js';
+import { ConstellationLines } from './ConstellationLines.js';
 import { attachControls, detachControls } from './cameraControls.js';
 import { BackSide, type Mesh } from 'three';
 
@@ -85,6 +87,8 @@ export function Scene(): JSX.Element {
       ))}
       <CometLayer />
       <ClickRipple />
+      <ConstellationLines />
+      <Heartbeats />
       <ProjectLabels />
       <ControlsBridge />
       {/*
