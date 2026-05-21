@@ -100,4 +100,5 @@ export type ClientMessage =
   | { type: 'dismiss_budget_alert'; sessionId: string }
   | { type: 'invoke_advisor'; advisorId: string; targetSessionId?: string; prompt?: string }
   | { type: 'pin_advisor'; advisorId: string }
-  | { type: 'unpin_advisor'; advisorId: string };
+  | { type: 'unpin_advisor'; advisorId: string }
+  | { type: 'set_advisor_enabled'; advisorId: string; enabled: boolean };

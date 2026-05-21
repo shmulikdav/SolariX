@@ -25,6 +25,7 @@ import {
 import { recordToolCall } from './state/toolcalls.js';
 import {
   getAdvisor,
+  setAdvisorEnabled as setAdvisorEnabledState,
   setAdvisorPinned,
 } from './state/advisors.js';
 import { buildContextEnvelope } from './state/context.js';
@@ -448,6 +449,24 @@ export class EventRouter {
       }
     }
     return ok;
+  }
+
+  /** Sprint N — enable/disable an advisor and broadcast the change so open
+   * browsers (and the CLI path) update live. Returns the updated advisor. */
+  setAdvisorEnabled(
+    advisorId: string,
+    enabled: boolean,
+  ): import('@solix/shared').Advisor | null {
+    const advisor = setAdvisorEnabledState(this.db, advisorId, enabled);
+    if (advisor) {
+      this.broadcaster.broadcast({ type: 'advisor_upsert', advisor });
+      this.broadcaster.broadcast({
+        type: 'toast',
+        level: 'info',
+        message: `${advisor.codename} ${enabled ? 'added to crew' : 'disabled'}`,
+      });
+    }
+    return advisor;
   }
 
   unpinAdvisor(advisorId: string): boolean {
