@@ -132,6 +132,14 @@ CREATE TABLE IF NOT EXISTS scheduled_tasks (
   last_run_at INTEGER,
   next_run_at INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS goals (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  color TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
 `;
 
 export type DB = Database.Database;
@@ -175,6 +183,13 @@ export function getDb(): DB {
   ensureColumn(db, 'sessions', 'pr_check_status', 'pr_check_status TEXT');
   ensureColumn(db, 'advisors', 'texture_pack', 'texture_pack TEXT');
   ensureColumn(db, 'missions', 'error_summary', 'error_summary TEXT');
+  // Sprint M — cost tracking, heartbeats, goals.
+  ensureColumn(db, 'sessions', 'cost_usd', 'cost_usd REAL DEFAULT 0');
+  ensureColumn(db, 'sessions', 'budget_usd', 'budget_usd REAL');
+  ensureColumn(db, 'sessions', 'current_goal_id', 'current_goal_id TEXT');
+  ensureColumn(db, 'missions', 'goal_id', 'goal_id TEXT');
+  ensureColumn(db, 'scheduled_tasks', 'cwd', 'cwd TEXT');
+  ensureColumn(db, 'scheduled_tasks', 'name', 'name TEXT');
   _db = db;
   return db;
 }

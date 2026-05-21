@@ -28,6 +28,9 @@ interface SessionRow {
   agent_view_summary: string | null;
   pr_url: string | null;
   pr_check_status: string | null;
+  cost_usd: number | null;
+  budget_usd: number | null;
+  current_goal_id: string | null;
   current_mission_id: string | null;
   last_completed_mission_id: string | null;
   created_at: number;
@@ -66,6 +69,9 @@ function rowToSession(row: SessionRow): Session {
         | 'failure'
         | 'neutral'
         | null) ?? undefined,
+    costUsd: row.cost_usd ?? 0,
+    budgetUsd: row.budget_usd ?? undefined,
+    currentGoalId: row.current_goal_id ?? undefined,
   };
 }
 
@@ -177,6 +183,7 @@ export function upsertSession(db: DB, input: CreateSessionInput): Session {
     agentViewSummary: input.agentViewSummary,
     prUrl: input.prUrl,
     prCheckStatus: input.prCheckStatus,
+    costUsd: 0,
   };
 }
 
@@ -276,6 +283,45 @@ export function setSessionContextUsage(
   db.prepare(
     `UPDATE sessions SET context_usage_pct = ?, updated_at = ? WHERE id = ?`,
   ).run(clamped, ts, sessionId);
+  return getSession(db, sessionId);
+}
+
+/** Sprint M — set the running cost estimate (USD) for a session. */
+export function setSessionCost(
+  db: DB,
+  sessionId: string,
+  costUsd: number,
+): Session | null {
+  const ts = now();
+  db.prepare(
+    `UPDATE sessions SET cost_usd = ?, updated_at = ? WHERE id = ?`,
+  ).run(Math.max(0, costUsd), ts, sessionId);
+  return getSession(db, sessionId);
+}
+
+/** Sprint M — set (or raise) the per-session budget cap in USD. */
+export function setSessionBudget(
+  db: DB,
+  sessionId: string,
+  budgetUsd: number | null,
+): Session | null {
+  const ts = now();
+  db.prepare(
+    `UPDATE sessions SET budget_usd = ?, updated_at = ? WHERE id = ?`,
+  ).run(budgetUsd, ts, sessionId);
+  return getSession(db, sessionId);
+}
+
+/** Sprint M — associate a session with a goal (constellation grouping). */
+export function setSessionGoal(
+  db: DB,
+  sessionId: string,
+  goalId: string | null,
+): Session | null {
+  const ts = now();
+  db.prepare(
+    `UPDATE sessions SET current_goal_id = ?, updated_at = ? WHERE id = ?`,
+  ).run(goalId, ts, sessionId);
   return getSession(db, sessionId);
 }
 

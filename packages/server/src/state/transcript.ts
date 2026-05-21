@@ -9,8 +9,11 @@ import {
 } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { costForUsage, totalTokens } from '@solix/shared';
 import type { Broadcaster } from '../broadcaster.js';
 import type { DB } from '../db.js';
+import { getSession, setSessionCost } from './sessions.js';
+import { addMissionTokens } from './missions.js';
 
 const TRANSCRIPT_BASE = join(homedir(), '.claude', 'projects');
 
@@ -76,13 +79,15 @@ interface WatcherRecord {
 export class TranscriptWatcherManager {
   private records = new Map<string, WatcherRecord>();
   private deferredRetry = new Map<string, NodeJS.Timeout>();
+  // Sprint M: sessions we've already raised a budget alert for, so we don't
+  // re-fire on every subsequent assistant message. Cleared when spend drops
+  // back under the cap (e.g. after the cap is raised).
+  private budgetAlerted = new Set<string>();
 
   constructor(
     private db: DB,
     private broadcaster: Broadcaster,
-  ) {
-    void this.db; // reserved for future persistence
-  }
+  ) {}
 
   /**
    * Begin tailing this session's transcript. Idempotent. If the file doesn't
@@ -246,6 +251,43 @@ export class TranscriptWatcherManager {
         sessionId,
         usagePct: pct,
       });
+
+      // Sprint M — accumulate dollar cost from this message's token usage.
+      const inc = costForUsage(message.model, message.usage);
+      const session = getSession(this.db, sessionId);
+      if (session) {
+        const updated = setSessionCost(this.db, sessionId, session.costUsd + inc);
+        const costUsd = updated?.costUsd ?? session.costUsd + inc;
+        const cap = updated?.budgetUsd ?? session.budgetUsd;
+        this.broadcaster.broadcast({
+          type: 'cost_update',
+          sessionId,
+          costUsd,
+          budgetUsd: cap,
+        });
+        // Roll the message's tokens into the active mission's total.
+        if (session.currentMissionId) {
+          addMissionTokens(
+            this.db,
+            session.currentMissionId,
+            totalTokens(message.usage),
+          );
+        }
+        // Budget breach → one-shot alert; clears when back under the cap.
+        if (cap != null && costUsd >= cap) {
+          if (!this.budgetAlerted.has(sessionId)) {
+            this.budgetAlerted.add(sessionId);
+            this.broadcaster.broadcast({
+              type: 'budget_alert',
+              sessionId,
+              costUsd,
+              budgetUsd: cap,
+            });
+          }
+        } else {
+          this.budgetAlerted.delete(sessionId);
+        }
+      }
     }
 
     const content = this.flattenAssistantContent(message.content);

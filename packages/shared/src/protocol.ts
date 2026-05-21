@@ -2,9 +2,11 @@ import type {
   Advisor,
   ChatDelta,
   GalaxyManifest,
+  Goal,
   Mission,
   Model,
   Project,
+  ScheduledTask,
   Session,
   Skill,
   ToolCall,
@@ -18,6 +20,8 @@ export type ServerMessage =
       missions: Mission[];
       advisors: Advisor[];
       skills: Skill[];
+      schedules: ScheduledTask[];
+      goals: Goal[];
     }
   | { type: 'session_upsert'; session: Session }
   | { type: 'session_remove'; sessionId: string }
@@ -33,6 +37,22 @@ export type ServerMessage =
   | { type: 'plan_proposed'; sessionId: string; plan: string }
   | { type: 'chat_delta'; sessionId: string; delta: ChatDelta }
   | { type: 'context_update'; sessionId: string; usagePct: number }
+  | {
+      type: 'cost_update';
+      sessionId: string;
+      costUsd: number;
+      budgetUsd?: number;
+    }
+  | {
+      type: 'budget_alert';
+      sessionId: string;
+      costUsd: number;
+      budgetUsd: number;
+    }
+  | { type: 'schedule_upsert'; schedule: ScheduledTask }
+  | { type: 'schedule_remove'; scheduleId: string }
+  | { type: 'goal_upsert'; goal: Goal }
+  | { type: 'goal_remove'; goalId: string }
   | { type: 'advisor_upsert'; advisor: Advisor }
   | { type: 'skill_upsert'; skill: Skill }
   | { type: 'galaxy_imported'; manifest: GalaxyManifest }
@@ -70,8 +90,14 @@ export type ClientMessage =
       useAgentView?: boolean;
       /** Optional subagent name to dispatch (`@code-reviewer ...`). */
       agentName?: string;
+      /** Sprint M: optional per-session budget cap (USD). */
+      budgetUsd?: number;
+      /** Sprint M: goal this task rolls up to (constellation grouping). */
+      goalId?: string;
     }
   | { type: 'terminate_session'; sessionId: string }
+  | { type: 'raise_budget'; sessionId: string; budgetUsd: number }
+  | { type: 'dismiss_budget_alert'; sessionId: string }
   | { type: 'invoke_advisor'; advisorId: string; targetSessionId?: string; prompt?: string }
   | { type: 'pin_advisor'; advisorId: string }
   | { type: 'unpin_advisor'; advisorId: string };

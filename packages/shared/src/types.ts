@@ -59,6 +59,16 @@ export interface Session {
   /** CI status of the PR. Lets the SidePanel render ✓ / ✗ / ⏳ next
    * to the PR chip without re-querying GitHub. */
   prCheckStatus?: 'pending' | 'success' | 'failure' | 'neutral';
+  /** Sprint M — running estimated spend for this session in USD, derived
+   * from the token usage Claude reports in the transcript × model pricing.
+   * An estimate, not a billing figure. */
+  costUsd: number;
+  /** Optional per-session budget cap in USD. When set, the planet grows a
+   * budget ring and a breach raises a Decision Queue alert. */
+  budgetUsd?: number;
+  /** Goal this session's current mission rolls up to (Sprint M). Drives the
+   * constellation grouping in the galaxy view. */
+  currentGoalId?: string;
 }
 
 export type MissionStatus = 'active' | 'completed' | 'failed' | 'cancelled';
@@ -87,6 +97,22 @@ export interface Mission {
    * Populated server-side from post-tool events with is_error=true.
    * Surfaced in MissionView for failed missions. */
   errorSummary?: string;
+  /** Goal this mission rolls up to (Sprint M). */
+  goalId?: string;
+}
+
+/**
+ * A named objective that missions roll up to (Sprint M — "goal
+ * constellations"). Planets working toward the same goal are linked by
+ * constellation lines in the goal's color.
+ */
+export interface Goal {
+  id: string;
+  name: string;
+  description?: string;
+  /** Hex color used for the constellation lines + chips. */
+  color: string;
+  createdAt: number;
 }
 
 export type ToolCallStatus = 'running' | 'ok' | 'error';
@@ -113,7 +139,13 @@ export interface Project {
 export interface ScheduledTask {
   id: string;
   projectId: string;
+  /** Working directory the task launches in (Sprint M heartbeats). */
+  cwd: string;
+  /** Optional short label for the pulsing node in the galaxy. */
+  name?: string;
   prompt: string;
+  /** Cadence string. Sprint M supports simple intervals: "30m", "2h", "1d".
+   * (Full cron is future work — see Sprint M plan.) */
   cron: string;
   enabled: boolean;
   lastRunAt?: number;
