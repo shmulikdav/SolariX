@@ -1,0 +1,104 @@
+# Security model
+
+This document describes SolariX's trust model honestly — what it does and
+does **not** protect against — and how to turn on the optional hardening.
+
+## TL;DR
+
+By default, SolariX is a **visibility + human-in-the-loop oversight surface** on
+top of Claude Code's own permission system. Out of the box it does **not** add
+sandboxing or block tools — it observes and audits. As of this version you can
+opt into three hardening features:
+
+| Feature | Default | Turn on with |
+|---|---|---|
+| Enforcing approval gate (Deny actually blocks the tool) | **off** | `SOLIX_GATE_ENABLED=1` |
+| Sandbox/env isolation for SolariX-launched agents | **off** | `SOLIX_ENV_SCRUB=1` and/or `SOLIX_SANDBOX_CMD=…` |
+| Shared-secret auth on the local ingestion API | **on after `solix install`** | automatic (`~/.solix/token`) |
+
+## How approvals work
+
+Claude Code runs the agents. `solix install` wires hook scripts into
+`~/.claude/settings.json`; they POST events to the local server
+(`127.0.0.1:4242` by default), which the browser renders.
+
+**Default (observational).** The hooks are fire-and-forget (`curl --max-time 1
+… || true; exit 0`) so SolariX can never wedge or block your agent if the
+server is down. In this mode the Decision Queue's Approve/Deny updates SolariX's
+UI state and writes an audit row, but the actual allow/deny boundary is Claude
+Code's own `settings.json` allow/deny rules — **Deny in the browser does not
+block the tool.**
+
+**Enforcing gate (`SOLIX_GATE_ENABLED=1`).** The three sensitive PreToolUse
+hooks (Bash, file writes, Task) become a **synchronous gate**: they POST to
+`/events/permission` and *block* until you Approve/Deny in the browser, then
+return Claude Code a real `permissionDecision` of `allow`/`deny`. Now Deny
+actually blocks the tool, and Approve releases it.
+
+> Trade-off: with the gate on, **every** matched tool call waits for a human.
+> That's deliberate (it's a human-in-the-loop gate) but noisier than the default.
+> To gate only some tools, remove the hooks you don't want from
+> `~/.claude/settings.json` (e.g. leave `pre-tool-task` unmanaged to not gate
+> subagent spawns).
+
+### Fail policy
+
+When the gate is on but the server is unreachable or no one answers in time, the
+hook applies a configurable policy so you're never silently stuck:
+
+| Env var | Default | Meaning |
+|---|---|---|
+| `SOLIX_GATE_POLICY` | `fail-open` | `fail-open` → defer to Claude Code's normal flow (never wedges). `fail-closed` → deny on outage/timeout. |
+| `SOLIX_GATE_TIMEOUT` | `305` | Hook-side timeout (seconds); the curl `--max-time`. |
+| `SOLIX_GATE_TIMEOUT_MS` | `300000` | Server-side hold timeout (ms). Keep it shorter than `SOLIX_GATE_TIMEOUT` so the server's policy-aware answer wins. |
+| `SOLIX_HOST` / `SOLIX_PORT` | `127.0.0.1` / `4242` | Where the hook reaches the server. |
+
+The gate only works when the machine running `claude` can reach the SolariX
+server — i.e. same host, or a reachable `SOLIX_HOST`/`SOLIX_PORT`.
+
+## Sandboxing of launched agents
+
+This covers only sessions **SolariX launches itself** (the `+ Task` / pinned /
+heartbeat paths), not externally-run `claude`.
+
+- **Env isolation (`SOLIX_ENV_SCRUB=1`).** By default a launched agent inherits
+  SolariX's full environment. With scrubbing on, it gets only an allowlist
+  (`PATH`, `HOME`, locale, proxy vars, `SOLIX_*` gate vars) plus anything matching
+  `ANTHROPIC_*` / `CLAUDE_*` (so auth still works). Add extras with
+  `SOLIX_ENV_PASSTHROUGH=FOO,BAR`. This stops unrelated host secrets from leaking
+  into agent subprocesses. (Implied automatically when `SOLIX_SANDBOX_CMD` is set.)
+- **Sandbox wrapper (`SOLIX_SANDBOX_CMD=…`).** When set, SolariX wraps the spawned
+  `claude` with your command, e.g. `bwrap --bind "$PWD" "$PWD" --unshare-net …`
+  (Linux) or `sandbox-exec -f profile.sb` (macOS). SolariX provides the injection
+  point; you supply the jail. Unset → no wrapper (no behavior change).
+
+Full OS-level confinement is **out of scope** — this is env isolation plus an
+injection point, not a complete jail.
+
+## Local API authentication
+
+`solix install` generates a random token at `~/.solix/token` (mode `0600`).
+Hooks send it as `X-Solix-Token`, and the server requires it on the spoofable
+ingestion endpoints (`/events`, `/events/permission`). This stops an arbitrary
+local process from injecting fake events or answering gates. The browser never
+calls those endpoints (it uses the WebSocket), so the UI is unaffected. Installs
+that predate the token simply have no enforcement until you re-run
+`solix install`.
+
+CORS is restricted to the known localhost origins. The server binds to
+`127.0.0.1` only and is never internet-exposed.
+
+### Known limitations
+
+- The WebSocket itself is not yet token-gated (loopback-only + ingestion-token
+  is the v1 boundary).
+- The token is local; a `claude` session on a *different* host can't read it, so
+  the gate is effectively same-host for now.
+- The enforcing gate depends on Claude Code honoring the PreToolUse
+  `permissionDecision` contract.
+
+## Reporting
+
+Found an issue? Open a report at
+https://github.com/shmulikdav/SolariX/issues (or contact the maintainer
+privately for sensitive disclosures).

@@ -108,6 +108,81 @@ function ensureWorktree(opts: {
 
 const FAKE_CLAUDE = process.env.SOLIX_FAKE_CLAUDE === '1';
 
+/**
+ * Opt-in process isolation for SolariX-launched agents (not externally-run
+ * `claude`). Off by default — returns `undefined` so spawn inherits the full
+ * ambient env exactly as before. When `SOLIX_ENV_SCRUB=1` (implied when a
+ * sandbox wrapper is set), pass only an allowlisted env so unrelated host
+ * secrets don't leak into agent subprocesses. Auth + the gate vars are always
+ * preserved so `claude` and the agent's own hooks still work.
+ */
+function buildSpawnEnv(): NodeJS.ProcessEnv | undefined {
+  const scrub =
+    process.env.SOLIX_ENV_SCRUB === '1' ||
+    (process.env.SOLIX_SANDBOX_CMD ?? '').trim() !== '';
+  if (!scrub) return undefined;
+
+  const allow = [
+    'PATH',
+    'HOME',
+    'USER',
+    'LOGNAME',
+    'SHELL',
+    'LANG',
+    'LC_ALL',
+    'TERM',
+    'TMPDIR',
+    'TZ',
+    'HTTP_PROXY',
+    'HTTPS_PROXY',
+    'NO_PROXY',
+    'http_proxy',
+    'https_proxy',
+    'no_proxy',
+    'SOLIX_HOME',
+    'SOLIX_HOST',
+    'SOLIX_PORT',
+    'SOLIX_GATE_ENABLED',
+    'SOLIX_GATE_POLICY',
+    'SOLIX_GATE_TIMEOUT',
+  ];
+  const extra = (process.env.SOLIX_ENV_PASSTHROUGH ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const keep = new Set([...allow, ...extra]);
+
+  const env: NodeJS.ProcessEnv = {};
+  for (const k of keep) {
+    if (process.env[k] !== undefined) env[k] = process.env[k];
+  }
+  // Always pass through auth / Claude config so the agent can actually run.
+  for (const k of Object.keys(process.env)) {
+    if (k.startsWith('ANTHROPIC_') || k.startsWith('CLAUDE_')) {
+      env[k] = process.env[k];
+    }
+  }
+  return env;
+}
+
+/**
+ * Optional sandbox wrapper. When `SOLIX_SANDBOX_CMD` is set (e.g.
+ * `bwrap --bind <cwd> <cwd> --unshare-net` on Linux, or `sandbox-exec -f
+ * profile` on macOS), the spawned `claude` is wrapped by it. Unset → spawn
+ * directly (no behavior change). The user supplies the jail; SolariX only
+ * provides the injection point.
+ */
+function sandboxWrap(
+  file: string,
+  args: string[],
+): { file: string; args: string[] } {
+  const cmd = (process.env.SOLIX_SANDBOX_CMD ?? '').trim();
+  if (!cmd) return { file, args };
+  const parts = cmd.split(/\s+/);
+  const bin = parts[0]!;
+  return { file: bin, args: [...parts.slice(1), file, ...args] };
+}
+
 export class Launcher {
   private byPid = new Map<number, PinnedProcess>();
   private byAdvisor = new Map<string, PinnedProcess>();
@@ -140,15 +215,17 @@ export class Launcher {
     }
 
     try {
-      const child = spawn(
-        'claude',
-        ['--agent', advisor.id, '--no-tty'],
-        {
-          cwd,
-          stdio: ['pipe', 'pipe', 'pipe'],
-          detached: false,
-        },
-      );
+      const spawnSpec = sandboxWrap('claude', [
+        '--agent',
+        advisor.id,
+        '--no-tty',
+      ]);
+      const child = spawn(spawnSpec.file, spawnSpec.args, {
+        cwd,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        detached: false,
+        env: buildSpawnEnv(),
+      });
 
       const pid = child.pid;
       if (!pid) {
@@ -408,10 +485,12 @@ export class Launcher {
 
     let child: ChildProcess;
     try {
-      child = spawn('claude', args, {
+      const spawnSpec = sandboxWrap('claude', args);
+      child = spawn(spawnSpec.file, spawnSpec.args, {
         cwd: opts.cwd,
         stdio: ['ignore', 'pipe', 'pipe'],
         detached: false,
+        env: buildSpawnEnv(),
       });
     } catch (err) {
       this.broadcaster.broadcast({
@@ -536,10 +615,12 @@ export class Launcher {
   }): { ok: boolean; sessionId?: string } {
     let child: ChildProcess;
     try {
-      child = spawn('claude', opts.args, {
+      const spawnSpec = sandboxWrap('claude', opts.args);
+      child = spawn(spawnSpec.file, spawnSpec.args, {
         cwd: opts.cwd,
         stdio: ['ignore', 'pipe', 'pipe'],
         detached: false,
+        env: buildSpawnEnv(),
       });
     } catch (err) {
       this.broadcaster.broadcast({
