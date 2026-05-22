@@ -78,9 +78,41 @@ import type { GalaxyManifest } from '@solix/shared';
 export function createHttpApp(opts: {
   db: DB;
   router: EventRouter;
+  token?: string | null;
 }) {
   const app = new Hono();
-  app.use('*', cors());
+  // The UI is served same-origin from this same port, so it never needs CORS.
+  // Restrict cross-origin to the known localhost dev origins (Vite proxy on
+  // :4243) to close the localhost-CSRF vector that an open `cors()` left open.
+  app.use(
+    '*',
+    cors({
+      origin: [
+        'http://127.0.0.1:4242',
+        'http://localhost:4242',
+        'http://127.0.0.1:4243',
+        'http://localhost:4243',
+      ],
+    }),
+  );
+
+  // When a token is configured (written by `solix install`), require it on the
+  // event-ingestion surface — the only endpoints an arbitrary local process
+  // could otherwise spoof. The browser never calls these (it uses the WS), so
+  // this doesn't touch the UI. No token configured → no enforcement.
+  if (opts.token) {
+    const expected = opts.token;
+    const paths = ['/events', '/events/permission'];
+    for (const p of paths) {
+      app.use(p, async (c, next) => {
+        if (c.req.header('x-solix-token') !== expected) {
+          return c.json({ error: 'unauthorized' }, 401);
+        }
+        await next();
+      });
+    }
+  }
+
   const registry = new RegistryClient();
 
   app.get('/api/health', (c) =>
@@ -104,6 +136,28 @@ export function createHttpApp(opts: {
       opts.router.handleHookEvent(body);
     }
     return c.json({ ok: true });
+  });
+
+  // Blocking human-in-the-loop gate. A PreToolUse hook (when SOLIX_GATE_ENABLED)
+  // POSTs here and holds the connection until a human answers in the browser
+  // (or the server-side timeout fires). We answer { decision } so the hook can
+  // return Claude Code a real allow/deny. `timeout` lets the hook apply its own
+  // fail-open / fail-closed policy.
+  app.post('/events/permission', async (c) => {
+    let body: HookEvent | null = null;
+    try {
+      body = (await c.req.json()) as HookEvent;
+    } catch {
+      return c.json({ decision: 'allow' });
+    }
+    if (!body || !body.event) return c.json({ decision: 'allow' });
+    const result = await opts.router.requestPermission(body);
+    const decision = result.timedOut
+      ? 'timeout'
+      : result.approved
+        ? 'allow'
+        : 'deny';
+    return c.json({ decision });
   });
 
   app.get('/api/projects', (c) => c.json(listProjects(opts.db)));

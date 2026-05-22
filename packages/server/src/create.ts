@@ -1,4 +1,7 @@
 import { serve } from '@hono/node-server';
+import { readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { Broadcaster } from './broadcaster.js';
 import { getDb } from './db.js';
 import { createHttpApp } from './http.js';
@@ -48,7 +51,22 @@ export async function createSolixServer(
   const launcher = new Launcher(db, broadcaster);
   const transcripts = new TranscriptWatcherManager(db, broadcaster);
   const router = new EventRouter(db, broadcaster, launcher, transcripts);
-  const app = createHttpApp({ db, router });
+
+  // Shared secret written by `solix install`. When present, the server
+  // requires it on the spoofable /events ingestion surface. Absent (e.g. an
+  // older install that predates the token) → no enforcement, same as before.
+  const tokenPath = join(
+    process.env.SOLIX_HOME ?? join(homedir(), '.solix'),
+    'token',
+  );
+  let token: string | null = null;
+  try {
+    token = readFileSync(tokenPath, 'utf8').trim() || null;
+  } catch {
+    token = null;
+  }
+
+  const app = createHttpApp({ db, router, token });
 
   const server = serve({
     fetch: app.fetch,

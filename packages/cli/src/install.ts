@@ -9,6 +9,7 @@ import {
   writeFileSync,
   chmodSync,
 } from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import {
   CLAUDE_AGENTS_DIR,
@@ -19,6 +20,7 @@ import {
   HOOKS_DIR,
   SOLIX_HOME,
   SOLIX_SKILLS_DIR,
+  SOLIX_TOKEN_FILE,
   packagedAgentsDir,
   packagedHooksDir,
   packagedSkillsDir,
@@ -92,6 +94,23 @@ function mergeHooks(
     merged[evt] = [...userEntries, ...solixEntries];
   }
   return merged;
+}
+
+/**
+ * Generate a per-machine shared secret once and persist it (0600). Hooks read
+ * it and send it as X-Solix-Token; the server requires it on /events. Idempotent
+ * — keeps the existing token so re-running install (or --force) doesn't break
+ * already-wired hooks.
+ */
+function ensureToken(): void {
+  if (existsSync(SOLIX_TOKEN_FILE)) return;
+  const token = randomBytes(24).toString('hex');
+  writeFileSync(SOLIX_TOKEN_FILE, token, { mode: 0o600 });
+  try {
+    chmodSync(SOLIX_TOKEN_FILE, 0o600);
+  } catch {
+    /* best effort on platforms without POSIX modes */
+  }
 }
 
 function installHookScripts(): void {
@@ -174,6 +193,8 @@ export function install(opts: InstallOptions = {}): void {
   } else if (opts.force && existsSync(CLAUDE_SETTINGS)) {
     copyFileSync(CLAUDE_SETTINGS, CLAUDE_BACKUP);
   }
+
+  ensureToken();
 
   installHookScripts();
   console.log(`[solix] installed hook scripts in ${HOOKS_DIR}`);

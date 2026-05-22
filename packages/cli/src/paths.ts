@@ -6,6 +6,9 @@ import { fileURLToPath } from 'node:url';
 export const SOLIX_HOME = process.env.SOLIX_HOME ?? join(homedir(), '.solix');
 export const HOOKS_DIR = join(SOLIX_HOME, 'hooks');
 export const SOLIX_SKILLS_DIR = join(SOLIX_HOME, 'skills');
+// Shared secret written at install time; hooks send it as X-Solix-Token and
+// the server requires it on the /events ingestion surface.
+export const SOLIX_TOKEN_FILE = join(SOLIX_HOME, 'token');
 export const CLAUDE_DIR = join(homedir(), '.claude');
 export const CLAUDE_SETTINGS = join(CLAUDE_DIR, 'settings.json');
 export const CLAUDE_BACKUP = join(CLAUDE_DIR, 'settings.solix.backup.json');
