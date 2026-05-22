@@ -44,6 +44,11 @@ interface PendingPermission {
   tool: string;
   args: Record<string, unknown>;
   createdAt: number;
+  // Set only for *blocking* gate requests (the synchronous PreToolUse path).
+  // resolvePermission calls this to release the held HTTP request; the timer
+  // is the server-side backstop when no human answers.
+  resolve?: (approved: boolean) => void;
+  timer?: ReturnType<typeof setTimeout>;
 }
 
 export class EventRouter {
@@ -389,6 +394,117 @@ export class EventRouter {
     });
   }
 
+  /**
+   * Synchronous human-in-the-loop gate for the blocking PreToolUse path.
+   * Records the tool call (so the comet/timeline visuals still fire — the gate
+   * hook no longer POSTs to /events), broadcasts a permission_request, and
+   * returns a promise that resolves when a human answers via `permission_response`
+   * (reused unchanged) or when the server-side timeout fires.
+   */
+  requestPermission(
+    event: HookEvent,
+  ): Promise<{ approved: boolean; timedOut: boolean }> {
+    const sessionId = this.extractSessionId(event);
+    const p = event.payload as Record<string, unknown>;
+    const { tool, args } = this.describeGatedTool(event.event, p);
+
+    const session = getSession(this.db, sessionId);
+    if (session) {
+      const toolCall = recordToolCall(this.db, {
+        sessionId,
+        missionId: session.currentMissionId,
+        tool,
+        args,
+      });
+      if (
+        event.event === 'pre_tool_file' &&
+        session.currentMissionId &&
+        typeof args.file_path === 'string' &&
+        args.file_path
+      ) {
+        addTouchedFile(this.db, session.currentMissionId, args.file_path);
+      }
+      this.broadcaster.broadcast({ type: 'tool_call', toolCall });
+    }
+
+    const requestId = nanoid();
+    const timeoutMs = Number(process.env.SOLIX_GATE_TIMEOUT_MS ?? 300_000);
+
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        const pending = this.permissions.get(requestId);
+        if (!pending) return;
+        this.permissions.delete(requestId);
+        const s = setSessionStatus(this.db, sessionId, 'active');
+        if (s) this.broadcaster.broadcast({ type: 'session_upsert', session: s });
+        resolve({ approved: false, timedOut: true });
+      }, timeoutMs);
+
+      this.permissions.set(requestId, {
+        requestId,
+        sessionId,
+        tool,
+        args,
+        createdAt: Date.now(),
+        resolve: (approved: boolean) => resolve({ approved, timedOut: false }),
+        timer,
+      });
+
+      const updated = setSessionStatus(
+        this.db,
+        sessionId,
+        'awaiting_permission',
+      );
+      if (updated) {
+        this.broadcaster.broadcast({ type: 'session_upsert', session: updated });
+      }
+      this.broadcaster.broadcast({
+        type: 'permission_request',
+        sessionId,
+        tool,
+        args,
+        requestId,
+      });
+      this.broadcaster.broadcast({
+        type: 'toast',
+        level: 'warn',
+        message: `Approval requested: ${tool}`,
+      });
+    });
+  }
+
+  private describeGatedTool(
+    eventName: HookEvent['event'],
+    p: Record<string, unknown>,
+  ): { tool: string; args: Record<string, unknown> } {
+    const toolInput = (p.tool_input as Record<string, unknown>) ?? {};
+    if (eventName === 'pre_tool_bash') {
+      const command =
+        typeof p.command === 'string'
+          ? p.command
+          : typeof toolInput.command === 'string'
+            ? toolInput.command
+            : '';
+      return { tool: 'Bash', args: { command } };
+    }
+    if (eventName === 'pre_tool_file') {
+      const tool = typeof p.tool_name === 'string' ? p.tool_name : 'File';
+      const filePath =
+        typeof p.file_path === 'string'
+          ? p.file_path
+          : typeof toolInput.file_path === 'string'
+            ? toolInput.file_path
+            : '';
+      return { tool, args: { file_path: filePath } };
+    }
+    if (eventName === 'pre_tool_task') {
+      const tool = typeof p.tool_name === 'string' ? p.tool_name : 'Task';
+      return { tool, args: toolInput };
+    }
+    const tool = typeof p.tool_name === 'string' ? p.tool_name : 'tool';
+    return { tool, args: toolInput };
+  }
+
   invokeAdvisor(
     advisorId: string,
     targetSessionId?: string,
@@ -491,6 +607,10 @@ export class EventRouter {
     const pending = this.permissions.get(requestId);
     if (!pending) return false;
     this.permissions.delete(requestId);
+    // Blocking gate request: release the held HTTP response so the hook can
+    // return Claude Code the decision, and cancel the server-side timeout.
+    if (pending.timer) clearTimeout(pending.timer);
+    if (pending.resolve) pending.resolve(approved);
     const status = approved ? 'active' : 'idle';
     const session = setSessionStatus(this.db, pending.sessionId, status);
     if (session)
