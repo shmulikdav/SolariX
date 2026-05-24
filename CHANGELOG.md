@@ -5,6 +5,45 @@ All notable changes to Solix (`@shmulikdav/solix`) are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] — 2026-05-24
+
+**Security hardening — enforcing approvals, opt-in sandbox, and local-API auth.**
+
+Until now Solix was an *observational* oversight layer: hooks were
+fire-and-forget, so clicking **Deny** updated the UI but never actually stopped
+the tool. This release makes approvals able to truly block — opt-in, and
+fail-open by default so a Solix outage never wedges an agent. All three features
+below are additive and off (or transparent) unless you turn them on.
+
+### Added
+- **Enforcing approval gate** (opt-in via `SOLIX_GATE_ENABLED=1`). The sensitive
+  PreToolUse hooks (Bash, file writes, Task) become a **synchronous gate**: they
+  POST to the new blocking `/events/permission` endpoint and wait until you
+  Approve/Deny in the browser, then return Claude Code a real
+  `permissionDecision`. **Deny** now blocks the tool; **Approve** releases it.
+  Configurable fail policy via `SOLIX_GATE_POLICY` (`fail-open` default /
+  `fail-closed`), `SOLIX_GATE_TIMEOUT` (hook, default 305s), and
+  `SOLIX_GATE_TIMEOUT_MS` (server, default 300000).
+- **Opt-in sandbox for Solix-launched agents.** `SOLIX_ENV_SCRUB=1` passes only
+  an allowlisted environment (plus `ANTHROPIC_*` / `CLAUDE_*` and an opt-in
+  `SOLIX_ENV_PASSTHROUGH`) so unrelated host secrets don't leak into agent
+  subprocesses; `SOLIX_SANDBOX_CMD` wraps the spawned `claude` with a
+  user-supplied jail (e.g. `bwrap …`, `sandbox-exec …`). Unset → no change.
+- **Local-API authentication.** `solix install` writes a per-machine secret to
+  `~/.solix/token` (mode 0600); hooks send it as `X-Solix-Token` and the server
+  requires it on the spoofable `/events` ingestion surface. CORS is now
+  restricted to known localhost origins (was wide open).
+- **`SECURITY.md`** documenting the trust model and every env var, and a
+  runnable **zero-to-one demo** (`scripts/demo-zero-to-one.sh`,
+  `pnpm demo:zero-to-one`) with the `ZERO-TO-ONE.md` checklist.
+
+### Changed
+- `router` gains `requestPermission()` (the blocking gate path) while
+  `resolvePermission()` now releases held gate requests; the observational
+  `Notification` path is unchanged, so both coexist.
+- Installs that predate the token simply run without enforcement until you
+  re-run `solix install`.
+
 ## [1.7.0] — 2026-05-21
 
 **Sprint N — Crew roster: discover & enable opt-in advisors, plus four new advisor types.**
@@ -85,5 +124,6 @@ For releases before this changelog was introduced, see the
 [Git history](https://github.com/shmulikdav/SolariX/commits/main) and
 [GitHub releases](https://github.com/shmulikdav/SolariX/releases).
 
+[1.8.0]: https://github.com/shmulikdav/SolariX/releases/tag/v1.8.0
 [1.7.0]: https://github.com/shmulikdav/SolariX/releases/tag/v1.7.0
 [1.6.0]: https://github.com/shmulikdav/SolariX/releases/tag/v1.6.0
