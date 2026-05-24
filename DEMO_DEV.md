@@ -22,8 +22,8 @@ need to evaluate, run, and extend it.
 ## Quick start
 
 ```sh
-git clone https://github.com/shmulikdav/SolariX.git
-cd SolariX
+git clone https://github.com/shmulikdav/Solix.git
+cd Solix
 git checkout claude/solix-command-center-z1y95
 pnpm install
 pnpm --filter @solix/web build

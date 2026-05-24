@@ -59,13 +59,13 @@ If either prints an error, ping me before continuing.
 We're going to copy Solix from GitHub onto your machine. In Terminal:
 
 ```sh
-git clone https://github.com/shmulikdav/SolariX.git
-cd SolariX
+git clone https://github.com/shmulikdav/Solix.git
+cd Solix
 git checkout claude/solix-command-center-z1y95
 ```
 
 **What you should see:** a few lines of "Cloning..." text, then your
-prompt comes back. You're now inside the SolariX folder.
+prompt comes back. You're now inside the Solix folder.
 
 > If you get "command not found: git", install Git from
 > [git-scm.com/downloads](https://git-scm.com/downloads) first.
@@ -156,7 +156,7 @@ busy.
 In the new window:
 
 ```sh
-cd ~/SolariX
+cd ~/Solix
 pnpm --filter @shmulikdav/solix exec tsx src/index.ts demo
 ```
 
@@ -230,7 +230,7 @@ fun. If you don't, skip to Step 10.
 **Open a third Terminal window** (Cmd+N), then:
 
 ```sh
-cd ~/SolariX
+cd ~/Solix
 pnpm --filter @shmulikdav/solix exec tsx src/index.ts install
 ```
 
@@ -276,7 +276,7 @@ your advisors and missions will still be there.
 To start it back up later, just open Terminal, then:
 
 ```sh
-cd ~/SolariX
+cd ~/Solix
 pnpm --filter @shmulikdav/solix exec tsx src/index.ts start
 ```
 

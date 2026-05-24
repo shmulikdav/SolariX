@@ -30,7 +30,7 @@ jobs:
         run: |
           if [ -z "${NPM_TOKEN}" ]; then
             echo "::error::NPM_TOKEN repository secret is empty or not set."
-            echo "::error::Add it at: https://github.com/shmulikdav/SolariX/settings/secrets/actions"
+            echo "::error::Add it at: https://github.com/shmulikdav/Solix/settings/secrets/actions"
             echo "::error::It must be a Repository secret (not an Environment secret)."
             exit 1
           fi

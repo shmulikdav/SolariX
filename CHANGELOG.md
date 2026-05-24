@@ -121,9 +121,9 @@ tasks, and goal grouping.
   sessions; tasks launched from Solix round-trip into `claude agents`.
 
 For releases before this changelog was introduced, see the
-[Git history](https://github.com/shmulikdav/SolariX/commits/main) and
-[GitHub releases](https://github.com/shmulikdav/SolariX/releases).
+[Git history](https://github.com/shmulikdav/Solix/commits/main) and
+[GitHub releases](https://github.com/shmulikdav/Solix/releases).
 
-[1.8.0]: https://github.com/shmulikdav/SolariX/releases/tag/v1.8.0
-[1.7.0]: https://github.com/shmulikdav/SolariX/releases/tag/v1.7.0
-[1.6.0]: https://github.com/shmulikdav/SolariX/releases/tag/v1.6.0
+[1.8.0]: https://github.com/shmulikdav/Solix/releases/tag/v1.8.0
+[1.7.0]: https://github.com/shmulikdav/Solix/releases/tag/v1.7.0
+[1.6.0]: https://github.com/shmulikdav/Solix/releases/tag/v1.6.0
