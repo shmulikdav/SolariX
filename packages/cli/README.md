@@ -10,7 +10,7 @@ permission without leaving the browser.
 
 [![npm version](https://img.shields.io/npm/v/@shmulikdav/solix.svg)](https://www.npmjs.com/package/@shmulikdav/solix)
 [![npm downloads](https://img.shields.io/npm/dm/@shmulikdav/solix.svg)](https://www.npmjs.com/package/@shmulikdav/solix)
-[![license](https://img.shields.io/npm/l/@shmulikdav/solix.svg)](https://github.com/shmulikdav/solarix/blob/main/LICENSE)
+[![license](https://img.shields.io/npm/l/@shmulikdav/solix.svg)](https://github.com/shmulikdav/Solix/blob/main/LICENSE)
 [![node](https://img.shields.io/node/v/@shmulikdav/solix.svg)](https://nodejs.org)
 
 ## Install
@@ -70,7 +70,7 @@ The full docs live in the GitHub repo:
 - **DEMO walkthroughs** — for non-technical, PM, and developer
   audiences
 
-→ <https://github.com/shmulikdav/solarix>
+→ <https://github.com/shmulikdav/Solix>
 
 ## License
 

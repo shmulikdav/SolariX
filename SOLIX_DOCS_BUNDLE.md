@@ -207,7 +207,7 @@ once.
 npm i -g @shmulikdav/solix              # if published
 # or, in a monorepo checkout:
 pnpm install && pnpm -r build
-# alias solix='node /path/to/SolariX/packages/cli/dist/index.js'
+# alias solix='node /path/to/Solix/packages/cli/dist/index.js'
 
 # 2. Verify
 which solix
@@ -596,7 +596,7 @@ before declaring V1 ready.
 | `claude` CLI | Optional (live launching only) |
 
 ```sh
-git clone <repo> && cd SolariX
+git clone <repo> && cd Solix
 pnpm install
 pnpm -r build
 # T1: node packages/server/dist/cli.js start

@@ -21,12 +21,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/shmulikdav/SolariX.git",
+    "url": "git+https://github.com/shmulikdav/Solix.git",
     "directory": "packages/cli"
   },
-  "homepage": "https://github.com/shmulikdav/SolariX#readme",
+  "homepage": "https://github.com/shmulikdav/Solix#readme",
   "bugs": {
-    "url": "https://github.com/shmulikdav/SolariX/issues"
+    "url": "https://github.com/shmulikdav/Solix/issues"
   },
   "keywords": [
     "claude-code",

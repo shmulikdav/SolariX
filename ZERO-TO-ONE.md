@@ -1,4 +1,4 @@
-# SolariX — zero to one
+# Solix — zero to one
 
 A from-scratch test that proves the headline capability: **real, blocking
 human-in-the-loop approvals over a live Claude Code session**, plus the
@@ -71,7 +71,7 @@ the server alive until you press Ctrl+C.
 
 5. **Prove it never wedges you (fail-open):** in the claude terminal run
    `unset SOLIX_GATE_ENABLED` and repeat step 3. The same prompt now proceeds
-   without blocking — SolariX falls back to pure observability. (Same result if
+   without blocking — Solix falls back to pure observability. (Same result if
    the server is down.)
 
 ## Stopping
