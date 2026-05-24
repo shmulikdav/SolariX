@@ -1,11 +1,11 @@
 # Security model
 
-This document describes SolariX's trust model honestly — what it does and
+This document describes Solix's trust model honestly — what it does and
 does **not** protect against — and how to turn on the optional hardening.
 
 ## TL;DR
 
-By default, SolariX is a **visibility + human-in-the-loop oversight surface** on
+By default, Solix is a **visibility + human-in-the-loop oversight surface** on
 top of Claude Code's own permission system. Out of the box it does **not** add
 sandboxing or block tools — it observes and audits. As of this version you can
 opt into three hardening features:
@@ -13,7 +13,7 @@ opt into three hardening features:
 | Feature | Default | Turn on with |
 |---|---|---|
 | Enforcing approval gate (Deny actually blocks the tool) | **off** | `SOLIX_GATE_ENABLED=1` |
-| Sandbox/env isolation for SolariX-launched agents | **off** | `SOLIX_ENV_SCRUB=1` and/or `SOLIX_SANDBOX_CMD=…` |
+| Sandbox/env isolation for Solix-launched agents | **off** | `SOLIX_ENV_SCRUB=1` and/or `SOLIX_SANDBOX_CMD=…` |
 | Shared-secret auth on the local ingestion API | **on after `solix install`** | automatic (`~/.solix/token`) |
 
 ## How approvals work
@@ -23,8 +23,8 @@ Claude Code runs the agents. `solix install` wires hook scripts into
 (`127.0.0.1:4242` by default), which the browser renders.
 
 **Default (observational).** The hooks are fire-and-forget (`curl --max-time 1
-… || true; exit 0`) so SolariX can never wedge or block your agent if the
-server is down. In this mode the Decision Queue's Approve/Deny updates SolariX's
+… || true; exit 0`) so Solix can never wedge or block your agent if the
+server is down. In this mode the Decision Queue's Approve/Deny updates Solix's
 UI state and writes an audit row, but the actual allow/deny boundary is Claude
 Code's own `settings.json` allow/deny rules — **Deny in the browser does not
 block the tool.**
@@ -53,23 +53,23 @@ hook applies a configurable policy so you're never silently stuck:
 | `SOLIX_GATE_TIMEOUT_MS` | `300000` | Server-side hold timeout (ms). Keep it shorter than `SOLIX_GATE_TIMEOUT` so the server's policy-aware answer wins. |
 | `SOLIX_HOST` / `SOLIX_PORT` | `127.0.0.1` / `4242` | Where the hook reaches the server. |
 
-The gate only works when the machine running `claude` can reach the SolariX
+The gate only works when the machine running `claude` can reach the Solix
 server — i.e. same host, or a reachable `SOLIX_HOST`/`SOLIX_PORT`.
 
 ## Sandboxing of launched agents
 
-This covers only sessions **SolariX launches itself** (the `+ Task` / pinned /
+This covers only sessions **Solix launches itself** (the `+ Task` / pinned /
 heartbeat paths), not externally-run `claude`.
 
 - **Env isolation (`SOLIX_ENV_SCRUB=1`).** By default a launched agent inherits
-  SolariX's full environment. With scrubbing on, it gets only an allowlist
+  Solix's full environment. With scrubbing on, it gets only an allowlist
   (`PATH`, `HOME`, locale, proxy vars, `SOLIX_*` gate vars) plus anything matching
   `ANTHROPIC_*` / `CLAUDE_*` (so auth still works). Add extras with
   `SOLIX_ENV_PASSTHROUGH=FOO,BAR`. This stops unrelated host secrets from leaking
   into agent subprocesses. (Implied automatically when `SOLIX_SANDBOX_CMD` is set.)
-- **Sandbox wrapper (`SOLIX_SANDBOX_CMD=…`).** When set, SolariX wraps the spawned
+- **Sandbox wrapper (`SOLIX_SANDBOX_CMD=…`).** When set, Solix wraps the spawned
   `claude` with your command, e.g. `bwrap --bind "$PWD" "$PWD" --unshare-net …`
-  (Linux) or `sandbox-exec -f profile.sb` (macOS). SolariX provides the injection
+  (Linux) or `sandbox-exec -f profile.sb` (macOS). Solix provides the injection
   point; you supply the jail. Unset → no wrapper (no behavior change).
 
 Full OS-level confinement is **out of scope** — this is env isolation plus an
@@ -100,5 +100,5 @@ CORS is restricted to the known localhost origins. The server binds to
 ## Reporting
 
 Found an issue? Open a report at
-https://github.com/shmulikdav/SolariX/issues (or contact the maintainer
+https://github.com/shmulikdav/Solix/issues (or contact the maintainer
 privately for sensitive disclosures).

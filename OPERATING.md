@@ -43,7 +43,7 @@ boot it — that's expected.
 
 > **From source instead?** Clone the repo, `pnpm install && pnpm -r
 > build`, then either add `packages/cli/dist/index.js` to PATH or
-> `alias solix='node /path/to/SolariX/packages/cli/dist/index.js'`.
+> `alias solix='node /path/to/Solix/packages/cli/dist/index.js'`.
 
 > **Native dep note:** Solix uses `better-sqlite3`. Most users get a
 > prebuilt binary on `npm install`. If yours doesn't, npm compiles

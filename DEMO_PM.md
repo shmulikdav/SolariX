@@ -69,8 +69,8 @@ If either errors, message me — I'll help.
 ## Step 1 — Get Solix
 
 ```sh
-git clone https://github.com/shmulikdav/SolariX.git
-cd SolariX
+git clone https://github.com/shmulikdav/Solix.git
+cd Solix
 git checkout claude/solix-command-center-z1y95
 ```
 
@@ -161,7 +161,7 @@ once.
 Open a **second Terminal** (in Terminal: **Cmd+N**), then:
 
 ```sh
-cd ~/SolariX
+cd ~/Solix
 pnpm --filter @shmulikdav/solix exec tsx src/index.ts demo
 ```
 
@@ -299,7 +299,7 @@ If you have **Claude Code** installed (or want to install it now from
 Open a **third Terminal** (**Cmd+N**):
 
 ```sh
-cd ~/SolariX
+cd ~/Solix
 pnpm --filter @shmulikdav/solix exec tsx src/index.ts install
 ```
 
