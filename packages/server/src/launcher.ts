@@ -109,7 +109,7 @@ function ensureWorktree(opts: {
 const FAKE_CLAUDE = process.env.SOLIX_FAKE_CLAUDE === '1';
 
 /**
- * Opt-in process isolation for SolariX-launched agents (not externally-run
+ * Opt-in process isolation for Solix-launched agents (not externally-run
  * `claude`). Off by default — returns `undefined` so spawn inherits the full
  * ambient env exactly as before. When `SOLIX_ENV_SCRUB=1` (implied when a
  * sandbox wrapper is set), pass only an allowlisted env so unrelated host
@@ -169,7 +169,7 @@ function buildSpawnEnv(): NodeJS.ProcessEnv | undefined {
  * Optional sandbox wrapper. When `SOLIX_SANDBOX_CMD` is set (e.g.
  * `bwrap --bind <cwd> <cwd> --unshare-net` on Linux, or `sandbox-exec -f
  * profile` on macOS), the spawned `claude` is wrapped by it. Unset → spawn
- * directly (no behavior change). The user supplies the jail; SolariX only
+ * directly (no behavior change). The user supplies the jail; Solix only
  * provides the injection point.
  */
 function sandboxWrap(

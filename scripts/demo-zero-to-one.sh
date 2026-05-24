@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# SolariX — zero to one demo / test plan.
+# Solix — zero to one demo / test plan.
 #
 # Takes a fresh clone to a running command center and sets the stage to
 # demonstrate the headline capability: real, blocking human-in-the-loop
@@ -39,7 +39,7 @@ cleanup() {
   local code=$?
   if [ -n "$SERVER_PID" ] && kill -0 "$SERVER_PID" 2>/dev/null; then
     printf '\n'
-    c_bold "Stopping SolariX server (pid ${SERVER_PID})…"
+    c_bold "Stopping Solix server (pid ${SERVER_PID})…"
     kill "$SERVER_PID" 2>/dev/null || true
     wait "$SERVER_PID" 2>/dev/null || true
   fi
@@ -158,12 +158,12 @@ fi
 phase "Phase 6 — Your turn: the live approval gate (the payoff)"
 
 WORK="$(mktemp -d -t solix-demo-repo.XXXXXX)"
-( cd "$WORK" && git init -q && printf '# Demo repo for SolariX gate test\n' > README.md && git add -A && git commit -qm "init" )
+( cd "$WORK" && git init -q && printf '# Demo repo for Solix gate test\n' > README.md && git add -A && git commit -qm "init" )
 c_ok "created a throwaway git repo for the demo session: ${WORK}"
 
 cat <<EOF
 
-$(c_bold "SolariX is running. Now drive a REAL claude session through the gate:")
+$(c_bold "Solix is running. Now drive a REAL claude session through the gate:")
 
   1) Open this in your browser:
          ${BASE}
@@ -193,7 +193,7 @@ $(c_bold "SolariX is running. Now drive a REAL claude session through the gate:"
   5) Prove it never wedges you (fail-open). Stop this script (Ctrl+C) or in the
      claude terminal run:  unset SOLIX_GATE_ENABLED
      …then repeat step 3: the same prompt now proceeds without blocking —
-     SolariX falls back to pure observability.
+     Solix falls back to pure observability.
 
 See ZERO-TO-ONE.md for the full checklist and SECURITY.md for the trust model
 and every gate env var (SOLIX_GATE_POLICY, SOLIX_GATE_TIMEOUT, …).
