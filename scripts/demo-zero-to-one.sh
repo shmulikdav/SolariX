@@ -18,6 +18,9 @@ set -euo pipefail
 PORT="${SOLIX_PORT:-4242}"
 HOST="127.0.0.1"
 BASE="http://${HOST}:${PORT}"
+# Make sure every `solix` subcommand (demo, goal, schedule, …) talks to the
+# same server we're starting — they read SOLIX_PORT as a fallback.
+export SOLIX_PORT="$PORT"
 
 # Resolve repo root from this script's location (scripts/ lives at the root).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -107,7 +110,7 @@ $CLI doctor || c_warn "doctor reported warnings (continuing)"
 # ──────────────────────────────────────────────────────────────────────────
 phase "Phase 4 — Start the server (background, gate-ready)"
 SERVER_LOG="$(mktemp -t solix-server.XXXXXX.log)"
-SOLIX_GATE_TIMEOUT_MS=300000 $CLI start --no-open >"$SERVER_LOG" 2>&1 &
+SOLIX_GATE_TIMEOUT_MS=300000 $CLI start --no-open --port "$PORT" >"$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 c_ok "server starting (pid ${SERVER_PID}); logs: ${SERVER_LOG}"
 
@@ -129,7 +132,7 @@ fi
 # ──────────────────────────────────────────────────────────────────────────
 phase "Phase 5 — Light up the galaxy + auth sanity check"
 
-$CLI demo || c_warn "demo seeding reported an issue (continuing)"
+$CLI demo --port "$PORT" || c_warn "demo seeding reported an issue (continuing)"
 c_ok "seeded synthetic planets, an over-budget flare, and a permission request"
 $CLI goal add "Zero to One" >/dev/null 2>&1 && c_ok 'created goal "Zero to One"' || true
 
