@@ -1,8 +1,7 @@
-import { Suspense, useEffect, useRef, type ComponentRef } from 'react';
+import { Suspense, useEffect, useMemo, useRef, type ComponentRef } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, Stars, useTexture } from '@react-three/drei';
 import { EffectComposer, Bloom } from '@react-three/postprocessing';
-import { ACESFilmicToneMapping } from 'three';
 import {
   selectAdvisorPlanets,
   selectPlanets,
@@ -15,13 +14,17 @@ import { CometLayer } from './Comets.js';
 import { AdvisorRing } from './AdvisorRing.js';
 import { AsteroidBelt } from './AsteroidBelt.js';
 import { ProjectLabels } from './ProjectLabels.js';
-import { Nebula } from './Nebula.js';
-import { ShootingStars } from './ShootingStars.js';
-import { ClickRipple } from './ClickRipple.js';
-import { Heartbeats } from './Heartbeats.js';
-import { ConstellationLines } from './ConstellationLines.js';
-import { attachControls, detachControls } from './cameraControls.js';
-import { BackSide, type Mesh } from 'three';
+import {
+  attachControls,
+  detachControls,
+  setFramePositionsProvider,
+} from './cameraControls.js';
+import {
+  LayoutContext,
+  computeGalaxyLayout,
+  uniqueRingRadii,
+} from './layout.js';
+import { BackSide, Vector3, type Mesh } from 'three';
 
 const MILKY_WAY_URL = '/textures/milky_way.jpg';
 
@@ -32,23 +35,36 @@ export function Scene(): JSX.Element {
   const selectAdvisor = useSolixStore((s) => s.selectAdvisor);
   const selectSkill = useSolixStore((s) => s.selectSkill);
 
-  const allOuter = [...planets, ...advisorPlanets];
-  const orbitSlots = Array.from(
-    new Set(allOuter.map((p) => p.orbitSlot)),
-  ).sort((a, b) => a - b);
+  const allOuter = useMemo(
+    () => [...planets, ...advisorPlanets],
+    [planets, advisorPlanets],
+  );
+  const layout = useMemo(() => computeGalaxyLayout(allOuter), [allOuter]);
+  const ringRadii = useMemo(() => uniqueRingRadii(layout), [layout]);
+
+  // Register a positions-provider so the F-key (frameAll) can fit all current
+  // planets into the viewport. Recomputes lazily — only on demand.
+  useEffect(() => {
+    setFramePositionsProvider(() => {
+      const out: Vector3[] = [];
+      for (const entry of layout.values()) {
+        out.push(
+          new Vector3(
+            Math.cos(entry.angle) * entry.radius,
+            0,
+            Math.sin(entry.angle) * entry.radius,
+          ),
+        );
+      }
+      return out;
+    });
+    return () => setFramePositionsProvider(null);
+  }, [layout]);
 
   return (
     <Canvas
       shadows={false}
-      // Sprint K.5b: pulled camera back further (was [10,7,22]) so the
-      // sun stops dominating the frame and planets get breathing room.
-      camera={{ position: [16, 9, 32], fov: 55, near: 0.1, far: 600 }}
-      gl={{
-        toneMapping: ACESFilmicToneMapping,
-        // Slightly lower exposure — overall scene reads more like
-        // deep space, less like a stage lit by a spotlight.
-        toneMappingExposure: 0.85,
-      }}
+      camera={{ position: [0, 14, 22], fov: 55, near: 0.1, far: 600 }}
       onPointerMissed={() => {
         selectSession(null);
         selectAdvisor(null);
@@ -56,13 +72,8 @@ export function Scene(): JSX.Element {
       }}
     >
       <color attach="background" args={['#05060c']} />
-      {/*
-        Sprint K.5b: fog far-clip pushed out (was 100→320, now 140→500)
-        so the deep-distance nebula sprites aren't muddied by haze. The
-        nebula carries the background color now, not the fog tint.
-      */}
-      <fog attach="fog" args={['#0a0d1f', 140, 500]} />
-      <ambientLight intensity={0.12} />
+      <fog attach="fog" args={['#080a14', 60, 280]} />
+      <ambientLight intensity={0.18} />
       {/*
         Real Milky Way panorama as a giant inside-out sphere skybox.
         Falls back gracefully (Suspense boundary) to the procedural
@@ -71,25 +82,20 @@ export function Scene(): JSX.Element {
       <Suspense fallback={<Stars radius={180} depth={80} count={6000} factor={4} saturation={0.4} fade speed={0} />}>
         <MilkyWaySkybox />
       </Suspense>
-      {/* Sprint K.5: nebula color in the deep distance so the void
-          isn't flat-black; shooting stars for atmospheric motion. */}
-      <Nebula />
       <Starfield />
-      <ShootingStars />
       <Sun />
       <AdvisorRing />
       <AsteroidBelt />
-      {orbitSlots.map((slot) => (
-        <PlanetOrbitRing key={slot} orbitSlot={slot} />
-      ))}
-      {allOuter.map((p) => (
-        <Planet key={p.id} session={p} />
-      ))}
-      <CometLayer />
-      <ClickRipple />
-      <ConstellationLines />
-      <Heartbeats />
-      <ProjectLabels />
+      <LayoutContext.Provider value={layout}>
+        {ringRadii.map((r) => (
+          <PlanetOrbitRing key={r} radius={r} />
+        ))}
+        {allOuter.map((p) => (
+          <Planet key={p.id} session={p} />
+        ))}
+        <CometLayer />
+        <ProjectLabels />
+      </LayoutContext.Provider>
       <ControlsBridge />
       {/*
         Bloom makes the textured sun, active planet emissives, and red /
@@ -97,18 +103,11 @@ export function Scene(): JSX.Element {
         (the sun) without lighting up regular UI text overlays via <Html>.
       */}
       <EffectComposer multisampling={4}>
-        {/*
-          Sprint K.5b: pulled bloom way back. Threshold up (only the
-          sun & truly hot emissives bloom), intensity down (less
-          sun-glare on the rest of the scene), radius tighter so the
-          glow doesn't bleed across half the screen.
-        */}
         <Bloom
-          intensity={0.85}
-          luminanceThreshold={0.7}
+          intensity={1.1}
+          luminanceThreshold={0.55}
           luminanceSmoothing={0.2}
           mipmapBlur
-          radius={0.55}
         />
       </EffectComposer>
     </Canvas>

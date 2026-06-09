@@ -1,24 +1,27 @@
-import { useMemo } from 'react';
+import { useContext, useMemo } from 'react';
 import { Html } from '@react-three/drei';
 import {
   selectAdvisorPlanets,
   selectPlanets,
   useSolixStore,
 } from '../store/index.js';
-import { planetOrbitRadius, planetPhase } from './orbits.js';
+import { hashAngle } from './orbits.js';
+import { LayoutContext } from './layout.js';
 
 /**
  * Floating project name labels at each project's orbital cluster.
  *
- * planetPhase() now hashes the projectId so all of a project's planets
- * cluster around one base angle. This component drops a single label
- * near that anchor — one per project — so multi-project setups read as
- * separate neighborhoods.
+ * Anchors each label at the project's base angle (a stable hash of
+ * projectId) on the outermost ring any of its planets occupy. With the
+ * compressed layout, this is usually one of rings 1–5 unless every
+ * session in the project is attention-grabbing (active / awaiting),
+ * in which case the label hugs the inner ring.
  */
 export function ProjectLabels(): JSX.Element {
   const projects = useSolixStore((s) => s.projects);
   const planets = useSolixStore(selectPlanets);
   const advisorPlanets = useSolixStore(selectAdvisorPlanets);
+  const layout = useContext(LayoutContext);
 
   const groups = useMemo(() => {
     const all = [...planets, ...advisorPlanets];
@@ -41,14 +44,16 @@ export function ProjectLabels(): JSX.Element {
   return (
     <>
       {groups.map(({ project, sessions }) => {
-        // Anchor the label at the project's hashed base angle, on the
-        // outermost orbit slot used by this project.
-        const repSlot = sessions.reduce(
-          (m, s) => Math.max(m, s.orbitSlot),
-          0,
-        );
-        const angle = planetPhase(repSlot, sessions[0]!.id, project.id);
-        const radius = planetOrbitRadius(repSlot) + 1.2;
+        // Outermost ring used by this project — gives the label headroom
+        // outside the planet wedge.
+        let outerRadius = 0;
+        for (const s of sessions) {
+          const entry = layout.get(s.id);
+          if (entry && entry.radius > outerRadius) outerRadius = entry.radius;
+        }
+        if (outerRadius === 0) return null;
+        const angle = hashAngle(project.id);
+        const radius = outerRadius + 1.2;
         const x = Math.cos(angle) * radius;
         const z = Math.sin(angle) * radius;
         return (

@@ -1,12 +1,15 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { Scene } from './scene/Scene.js';
 import { ListView } from './hud/ListView.js';
 import { MissionView } from './hud/MissionView.js';
+import { TimelineDrawer } from './hud/TimelineDrawer.js';
 import { TopBar } from './hud/TopBar.js';
 import { Toasts } from './hud/Toasts.js';
 import { Welcome } from './hud/Welcome.js';
 import { DecisionQueue } from './hud/DecisionQueue.js';
 import { SceneControls } from './hud/SceneControls.js';
 import {
+  frameAll as cameraFrameAll,
   panDown,
   panLeft,
   panRight,
@@ -18,34 +21,16 @@ import {
 import { SidePanel } from './panels/SidePanel.js';
 import { AdvisorPanel } from './panels/AdvisorPanel.js';
 import { SkillPanel } from './panels/SkillPanel.js';
+import { GalaxyPanel } from './panels/GalaxyPanel.js';
 import { NewTaskModal } from './panels/NewTaskModal.js';
 import { useSolixStore } from './store/index.js';
 import { startWsClient } from './ws/client.js';
-
-// Sprint K code-split: the 3D galaxy scene pulls three.js, drei, and
-// postprocessing — together the largest chunk of the bundle. Lazy-load
-// it so a user who lands directly on List view doesn't pay that cost.
-// Same for the Timeline drawer (only opened on demand) and the Galaxy
-// panel (which has its own fetch + state).
-const Scene = lazy(() =>
-  import('./scene/Scene.js').then((m) => ({ default: m.Scene })),
-);
-const TimelineDrawer = lazy(() =>
-  import('./hud/TimelineDrawer.js').then((m) => ({ default: m.TimelineDrawer })),
-);
-const GalaxyPanel = lazy(() =>
-  import('./panels/GalaxyPanel.js').then((m) => ({ default: m.GalaxyPanel })),
-);
-const CrewPanel = lazy(() =>
-  import('./panels/CrewPanel.js').then((m) => ({ default: m.CrewPanel })),
-);
 
 export default function App(): JSX.Element {
   const [galaxyOpen, setGalaxyOpen] = useState(false);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
-  const [crewOpen, setCrewOpen] = useState(false);
 
   useEffect(() => {
     startWsClient();
@@ -69,21 +54,10 @@ export default function App(): JSX.Element {
         setGalaxyOpen(false);
         setNewTaskOpen(false);
         setHelpOpen(false);
-        setCrewOpen(false);
-        // Esc also exits Timeline Playback — the only mode where the rest of
-        // the UI feels frozen because state is derived from past events.
-        // Cheap escape hatch when the "× Live" button isn't clickable for
-        // any reason (e.g. a third-party window overlay).
-        if (state.playback.active) {
-          state.exitPlayback();
-          setTimelineOpen(false);
-        }
       } else if (!isTextField && e.key === '?') {
         setHelpOpen((v) => !v);
       } else if (!isTextField && (e.key === 'g' || e.key === 'G')) {
         setGalaxyOpen((v) => !v);
-      } else if (!isTextField && (e.key === 'c' || e.key === 'C')) {
-        setCrewOpen((v) => !v);
       } else if (!isTextField && (e.key === 'l' || e.key === 'L')) {
         setNewTaskOpen(true);
       } else if (!isTextField && (e.key === '+' || e.key === '=')) {
@@ -92,6 +66,8 @@ export default function App(): JSX.Element {
         cameraZoomOut();
       } else if (!isTextField && e.key === '0') {
         cameraReset();
+      } else if (!isTextField && (e.key === 'f' || e.key === 'F')) {
+        cameraFrameAll();
       } else if (!isTextField && e.key === 'ArrowLeft') {
         panLeft();
       } else if (!isTextField && e.key === 'ArrowRight') {
@@ -127,34 +103,23 @@ export default function App(): JSX.Element {
         onNewTask={() => setNewTaskOpen(true)}
         onOpenTimeline={() => setTimelineOpen(true)}
         onOpenHelp={() => setHelpOpen(true)}
-        onOpenCrew={() => setCrewOpen(true)}
       />
       <DecisionQueue />
       <SidePanel />
       <AdvisorPanel />
       <SkillPanel />
-      {galaxyOpen && (
-        <Suspense fallback={null}>
-          <GalaxyPanel open={galaxyOpen} onClose={() => setGalaxyOpen(false)} />
-        </Suspense>
-      )}
-      {crewOpen && (
-        <Suspense fallback={null}>
-          <CrewPanel open={crewOpen} onClose={() => setCrewOpen(false)} />
-        </Suspense>
-      )}
+      <GalaxyPanel
+        open={galaxyOpen}
+        onClose={() => setGalaxyOpen(false)}
+      />
       <NewTaskModal
         open={newTaskOpen}
         onClose={() => setNewTaskOpen(false)}
       />
-      {timelineOpen && (
-        <Suspense fallback={null}>
-          <TimelineDrawer
-            open={timelineOpen}
-            onClose={() => setTimelineOpen(false)}
-          />
-        </Suspense>
-      )}
+      <TimelineDrawer
+        open={timelineOpen}
+        onClose={() => setTimelineOpen(false)}
+      />
       <SceneControls />
       <Welcome
         onOpenGalaxy={() => setGalaxyOpen(true)}
@@ -175,24 +140,7 @@ function ViewSurface(): JSX.Element {
   const viewMode = useSolixStore((s) => s.viewMode);
   if (viewMode === 'list') return <ListView />;
   if (viewMode === 'missions') return <MissionView />;
-  // The 3D galaxy chunk is loaded on demand. Show a quiet loader so
-  // the screen doesn't go blank during the ~hundreds-of-ms first
-  // paint while three.js downloads.
-  return (
-    <Suspense fallback={<SceneLoading />}>
-      <Scene />
-    </Suspense>
-  );
-}
-
-function SceneLoading(): JSX.Element {
-  return (
-    <div className="absolute inset-0 flex items-center justify-center bg-solix-bg z-0">
-      <div className="text-xs text-slate-500 uppercase tracking-widest solix-pulse">
-        loading galaxy…
-      </div>
-    </div>
-  );
+  return <Scene />;
 }
 
 function EmptyHint(): JSX.Element | null {

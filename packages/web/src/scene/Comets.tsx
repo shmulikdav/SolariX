@@ -1,8 +1,8 @@
-import { useMemo, useRef } from 'react';
+import { useContext, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Group, Mesh, MeshBasicMaterial, MathUtils } from 'three';
 import { useSolixStore } from '../store/index.js';
-import { planetOrbitRadius, planetPhase } from './orbits.js';
+import { LayoutContext } from './layout.js';
 
 const COMET_LIFETIME_MS = 1800;
 
@@ -83,18 +83,20 @@ export function CometLayer(): JSX.Element {
   const sessions = useSolixStore((s) =>
     s.playback.active ? s.playback.derivedSessions : s.sessions,
   );
+  const layout = useContext(LayoutContext);
 
   return (
     <group>
       {toolCalls.map((tc) => {
         const session = sessions[tc.sessionId];
         if (!session) return null;
-        const radius = planetOrbitRadius(session.orbitSlot);
-        const phase = planetPhase(
-          session.orbitSlot,
-          session.id,
-          session.projectId,
-        );
+        const entry = layout.get(session.id);
+        // Skip the comet if its planet isn't in the current layout (e.g.
+        // session was terminated mid-tool-call). Better than anchoring to a
+        // stale slot-derived position.
+        if (!entry) return null;
+        const radius = entry.radius;
+        const phase = entry.angle;
         const t = (Date.now() - tc.startedAt) / 1000;
         const speed = 0.18;
         const angle = phase + t * speed * 0.3;

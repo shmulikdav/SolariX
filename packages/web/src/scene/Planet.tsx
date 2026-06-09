@@ -4,18 +4,12 @@ import { Html } from '@react-three/drei';
 import { Color, Group, Mesh, MathUtils, MeshStandardMaterial } from 'three';
 import type { Session } from '@solix/shared';
 import { useSolixStore, selectMoons } from '../store/index.js';
-import { costColor, modelColor, statusEmissive, statusLabel } from './colors.js';
-import {
-  moonOrbitRadius,
-  moonOrbitSpeed,
-  planetOrbitRadius,
-  planetOrbitSpeed,
-  planetPhase,
-} from './orbits.js';
+import { modelColor, statusEmissive, statusLabel } from './colors.js';
+import { moonOrbitSpeed, planetOrbitSpeed } from './orbits.js';
+import { useLayoutEntry } from './layout.js';
 import { Moon } from './Moon.js';
 import { AtmosphereRim } from './AtmosphereRim.js';
 import { computeHealth, healthColor as healthBadgeColor } from '../health.js';
-import { GLOSSARY } from '../glossary.js';
 
 interface PlanetProps {
   session: Session;
@@ -27,14 +21,7 @@ export function Planet({ session }: PlanetProps): JSX.Element {
   const flareRef = useRef<Mesh>(null);
   const ringRef = useRef<Mesh>(null);
   const materialRef = useRef<MeshStandardMaterial>(null);
-  const phase = useMemo(
-    () => planetPhase(session.orbitSlot, session.id, session.projectId),
-    [session.orbitSlot, session.id],
-  );
-  const radius = useMemo(
-    () => planetOrbitRadius(session.orbitSlot),
-    [session.orbitSlot],
-  );
+  const entry = useLayoutEntry(session.id);
 
   const moons = useSolixStore((s) => selectMoons(s, session.id));
   const selectSession = useSolixStore((s) => s.selectSession);
@@ -79,7 +66,11 @@ export function Planet({ session }: PlanetProps): JSX.Element {
     [isAdvisor, advisorForRole, session.model],
   );
 
-  const angleRef = useRef(phase);
+  const angleRef = useRef(entry.angle);
+  // Lerps toward `entry.radius` so a planet whose layout ring changes (e.g.
+  // an idle session goes active → inner ring) glides between orbits over a
+  // ~0.6s window instead of teleporting.
+  const radiusRef = useRef(entry.radius);
   // Lerped focus-dim factor: 1.0 = full bright, 0.25 = dimmed because some
   // OTHER planet is selected. Cached on the group via scale-channel-z so we
   // don't re-allocate every frame.
@@ -101,11 +92,13 @@ export function Planet({ session }: PlanetProps): JSX.Element {
     dimRef.current = MathUtils.lerp(dimRef.current, dimTarget, 0.08);
     const dim = dimRef.current;
 
-    const speed = planetOrbitSpeed(session.status === 'active', session.orbitSlot);
+    const speed = planetOrbitSpeed(session.status === 'active', entry.ringIndex);
     if (motionEnabled) {
       angleRef.current += delta * speed * 0.3;
     }
+    radiusRef.current = MathUtils.lerp(radiusRef.current, entry.radius, 0.08);
     const angle = angleRef.current;
+    const radius = radiusRef.current;
     const x = Math.cos(angle) * radius;
     const z = Math.sin(angle) * radius;
     const tilt = Math.sin(angle * 0.5) * 0.4;
@@ -193,47 +186,20 @@ export function Planet({ session }: PlanetProps): JSX.Element {
   };
 
   const planetSize = 0.55;
-  // Sprint K: each user planet gets a small deterministic axial tilt,
-  // derived from session.id. Visual variety without breaking the
-  // metaphor — we never want two planets to look identical.
-  const axialTiltX = useMemo(() => hashTiltDeg(session.id, 18) * (Math.PI / 180), [session.id]);
-  const axialTiltZ = useMemo(() => hashTiltDeg(session.id + '-z', 12) * (Math.PI / 180), [session.id]);
-
-  // Sprint M — budget ring. A faint full "track" with a colored arc that
-  // fills as spend approaches the cap. Only present when a budget is set.
-  const hasBudget = session.budgetUsd != null && session.budgetUsd > 0;
-  const budgetPct = hasBudget
-    ? Math.min(100, (session.costUsd / (session.budgetUsd as number)) * 100)
-    : 0;
-  // Quantize so we only rebuild the arc geometry on whole-percent changes.
-  const budgetStep = Math.round(budgetPct);
-  const budgetArc = useMemo(
-    () => Math.max(0.0001, budgetStep / 100) * Math.PI * 2,
-    [budgetStep],
-  );
 
   return (
     <group ref={groupRef}>
-      <group rotation={[axialTiltX, 0, axialTiltZ]}>
-        <mesh ref={planetRef} onClick={onClick} castShadow>
-          <sphereGeometry args={[planetSize, 32, 32]} />
-          {/*
-            roughness/metalness tuned so the steeper sun-falloff lighting
-            from Sprint K reads as proper day/night on the sphere.
-            emissiveIntensity stays low (0.06) — just enough to keep the
-            night side from going jet black, but not so much that the
-            shape disappears.
-          */}
-          <meshStandardMaterial
-            ref={materialRef}
-            color={baseColor}
-            emissive={baseColor}
-            emissiveIntensity={0.06}
-            roughness={0.78}
-            metalness={0.12}
-          />
-        </mesh>
-      </group>
+      <mesh ref={planetRef} onClick={onClick} castShadow>
+        <sphereGeometry args={[planetSize, 32, 32]} />
+        <meshStandardMaterial
+          ref={materialRef}
+          color={baseColor}
+          emissive={baseColor}
+          emissiveIntensity={0.1}
+          roughness={0.6}
+          metalness={0.3}
+        />
+      </mesh>
 
       {/*
         Atmosphere rim — Fresnel glow at the silhouette in the planet's
@@ -268,28 +234,6 @@ export function Planet({ session }: PlanetProps): JSX.Element {
         </mesh>
       )}
 
-      {hasBudget && (
-        <group rotation={[Math.PI / 2, 0, 0]}>
-          {/* faint full track */}
-          <mesh>
-            <ringGeometry args={[planetSize * 2.05, planetSize * 2.3, 64]} />
-            <meshBasicMaterial color="#1e293b" transparent opacity={0.35} side={2} />
-          </mesh>
-          {/* colored fill arc, starting at top, growing clockwise */}
-          <mesh>
-            <ringGeometry
-              args={[planetSize * 2.05, planetSize * 2.3, 64, 1, Math.PI / 2, budgetArc]}
-            />
-            <meshBasicMaterial
-              color={costColor(budgetPct)}
-              transparent
-              opacity={0.9}
-              side={2}
-            />
-          </mesh>
-        </group>
-      )}
-
       {moons.map((moon, i) => (
         <Moon key={moon.id} session={moon} index={i} speed={moonOrbitSpeed()} />
       ))}
@@ -322,33 +266,9 @@ export function Planet({ session }: PlanetProps): JSX.Element {
                   : session.id.slice(0, 8))}
             </span>
           </div>
-          <div
-            className="opacity-70"
-            title={GLOSSARY[session.status] ?? undefined}
-          >
+          <div className="opacity-70">
             {String(session.model)} · {statusLabel(session.status)}
-            {session.origin === 'agentview' && (
-              <span
-                className="ml-1.5 text-[9px] uppercase tracking-wide text-cyan-300"
-                title="Background session managed by Anthropic's Agent View"
-              >
-                · agent
-              </span>
-            )}
-            {session.wrapperSocketPath && (
-              <span
-                className="ml-1.5 text-[9px] uppercase tracking-wide text-solix-accent"
-                title="Wrapped by `solix run` — UI prompts route to this terminal"
-              >
-                · wrapped
-              </span>
-            )}
           </div>
-          {session.agentViewSummary && (
-            <div className="opacity-80 italic text-[10px] max-w-[200px] truncate" title={session.agentViewSummary}>
-              {session.agentViewSummary}
-            </div>
-          )}
           <div
             className="opacity-70"
             title={
@@ -369,28 +289,11 @@ export function Planet({ session }: PlanetProps): JSX.Element {
   );
 }
 
-/**
- * Deterministic small tilt in degrees from a string key. Same id always
- * produces the same tilt so a planet doesn't jump every render. Range
- * is centered on 0, half on each side, so most planets stay close to
- * upright with occasional notably-tilted ones.
- */
-function hashTiltDeg(key: string, range: number): number {
-  let h = 0;
-  for (let i = 0; i < key.length; i++) {
-    h = (h * 31 + key.charCodeAt(i)) | 0;
-  }
-  // Map to [-range/2, +range/2].
-  const t = ((h >>> 0) % 1000) / 1000; // [0, 1)
-  return (t - 0.5) * range;
-}
-
 export function PlanetOrbitRing({
-  orbitSlot,
+  radius,
 }: {
-  orbitSlot: number;
+  radius: number;
 }): JSX.Element {
-  const radius = planetOrbitRadius(orbitSlot);
   return (
     <mesh rotation={[Math.PI / 2, 0, 0]}>
       <ringGeometry args={[radius - 0.02, radius + 0.02, 128]} />

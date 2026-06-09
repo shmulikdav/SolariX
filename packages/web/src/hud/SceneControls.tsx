@@ -49,6 +49,12 @@ export function SceneControls(): JSX.Element {
               </kbd>
               pause
             </span>
+            <span>
+              <kbd className="px-1 py-0.5 rounded bg-black/40 border border-solix-border text-[10px] mr-1">
+                F
+              </kbd>
+              fit
+            </span>
             <button
               onClick={dismissHint}
               className="ml-1 text-slate-500 hover:text-slate-100"

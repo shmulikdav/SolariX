@@ -1,6 +1,12 @@
 const PLANET_BASE_RADIUS = 6;
 const PLANET_RADIUS_STEP = 2.4;
 
+/**
+ * @deprecated Direct slot→radius mapping. New code should read
+ * `LayoutEntry.radius` from `./layout.ts` instead — the compressed
+ * layout caps the number of distinct rings regardless of slot count.
+ * Kept exported for backwards compat of any external/dev callers.
+ */
 export function planetOrbitRadius(orbitSlot: number): number {
   return PLANET_BASE_RADIUS + orbitSlot * PLANET_RADIUS_STEP;
 }
@@ -44,7 +50,7 @@ export function planetPhase(
   return base + offset + orbitSlot * 0.05;
 }
 
-function hashAngle(seed: string): number {
+export function hashAngle(seed: string): number {
   let h = 2166136261;
   for (let i = 0; i < seed.length; i++) {
     h = (h ^ seed.charCodeAt(i)) >>> 0;
