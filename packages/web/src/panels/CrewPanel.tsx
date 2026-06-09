@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import type { Advisor } from '@solix/shared';
 import { selectAllAdvisors, useSolixStore } from '../store/index.js';
 
@@ -18,6 +19,33 @@ export function CrewPanel({ open, onClose }: CrewPanelProps): JSX.Element | null
   const pinAdvisor = useSolixStore((s) => s.pinAdvisor);
   const unpinAdvisor = useSolixStore((s) => s.unpinAdvisor);
   const selectAdvisor = useSolixStore((s) => s.selectAdvisor);
+
+  // Self-heal the advisor list when the panel opens. If the WS snapshot
+  // arrived empty (server hadn't seeded yet, race on reconnect, stale
+  // socket), the Zustand cache stays empty until something *changes* an
+  // advisor — which only happens when the user clicks Add/Disable, but
+  // they can't see anything to click on. Re-reading from /api/advisors on
+  // open guarantees the panel is populated within ~200ms regardless of WS
+  // state. Same pattern as NewTaskModal's /api/system/preflight fetch.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    fetch('/api/advisors')
+      .then((r) => (r.ok ? (r.json() as Promise<Advisor[]>) : []))
+      .then((list) => {
+        if (cancelled) return;
+        const { applyMessage } = useSolixStore.getState();
+        for (const a of list) {
+          applyMessage({ type: 'advisor_upsert', advisor: a });
+        }
+      })
+      .catch(() => {
+        /* offline; render whatever the store already has */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   if (!open) return null;
 

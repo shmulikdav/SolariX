@@ -6,6 +6,7 @@ import { Broadcaster } from './broadcaster.js';
 import { getDb } from './db.js';
 import { createHttpApp } from './http.js';
 import { Launcher } from './launcher.js';
+import { DB_PATH } from './paths.js';
 import { EventRouter } from './router.js';
 import { attachWs } from './ws.js';
 import { seedAdvisors } from './state/advisors.js';
@@ -47,6 +48,20 @@ export async function createSolixServer(
   db.prepare(
     `UPDATE sessions SET wrapper_socket_path = NULL WHERE wrapper_socket_path IS NOT NULL`,
   ).run();
+  // Boot diagnostic — prints the actual DB file the server opened plus the
+  // row counts it found, so a user reporting "my data is gone" can confirm
+  // in one log line whether the running process is reading the expected
+  // ~/.solix/solix.db or a different one (stale global install, custom
+  // SOLIX_HOME, wrong cwd, etc.).
+  const advisorCount = (
+    db.prepare('SELECT count(*) AS n FROM advisors').get() as { n: number }
+  ).n;
+  const sessionCount = (
+    db.prepare('SELECT count(*) AS n FROM sessions').get() as { n: number }
+  ).n;
+  console.log(
+    `[solix] db      -> ${DB_PATH} (advisors=${advisorCount}, sessions=${sessionCount})`,
+  );
   const broadcaster = new Broadcaster();
   const launcher = new Launcher(db, broadcaster);
   const transcripts = new TranscriptWatcherManager(db, broadcaster);
@@ -88,38 +103,48 @@ export async function createSolixServer(
 
   // Sprint M — heartbeat scheduler. Every ~30s, fire any enabled schedule
   // whose next_run_at has passed by launching it through the normal internal
-  // launch path, then advance its next_run_at.
+  // launcher. The schedule's next_run_at is bumped by 60s to throttle
+  // re-fires if the launch itself fails (e.g. claude not on PATH).
   const scheduleTimer = setInterval(() => {
-    try {
-      const due = listDueSchedules(db, now());
-      for (const s of due) {
-        if (!s.cwd) continue;
-        launcher.launch({ cwd: s.cwd, initialPrompt: s.prompt });
-        const updated = markScheduleRun(db, s.id);
-        if (updated) {
-          broadcaster.broadcast({ type: 'schedule_upsert', schedule: updated });
-          broadcaster.broadcast({
-            type: 'toast',
-            level: 'info',
-            message: `Heartbeat fired: ${s.name ?? s.prompt.slice(0, 32)}`,
-          });
-        }
+    const due = listDueSchedules(db, now());
+    for (const s of due) {
+      const project = db
+        .prepare('SELECT cwd FROM projects WHERE id = ?')
+        .get(s.projectId) as { cwd?: string } | undefined;
+      if (!project?.cwd) continue;
+      const launched = router.launchInternalSession({
+        cwd: project.cwd,
+        initialPrompt: s.prompt,
+      });
+      if (launched.ok) {
+        markScheduleRun(db, s.id);
+        router.broadcastScheduleUpsert({
+          ...s,
+          lastRunAt: now(),
+          nextRunAt: now() + 60_000,
+        });
       }
-    } catch (err) {
-      console.warn('[scheduler] tick failed:', (err as Error).message);
     }
   }, 30_000);
 
   return {
     port,
     hostname,
-    close: () =>
-      new Promise<void>((resolve) => {
-        clearInterval(scheduleTimer);
-        stopAgentViewBridge();
-        transcripts.shutdownAll();
-        launcher.shutdownAll();
-        server.close(() => resolve());
-      }),
+    close: async () => {
+      clearInterval(scheduleTimer);
+      stopAgentViewBridge?.();
+      transcripts.stopAll();
+      router.setLauncher(undefined as never);
+      await new Promise<void>((resolve) => {
+        if (typeof (server as { close?: () => void }).close === 'function') {
+          (server as unknown as { close: (cb: () => void) => void }).close(
+            () => resolve(),
+          );
+        } else {
+          resolve();
+        }
+      });
+      launcher.shutdown();
+    },
   };
 }
