@@ -135,7 +135,7 @@ function BudgetCard({
   onDismiss: () => void;
 }): JSX.Element {
   return (
-    <div className="pointer-events-auto rounded border border-solix-danger bg-solix-danger/10 p-3 backdrop-blur shadow-lg">
+    <div className="pointer-events-auto rounded border border-solix-danger bg-solix-panel p-3 backdrop-blur shadow-lg">
       <div className="flex items-center justify-between">
         <div className="text-xs uppercase tracking-wide text-solix-danger">
           {name}
@@ -198,7 +198,7 @@ function DecisionCard({
     : null;
 
   return (
-    <div className="pointer-events-auto rounded border border-solix-danger bg-solix-danger/10 p-3 backdrop-blur shadow-lg">
+    <div className="pointer-events-auto rounded border border-solix-danger bg-solix-panel p-3 backdrop-blur shadow-lg">
       <div className="flex items-center justify-between">
         <div className="text-xs uppercase tracking-wide text-solix-danger">
           {name}
