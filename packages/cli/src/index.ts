@@ -99,12 +99,28 @@ program
 program
   .command('demo')
   .description(
-    'Seed the running server with fake planets, missions, and a pinned advisor (great for first-run)',
+    'Boot a sandbox server, seed a rich galaxy (8 projects, ~30 sessions, all advisors), ' +
+      'and keep firing activity until Ctrl+C. Showcase mode for live demos.',
   )
-  .option('-p, --port <port>', 'server port', (v) => parseInt(v, 10), 4242)
-  .action(async (opts: { port?: number }) => {
-    await demoCmd({ port: opts.port });
-  });
+  .option('-p, --port <port>', 'server port (falls back to +1 on conflict)', (v) => parseInt(v, 10), 4242)
+  .option('--keep', 'preserve ~/.solix/demo.db after teardown (default removes it)')
+  .option('--no-server', 'skip spawning a sandbox server; seed against the server you already have running')
+  .option('--no-ticker', 'seed once and exit (static snapshot for screenshots)')
+  .action(
+    async (opts: {
+      port?: number;
+      keep?: boolean;
+      server: boolean;
+      ticker: boolean;
+    }) => {
+      await demoCmd({
+        port: opts.port,
+        keep: opts.keep,
+        noServer: !opts.server,
+        noTicker: !opts.ticker,
+      });
+    },
+  );
 
 const advisors = program
   .command('advisors')
@@ -119,176 +135,155 @@ advisors
 
 advisors
   .command('enable <id>')
-  .description('Enable an advisor (renders in the inner crew ring)')
+  .description('Enable an advisor (add to the inner ring)')
   .action(async (id: string) => {
     await enableAdvisorCmd(id);
   });
 
 advisors
   .command('disable <id>')
-  .description('Disable an advisor')
+  .description('Disable an advisor (remove from the inner ring)')
   .action(async (id: string) => {
     await disableAdvisorCmd(id);
   });
 
 advisors
   .command('pin <id>')
-  .description('Pin an advisor (always-on planet)')
+  .description('Pin an advisor (spawn an always-on session)')
   .action(async (id: string) => {
     await pinAdvisorCmd(id);
   });
 
 advisors
   .command('unpin <id>')
-  .description('Unpin an advisor (back to on-demand)')
+  .description('Unpin an advisor (kill the always-on session)')
   .action(async (id: string) => {
     await unpinAdvisorCmd(id);
   });
 
 const skills = program
   .command('skills')
-  .description('Manage discovered skills (asteroid belt)');
+  .description('Browse + install skills from Anthropic, Solix, and your own');
 
 skills
   .command('list', { isDefault: true })
-  .description('List all known skills (Anthropic + Solix pack)')
+  .description('List skills detected in this project')
   .action(async () => {
     await listSkillsCmd();
   });
 
 skills
   .command('install <id>')
-  .description('Mark a skill as installed in a project')
-  .option('--project <projectId>', 'project id (hash of cwd)')
-  .action(async (id: string, opts: { project?: string }) => {
-    await installSkillCmd(id, opts.project);
+  .description('Install a skill into the current project')
+  .action(async (id: string) => {
+    await installSkillCmd(id);
   });
 
 const galaxy = program
   .command('galaxy')
-  .description('Export and import shareable galaxy configurations');
+  .description('Export, import, and publish galaxy presets');
 
 galaxy
-  .command('export <out>')
-  .description('Export the current galaxy to a JSON manifest file')
-  .option('--name <name>', 'galaxy name', 'My Galaxy')
-  .option('--author <author>', 'author name')
-  .option('--description <desc>', 'short description')
+  .command('export <name>')
+  .description('Snapshot the current crew + skills + projects into a manifest')
+  .option('--author <author>', 'author tag for the manifest')
+  .option('--description <description>', 'one-line manifest description')
   .action(
     async (
-      out: string,
-      opts: { name?: string; author?: string; description?: string },
+      name: string,
+      opts: { author?: string; description?: string },
     ) => {
-      await exportGalaxyCmd(out, opts);
+      await exportGalaxyCmd(name, opts);
     },
   );
 
 galaxy
-  .command('import <fileOrUrl>')
-  .description('Import a galaxy manifest from a local file or URL')
-  .action(async (fileOrUrl: string) => {
-    await importGalaxyCmd(fileOrUrl);
+  .command('import <path>')
+  .description('Apply a galaxy manifest (enables advisors, seeds skills + projects)')
+  .action(async (path: string) => {
+    await importGalaxyCmd(path);
   });
 
 galaxy
-  .command('publish <slug>')
-  .description('Publish the current galaxy to the configured registry')
-  .option('--name <name>', 'galaxy name', 'My Galaxy')
-  .option('--author <author>', 'author name')
-  .option('--description <desc>', 'short description')
-  .action(
-    async (
-      slug: string,
-      opts: { name?: string; author?: string; description?: string },
-    ) => {
-      await publishGalaxyCmd(slug, opts);
-    },
-  );
-
-galaxy
-  .command('install <slug>')
-  .description('Pull and install a galaxy from the configured registry')
-  .action(async (slug: string) => {
-    await installFromRegistryCmd(slug);
+  .command('publish <path>')
+  .description('Publish a manifest to the configured registry (SOLIX_REGISTRY_URL)')
+  .action(async (path: string) => {
+    await publishGalaxyCmd(path);
   });
 
-const schedule = program
-  .command('schedule')
-  .description('Manage recurring "heartbeat" tasks (Sprint M)');
+galaxy
+  .command('install <id>')
+  .description('Install a galaxy preset from the registry by id')
+  .action(async (id: string) => {
+    await installFromRegistryCmd(id);
+  });
 
-schedule
+const schedules = program
+  .command('schedules')
+  .description('Manage recurring scheduled tasks');
+
+schedules
   .command('list', { isDefault: true })
-  .description('List all scheduled tasks')
+  .description('List schedules across all projects')
   .action(async () => {
     await listSchedulesCmd();
   });
 
-schedule
-  .command('add <prompt>')
-  .description('Schedule a recurring task')
-  .option('--cwd <dir>', 'working directory (default: current dir)')
-  .option('--every <cadence>', 'cadence: 30m, 2h, 1d', '1h')
-  .option('--name <name>', 'short label for the galaxy node')
-  .action(
-    async (
-      prompt: string,
-      opts: { cwd?: string; every?: string; name?: string },
-    ) => {
-      await addScheduleCmd(prompt, opts);
-    },
-  );
+schedules
+  .command('add <projectId> <cron> <prompt>')
+  .description('Add a recurring task to a project')
+  .action(async (projectId: string, cron: string, prompt: string) => {
+    await addScheduleCmd(projectId, cron, prompt);
+  });
 
-schedule
+schedules
+  .command('remove <id>')
+  .description('Remove a schedule')
+  .action(async (id: string) => {
+    await removeScheduleCmd(id);
+  });
+
+schedules
   .command('enable <id>')
   .description('Enable a schedule')
   .action(async (id: string) => {
     await enableScheduleCmd(id);
   });
 
-schedule
+schedules
   .command('disable <id>')
-  .description('Disable a schedule (keeps it, stops firing)')
+  .description('Disable a schedule')
   .action(async (id: string) => {
     await disableScheduleCmd(id);
   });
 
-schedule
-  .command('remove <id>')
-  .description('Delete a schedule')
-  .action(async (id: string) => {
-    await removeScheduleCmd(id);
-  });
+const goals = program
+  .command('goals')
+  .description('Manage cross-session goals (constellations)');
 
-const goal = program
-  .command('goal')
-  .description('Manage goals that missions roll up to (Sprint M)');
-
-goal
+goals
   .command('list', { isDefault: true })
   .description('List all goals')
   .action(async () => {
     await listGoalsCmd();
   });
 
-goal
+goals
   .command('add <name>')
   .description('Create a goal')
-  .option('--description <desc>', 'optional description')
-  .option('--color <hex>', 'optional hex color for the constellation')
-  .action(
-    async (name: string, opts: { description?: string; color?: string }) => {
-      await addGoalCmd(name, opts);
-    },
-  );
+  .option('--color <hex>', 'goal color (default sky blue)')
+  .action(async (name: string, opts: { color?: string }) => {
+    await addGoalCmd(name, opts.color);
+  });
 
-goal
+goals
   .command('remove <id>')
-  .description('Delete a goal (detaches it from sessions/missions)')
+  .description('Remove a goal')
   .action(async (id: string) => {
     await removeGoalCmd(id);
   });
 
-program.parseAsync(process.argv).catch((err: unknown) => {
+program.parseAsync(process.argv).catch((err) => {
   console.error(err);
   process.exit(1);
 });

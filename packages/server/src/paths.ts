@@ -5,7 +5,12 @@ import { mkdirSync } from 'node:fs';
 export const SOLIX_HOME =
   process.env.SOLIX_HOME ?? join(homedir(), '.solix');
 
-export const DB_PATH = join(SOLIX_HOME, 'solix.db');
+// SOLIX_DB_PATH lets a caller (e.g. `solix demo`) point the server at an
+// isolated SQLite file without disturbing the real ~/.solix/solix.db. Falls
+// back to the canonical location when unset — backwards-compatible with every
+// existing install.
+export const DB_PATH =
+  process.env.SOLIX_DB_PATH ?? join(SOLIX_HOME, 'solix.db');
 export const HOOKS_DIR = join(SOLIX_HOME, 'hooks');
 export const LOG_PATH = join(SOLIX_HOME, 'solix.log');
 
