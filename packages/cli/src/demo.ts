@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdirSync, unlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, unlinkSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,6 +11,19 @@ import { fileURLToPath } from 'node:url';
 const SOLIX_HOME = process.env.SOLIX_HOME ?? join(homedir(), '.solix');
 const DEMO_DB_PATH = join(SOLIX_HOME, 'demo.db');
 const DEMO_PID_PATH = join(SOLIX_HOME, 'demo.pid');
+const TOKEN_PATH = join(SOLIX_HOME, 'token');
+
+// The sandbox server enforces the same x-solix-token gate on /events that a
+// real install does (it reads ~/.solix/token via SOLIX_HOME, which the demo
+// does NOT override). Read that token here so our seed POSTs authenticate.
+// Empty when no install has run (dev) — the server then has no token
+// configured either, so the header is simply omitted and nothing enforces.
+let demoToken = '';
+try {
+  demoToken = readFileSync(TOKEN_PATH, 'utf8').trim();
+} catch {
+  /* no token configured */
+}
 
 // Ticker cadences — tuned to look alive without spamming the broadcaster on
 // integrated graphics. All times in ms.
@@ -68,7 +81,10 @@ async function postEvent(base: string, payload: object): Promise<void> {
   try {
     await fetch(`${base}/events`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(demoToken ? { 'x-solix-token': demoToken } : {}),
+      },
       body: JSON.stringify(payload),
     });
   } catch {
@@ -143,10 +159,7 @@ async function bootSandbox(preferredPort: number): Promise<BootResult | null> {
   // Reap any stale demo pid from a previous run.
   if (existsSync(DEMO_PID_PATH)) {
     try {
-      const pid = parseInt(
-        (await import('node:fs')).readFileSync(DEMO_PID_PATH, 'utf8').trim(),
-        10,
-      );
+      const pid = parseInt(readFileSync(DEMO_PID_PATH, 'utf8').trim(), 10);
       if (pid > 0) {
         try {
           process.kill(pid, 0);
