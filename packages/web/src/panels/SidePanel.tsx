@@ -69,7 +69,7 @@ export function SidePanel(): JSX.Element | null {
   };
 
   return (
-    <div className="absolute top-0 right-0 h-full w-full sm:w-[460px] bg-solix-panel border-l border-solix-border backdrop-blur-md flex flex-col z-20">
+    <div className="absolute top-16 right-0 bottom-0 w-full sm:w-[460px] bg-solix-panel border-l border-solix-border backdrop-blur-md flex flex-col z-20">
       <div className="px-4 py-3 border-b border-solix-border flex items-start justify-between">
         <div className="min-w-0">
           <div className="text-xs uppercase tracking-wide text-slate-400">
