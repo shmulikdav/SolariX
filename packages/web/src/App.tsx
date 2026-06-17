@@ -47,6 +47,23 @@ export default function App(): JSX.Element {
   const [helpOpen, setHelpOpen] = useState(false);
   const [crewOpen, setCrewOpen] = useState(false);
 
+  // Drive the DecisionQueue's horizontal offset: when a right-side panel
+  // is open, the queue shifts left so it sits *beside* the panel rather
+  // than covering its title and top content. Widths match each panel's
+  // `w-[NNNpx]` literal — single source of truth.
+  const selectedSessionId = useSolixStore((s) => s.selectedSessionId);
+  const selectedAdvisorId = useSolixStore((s) => s.selectedAdvisorId);
+  const selectedSkillId = useSolixStore((s) => s.selectedSkillId);
+  const panelOffsetPx = selectedSessionId
+    ? 460
+    : selectedAdvisorId
+      ? 420
+      : selectedSkillId
+        ? 480
+        : galaxyOpen
+          ? 480
+          : 0;
+
   useEffect(() => {
     startWsClient();
   }, []);
@@ -129,7 +146,7 @@ export default function App(): JSX.Element {
         onOpenHelp={() => setHelpOpen(true)}
         onOpenCrew={() => setCrewOpen(true)}
       />
-      <DecisionQueue />
+      <DecisionQueue panelOffsetPx={panelOffsetPx} />
       <SidePanel />
       <AdvisorPanel />
       <SkillPanel />

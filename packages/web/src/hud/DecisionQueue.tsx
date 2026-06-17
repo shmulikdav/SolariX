@@ -15,7 +15,18 @@ import { suggestForPermission } from '../suggestions.js';
  * Sorted newest-first so the most recent block is at the top of the
  * queue.
  */
-export function DecisionQueue(): JSX.Element {
+interface DecisionQueueProps {
+  /**
+   * Horizontal offset (px) to shift the queue left of the screen's right
+   * edge — set by App when a right-side panel is open, so the queue sits
+   * beside the panel instead of covering its title and content.
+   */
+  panelOffsetPx?: number;
+}
+
+export function DecisionQueue({
+  panelOffsetPx = 0,
+}: DecisionQueueProps = {}): JSX.Element {
   const pending = useSolixStore((s) => s.pendingPermissions);
   const budgetAlerts = useSolixStore((s) => s.budgetAlerts);
   const sessions = useSolixStore((s) => s.sessions);
@@ -49,7 +60,10 @@ export function DecisionQueue(): JSX.Element {
   // waiting on the user.
   if (count === 0) {
     return (
-      <div className="absolute top-20 right-4 z-30 pointer-events-none">
+      <div
+        className="absolute top-20 z-30 pointer-events-none"
+        style={{ right: `${panelOffsetPx + 16}px` }}
+      >
         <div className="pointer-events-auto rounded-full border border-solix-border bg-solix-panel/60 backdrop-blur px-3 py-1 text-[10px] text-slate-500 flex items-center gap-2">
           <span className="uppercase tracking-widest">decisions</span>
           <span className="font-bold">0</span>
@@ -60,7 +74,10 @@ export function DecisionQueue(): JSX.Element {
   }
 
   return (
-    <div className="absolute top-20 right-4 z-30 w-80 flex flex-col gap-2 pointer-events-none">
+    <div
+      className="absolute top-20 z-30 w-80 flex flex-col gap-2 pointer-events-none"
+      style={{ right: `${panelOffsetPx + 16}px` }}
+    >
       <div className="pointer-events-auto rounded border border-solix-border bg-solix-panel/85 backdrop-blur px-3 py-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-[10px] uppercase tracking-widest text-slate-400">
