@@ -59,7 +59,7 @@ export function AdvisorPanel(): JSX.Element | null {
   };
 
   return (
-    <div className="absolute top-0 right-0 h-full w-[420px] bg-solix-panel border-l border-solix-border backdrop-blur-md flex flex-col z-20">
+    <div className="absolute top-16 right-0 bottom-0 w-[420px] bg-solix-panel border-l border-solix-border backdrop-blur-md flex flex-col z-20">
       <div className="px-4 py-3 border-b border-solix-border flex items-start justify-between">
         <div>
           <div className="text-xs uppercase tracking-wide text-amber-200/70">
