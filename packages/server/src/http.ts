@@ -73,6 +73,7 @@ import {
 } from './state/galaxy.js';
 import { diffManifests } from '@solix/shared';
 import { RegistryClient } from './cloud.js';
+import { isAllowedOrigin, isSafeFetchUrl } from './origins.js';
 import type { GalaxyManifest } from '@solix/shared';
 
 export function createHttpApp(opts: {
@@ -98,6 +99,24 @@ export function createHttpApp(opts: {
       ],
     }),
   );
+
+  // CSRF / cross-origin control-plane defense. CORS stops a malicious page
+  // from *reading* our responses, but browsers can still *send* cross-origin
+  // state-changing requests (a "simple" POST needs no preflight) — which is
+  // exactly how a visited web page could hit process-spawning routes like
+  // POST /api/schedules or trigger SSRF via POST /api/galaxy/import. A
+  // browser always sends an Origin header on those; reject any that isn't a
+  // loopback origin. Non-browser callers (hooks, curl, `solix demo`) send no
+  // Origin and pass through, so ingestion and the demo are unaffected.
+  app.use('*', async (c, next) => {
+    const method = c.req.method;
+    const mutating =
+      method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS';
+    if (mutating && !isAllowedOrigin(c.req.header('origin'))) {
+      return c.json({ error: 'cross-origin request refused' }, 403);
+    }
+    await next();
+  });
 
   // When a token is configured (written by `solix install`), require it on the
   // event-ingestion surface — the only endpoints an arbitrary local process
@@ -391,6 +410,12 @@ export function createHttpApp(opts: {
     let sourceUrl: string | undefined;
     if ('url' in body && typeof body.url === 'string') {
       sourceUrl = body.url;
+      if (!isSafeFetchUrl(body.url)) {
+        return c.json(
+          { error: 'import URL not allowed (must be a public http(s) address)' },
+          400,
+        );
+      }
       try {
         const res = await fetch(body.url, {
           signal: AbortSignal.timeout(5000),

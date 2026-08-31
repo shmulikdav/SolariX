@@ -12,6 +12,7 @@ import { listAdvisors } from './state/advisors.js';
 import { listSkills } from './state/skills.js';
 import { listSchedules } from './state/schedules.js';
 import { listGoals } from './state/goals.js';
+import { isAllowedOrigin } from './origins.js';
 
 export interface WsContext {
   db: DB;
@@ -27,6 +28,17 @@ export function attachWs(server: HttpServer, ctx: WsContext): WebSocketServer {
     (req: IncomingMessage, socket: Socket, head: Buffer) => {
       const url = req.url ?? '';
       if (!url.startsWith('/ws')) {
+        socket.destroy();
+        return;
+      }
+      // The WS control plane accepts launch_session / send_prompt / invoke,
+      // and browsers don't apply CORS to the WebSocket handshake — so without
+      // this check any page the user visits could open ws://127.0.0.1:4242/ws
+      // and drive their agents. Browsers always send Origin on the handshake;
+      // reject anything that isn't a loopback origin. (Non-browser WS clients
+      // send no Origin and are allowed.)
+      if (!isAllowedOrigin(req.headers.origin)) {
+        socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
         socket.destroy();
         return;
       }
