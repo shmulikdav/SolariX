@@ -634,7 +634,14 @@ async function tryOpenBrowser(url: string): Promise<void> {
         ? 'start'
         : 'xdg-open';
   try {
-    spawn(cmd, [url], { stdio: 'ignore', detached: true }).unref();
+    const child = spawn(cmd, [url], { stdio: 'ignore', detached: true });
+    // A missing opener (e.g. no `xdg-open` on a headless server / CI) makes
+    // spawn emit an *async* 'error' event, not a sync throw — without this
+    // handler that becomes an unhandled error and crashes `solix demo`.
+    child.on('error', () => {
+      /* headless or no opener available; user navigates manually */
+    });
+    child.unref();
   } catch {
     /* headless or no opener available; user can still navigate manually */
   }
