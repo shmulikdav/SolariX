@@ -17,11 +17,16 @@ sun. You see all your agents at once, click any planet to inspect its mission
 log, and react to permission requests without context-switching between
 terminals.
 
-> **Status:** M0–M1 foundation + a built-in crew of 10 advisor agents
-> (Compass · Forge · Lumen · Argus · Sentinel + 5 opt-in), a real skills
-> asteroid belt, and shareable galaxies (local file or opt-in cloud
-> registry). M2 visual polish, M3 transcript-tail mission log, and M3.5
-> internal-session launcher are next.
+![Solix — every running Claude Code session as a planet orbiting a central sun](docs/galaxy.png)
+
+<sub>Captured from `solix demo` (fully synthetic, no real Claude Code needed) — see [docs/CAPTURE.md](docs/CAPTURE.md).</sub>
+
+> **100% local, zero telemetry.** Solix runs entirely on `127.0.0.1` — a
+> local server, a local SQLite file, no account, no sign-in, and nothing
+> ever leaves your machine. It ships a crew of **14 advisor agents**, a
+> skills asteroid belt, live mission logs tailed from your transcripts,
+> an in-app session launcher, and shareable galaxies (local file or opt-in
+> cloud registry).
 
 ## Quick start
 
@@ -42,9 +47,10 @@ you through five things you can do.
 solix demo
 ```
 
-Seeds three user planets, an active mission with comet streaks, a moon,
-a red permission flare, and pins Compass — so the empty galaxy lights
-up immediately.
+Seeds a fully populated galaxy — ~30 sessions across 8 projects, all 14
+advisors, active missions with comet streaks, subagent moons, red
+permission flares, and a live ticker — so the galaxy is alive immediately,
+without touching your real data (it runs against a sandboxed demo DB).
 
 Then run `claude` in any terminal and a real planet will appear within
 a second.
@@ -307,7 +313,7 @@ solix/
 │   ├── server/   # Hono + WebSocket + SQLite + event router + launcher + cloud
 │   ├── web/      # React + react-three-fiber solar system + advisor ring + asteroid belt
 │   ├── cli/      # commander entrypoint + hook scripts
-│   ├── agents/   # canonical .md files for 10 advisor agents (+ manifest.json)
+│   ├── agents/   # canonical .md files for 14 advisor agents (+ manifest.json)
 │   └── skills/   # the bundled Solix skill pack (4 SKILL.md manifests)
 ├── pnpm-workspace.yaml
 └── tsconfig.base.json

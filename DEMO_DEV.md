@@ -10,7 +10,7 @@ ingests Claude Code's hook events and renders every session as a
 planet orbiting a sun.** Status (active / awaiting permission /
 context-bloated / plan review) is encoded as visual properties — color,
 emissive, halo, size — so you read it in <100 ms instead of scrolling a
-log. Bonus: a built-in roster of 10 role-based advisor agents, a real
+log. Bonus: a built-in roster of 14 role-based advisor agents, a real
 asteroid belt of skills (Anthropic + bundled), and a galaxy-manifest
 share format so a team's AI workflow becomes a versioned artifact.
 
@@ -299,7 +299,7 @@ relay, dev container telemetry, etc.
 | `solix install` | Patch `~/.claude/settings.json`; copy hooks, advisors, skills |
 | `solix uninstall` | Restore from backup |
 | `solix doctor` | Diagnostics (Node version, hooks installed, server reachable, advisor count, skill count) |
-| `solix demo` | Seed fake state (3 planets, mission, comets, permission flare, 87% context flare, pinned advisor) |
+| `solix demo` | Seed a fully populated galaxy (~30 sessions across 8 projects, all 14 advisors, missions, comets, permission flares, context flares, moons) + a live ticker |
 | `solix advisors {list,enable,disable,pin,unpin}` | Crew management |
 | `solix skills {list,install --project}` | Asteroid belt |
 | `solix galaxy {export,import,publish,install}` | Manifest share + opt-in registry |

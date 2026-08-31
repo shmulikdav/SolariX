@@ -29,7 +29,7 @@ everything.
 solix install        # one-time: wires Claude Code hooks
 solix start          # boot the server (default port 4242)
 # In another terminal:
-solix demo           # seed 3 planets to play with
+solix demo           # seed a fully populated demo galaxy to play with
 ```
 
 Open `http://127.0.0.1:4242`. Press `Y` to approve the demo's

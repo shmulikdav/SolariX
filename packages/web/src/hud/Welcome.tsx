@@ -89,8 +89,9 @@ export function Welcome({
               <>
                 In another terminal:{' '}
                 <code className="bg-black/40 px-1 rounded">solix demo</code>
-                . You'll get 3 planets, a moon, a permission flare, and a
-                pinned advisor — without running Claude Code.
+                . You'll get a fully populated galaxy — ~30 sessions across 8
+                projects, all 14 advisors, moons, and live permission flares —
+                without running Claude Code.
               </>
             }
           />
