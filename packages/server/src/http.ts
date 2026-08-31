@@ -79,6 +79,9 @@ export function createHttpApp(opts: {
   db: DB;
   router: EventRouter;
   token?: string | null;
+  /** Product version to report from /api/health. The CLI injects its own
+   * package version; absent when the server is embedded directly. */
+  version?: string;
 }) {
   const app = new Hono();
   // The UI is served same-origin from this same port, so it never needs CORS.
@@ -119,7 +122,7 @@ export function createHttpApp(opts: {
     c.json({
       ok: true,
       service: 'solix',
-      version: '1.0.0',
+      version: opts.version ?? 'unknown',
       ts: Date.now(),
     }),
   );

@@ -45,6 +45,7 @@ export function packagedHooksDir(): string {
 export function packagedAgentsDir(): string {
   const here = dirname(fileURLToPath(import.meta.url));
   const candidates = [
+    join(here, 'agents'),
     join(here, '..', '..', 'agents'),
     join(here, '..', '..', '..', 'agents'),
     join(here, '..', '..', '..', '..', 'packages', 'agents'),
@@ -58,6 +59,7 @@ export function packagedAgentsDir(): string {
 export function packagedSkillsDir(): string {
   const here = dirname(fileURLToPath(import.meta.url));
   const candidates = [
+    join(here, 'skills'),
     join(here, '..', '..', 'skills'),
     join(here, '..', '..', '..', 'skills'),
     join(here, '..', '..', '..', '..', 'packages', 'skills'),

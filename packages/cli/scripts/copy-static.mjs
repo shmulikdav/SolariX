@@ -26,6 +26,12 @@ const trees = [
     dst: join(distRoot, 'agents'),
     fatal: true,
   },
+  {
+    label: 'skills',
+    src: join(repoRoot, 'packages', 'skills'),
+    dst: join(distRoot, 'skills'),
+    fatal: true,
+  },
 ];
 
 for (const { label, src, dst, fatal } of trees) {

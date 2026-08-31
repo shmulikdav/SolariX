@@ -19,6 +19,9 @@ import { now } from './util.js';
 export interface SolixServerOptions {
   port?: number;
   hostname?: string;
+  /** Product version, surfaced at /api/health. The CLI passes its own
+   * package version; defaults to "unknown" when embedded directly. */
+  version?: string;
 }
 
 export interface SolixServerHandle {
@@ -66,7 +69,7 @@ export async function createSolixServer(
     token = null;
   }
 
-  const app = createHttpApp({ db, router, token });
+  const app = createHttpApp({ db, router, token, version: opts.version });
 
   const server = serve({
     fetch: app.fetch,

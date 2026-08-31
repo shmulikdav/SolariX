@@ -1,6 +1,11 @@
 import { createSolixServer } from '@solix/server/create';
 import open from 'open';
 
+// Injected at build time by tsup (same define as index.ts). Lets the
+// server report the real product version at /api/health instead of a
+// stale hardcoded literal.
+declare const __SOLIX_VERSION__: string;
+
 export interface StartOptions {
   port?: number;
   noOpen?: boolean;
@@ -21,7 +26,7 @@ const BANNER = `
 export async function start(opts: StartOptions = {}): Promise<void> {
   const port = opts.port ?? Number(process.env.SOLIX_PORT ?? 4242);
   console.log(BANNER);
-  const handle = await createSolixServer({ port });
+  const handle = await createSolixServer({ port, version: __SOLIX_VERSION__ });
   const url = `http://${handle.hostname}:${handle.port}`;
   console.log(`[solix] server listening on ${url}`);
   console.log(`[solix] events  -> POST ${url}/events`);
