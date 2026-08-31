@@ -230,11 +230,19 @@ schedules
   });
 
 schedules
-  .command('add <projectId> <cron> <prompt>')
-  .description('Add a recurring task to a project')
-  .action(async (projectId: string, cron: string, prompt: string) => {
-    await addScheduleCmd(projectId, cron, prompt);
-  });
+  .command('add <prompt>')
+  .description('Schedule a recurring task')
+  .option('--cwd <dir>', 'working directory (default: current dir)')
+  .option('--every <cadence>', 'cadence, e.g. 30m, 1h, 1d (default: 1h)')
+  .option('--name <name>', 'short label for the schedule')
+  .action(
+    async (
+      prompt: string,
+      opts: { cwd?: string; every?: string; name?: string },
+    ) => {
+      await addScheduleCmd(prompt, opts);
+    },
+  );
 
 schedules
   .command('remove <id>')
@@ -271,10 +279,13 @@ goals
 goals
   .command('add <name>')
   .description('Create a goal')
+  .option('--description <desc>', 'optional description')
   .option('--color <hex>', 'goal color (default sky blue)')
-  .action(async (name: string, opts: { color?: string }) => {
-    await addGoalCmd(name, opts.color);
-  });
+  .action(
+    async (name: string, opts: { description?: string; color?: string }) => {
+      await addGoalCmd(name, opts);
+    },
+  );
 
 goals
   .command('remove <id>')
