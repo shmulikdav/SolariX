@@ -5,6 +5,42 @@ All notable changes to Solix (`@shmulikdav/solix`) are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] — 2026-08-31
+
+**Live showcase demo, cross-origin hardening, and launch-readiness fixes.**
+
+### Added
+- **Live showcase demo.** `solix demo` now boots its own sandboxed server
+  (isolated `~/.solix/demo.db`), seeds a saturated galaxy (~30 sessions across
+  8 projects, all 14 advisors, missions, comets, moons, permission flares),
+  and runs a continuous ticker until Ctrl+C — a fully synthetic showcase that
+  needs no real Claude Code. `--no-ticker` seeds a static snapshot; `--keep`
+  preserves the sandbox DB; `--no-server` seeds against a server you already
+  have running.
+
+### Security
+- **Closed the cross-origin control-plane hole.** The install token guarded
+  only `/events`, while `/ws` and every `/api/*` route were open — and because
+  browsers don't CORS-check WebSocket handshakes (and can send "simple"
+  cross-origin POSTs), any page a user merely visited could open
+  `ws://127.0.0.1:4242/ws` or POST to process-spawning routes and drive their
+  agents. A loopback **Origin allowlist** now gates the WS upgrade and all
+  state-changing HTTP requests (non-browser callers with no Origin — hooks,
+  `curl`, `solix demo` — are unaffected), plus an **SSRF guard** on
+  `POST /api/galaxy/import`.
+
+### Fixed
+- **Skill pack ships in the npm tarball.** `copy-static.mjs` now bundles
+  `packages/skills` into `dist/skills`, and `packagedSkillsDir()` resolves it —
+  global installs previously got an empty asteroid belt despite the docs.
+- **`/api/health` reports the real version** (was a hardcoded `1.0.0`).
+- **`schedules` / `goals` command wiring** matched their handler signatures,
+  restoring a clean `tsc` (the publish workflow's typecheck gate).
+- **`solix demo` no longer crashes on headless machines** — a missing browser
+  opener emitted an unhandled async `spawn` error after seeding.
+- **Right-side panels clear the TopBar** and the **Decision Queue sits beside
+  an open panel** instead of overlapping it.
+
 ## [1.8.0] — 2026-05-24
 
 **Security hardening — enforcing approvals, opt-in sandbox, and local-API auth.**
