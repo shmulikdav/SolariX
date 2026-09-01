@@ -19,7 +19,7 @@ terminals.
 
 ![Solix — every running Claude Code session as a planet orbiting a central sun](docs/galaxy.png)
 
-<sub>Captured from `solix demo` (fully synthetic, no real Claude Code needed) — see [docs/CAPTURE.md](docs/CAPTURE.md).</sub>
+<sub>Run `solix demo` to see the live galaxy in your browser (fully synthetic, no real Claude Code needed) — capture guide in [docs/CAPTURE.md](docs/CAPTURE.md).</sub>
 
 > **100% local, zero telemetry.** Solix runs entirely on `127.0.0.1` — a
 > local server, a local SQLite file, no account, no sign-in, and nothing
