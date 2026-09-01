@@ -24,7 +24,6 @@ need to evaluate, run, and extend it.
 ```sh
 git clone https://github.com/shmulikdav/Solix.git
 cd Solix
-git checkout claude/solix-command-center-z1y95
 pnpm install
 pnpm --filter @solix/web build
 pnpm --filter @shmulikdav/solix exec tsx src/index.ts start

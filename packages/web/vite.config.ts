@@ -53,10 +53,17 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // Cache the app shell so the dashboard renders briefly while the
-        // server is restarting. WebSocket and /api/* always go to the
-        // network — we don't want stale state masquerading as live data.
-        globPatterns: ['**/*.{js,css,html,svg,png,jpg}'],
+        // Do NOT precache the app shell (js/css/html). Solix is served by
+        // its own local server, which is always up whenever the UI is — so
+        // precaching the shell bought nothing but the classic PWA failure:
+        // after `solix` upgrades (or a rebuild), the service worker kept
+        // serving the OLD bundle until it eventually updated, making fixes
+        // look like they hadn't shipped. Precache only the icons/manifest
+        // for installability; the shell always comes fresh from the network,
+        // and `navigateFallback: null` stops the SW from serving a cached
+        // index.html (the server owns navigation).
+        globPatterns: ['**/*.{png,svg,ico,webmanifest}'],
+        navigateFallback: null,
         navigateFallbackDenylist: [/^\/api/, /^\/events/, /^\/ws/],
       },
     }),
