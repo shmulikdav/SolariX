@@ -5,6 +5,29 @@ All notable changes to Solix (`@shmulikdav/solix`) are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.1] — 2026-09-01
+
+**Getting-started docs go npm-first, and the stale-UI service-worker trap is fixed.**
+
+### Fixed
+- **PWA service worker no longer precaches the app shell.** After a `solix`
+  upgrade (or a rebuild) the service worker used to keep serving the old
+  JS/CSS/HTML bundle until it eventually revalidated, making shipped fixes look
+  like they hadn't landed. The shell now always comes fresh from the local
+  server — which is always up whenever the UI is — and only the icons/manifest
+  are precached, for installability (`navigateFallback: null`). Precache dropped
+  from 13 entries (~1.3 MiB) to 6 (~96 KiB).
+
+### Changed
+- **Getting-started guides are npm-first.** `DEMO.md` and `DEMO_PM.md` now start
+  from `npm i -g @shmulikdav/solix` instead of cloning the repo, and drop the
+  from-source `pnpm install` / build steps and the `cd ~/Solix` references.
+  `DEMO_DEV.md` remains the from-source developer guide.
+
+### Added
+- **Launch banner** (`docs/galaxy.png`) for the README hero and launch listings,
+  re-rendered lighter (1.26 MB → 788 KB).
+
 ## [1.9.0] — 2026-08-31
 
 **Live showcase demo, cross-origin hardening, and launch-readiness fixes.**
@@ -160,6 +183,8 @@ For releases before this changelog was introduced, see the
 [Git history](https://github.com/shmulikdav/Solix/commits/main) and
 [GitHub releases](https://github.com/shmulikdav/Solix/releases).
 
+[1.9.1]: https://github.com/shmulikdav/Solix/releases/tag/v1.9.1
+[1.9.0]: https://github.com/shmulikdav/Solix/releases/tag/v1.9.0
 [1.8.0]: https://github.com/shmulikdav/Solix/releases/tag/v1.8.0
 [1.7.0]: https://github.com/shmulikdav/Solix/releases/tag/v1.7.0
 [1.6.0]: https://github.com/shmulikdav/Solix/releases/tag/v1.6.0
