@@ -1,0 +1,57 @@
+name: Bug report
+description: Something in Solix isn't working
+title: "[bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying Solix! A few details make bugs much faster to fix.
+
+        **Solix is 100% local** — please don't paste anything from your codebase, prompts, or anything you'd rather keep private.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect, and what did you get instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. npm i -g @shmulikdav/solix
+        2. solix install && solix start
+        3. ...
+  - type: input
+    id: solix-version
+    attributes:
+      label: Solix version
+      description: Output of `solix --version`
+      placeholder: "1.9.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Linux
+        - Windows (WSL)
+        - Windows (native)
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node version
+      description: Output of `node --version`
+      placeholder: "v20.x"
+  - type: textarea
+    id: doctor
+    attributes:
+      label: "`solix doctor` output"
+      description: Paste the output of `solix doctor` — it's all local, no secrets.
+      render: shell

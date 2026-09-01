@@ -319,9 +319,6 @@ solix/
 └── tsconfig.base.json
 ```
 
-## Roadmap
+## Feedback
 
-V1 ships in milestones (see PRD §12). M0+M1 foundation is in place.
-Remaining V1 work: M2 visual polish, M3 side-panel transcript tail,
-M3.5 internal-session launcher, M4 mission summaries + Quest Board,
-M5 npm publish.
+Solix is early and I'd love your feedback. **[Open an issue](https://github.com/shmulikdav/Solix/issues/new/choose)** for a bug or an idea — there are quick templates for both. Since Solix runs 100% locally, please leave out any private code or prompts.

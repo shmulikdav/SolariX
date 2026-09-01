@@ -1,0 +1,17 @@
+name: Idea / feature request
+description: Something you'd want Solix to do
+title: "[idea]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you want, and why?
+      description: What are you trying to do that Solix doesn't help with yet?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else?
+      description: Screenshots, examples, or how you'd expect it to work.
