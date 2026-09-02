@@ -3,12 +3,15 @@ import { useFrame, useLoader } from '@react-three/fiber';
 import {
   AdditiveBlending,
   CanvasTexture,
+  type Group,
+  MathUtils,
   type Mesh,
+  type PointLight,
   RepeatWrapping,
   type Sprite,
   TextureLoader,
 } from 'three';
-import { useSolixStore } from '../store/index.js';
+import { selectPlanets, useSolixStore } from '../store/index.js';
 
 const SUN_TEXTURE_URL = '/textures/sun.jpg';
 
@@ -16,18 +19,67 @@ const SUN_TEXTURE_URL = '/textures/sun.jpg';
 // screen) to 1.4. The sun should be the gravitational center, not the
 // only thing you can see.
 const SUN_RADIUS = 1.4;
+const SUN_LIGHT_BASE = 18;
+
+/**
+ * Live workspace activity, read imperatively so it never triggers a React
+ * render. `active` = sessions actually working; `attention` = anything that
+ * needs a human (permission / input / plan review / error).
+ */
+function readSunActivity(): { active: number; attention: number } {
+  const planets = selectPlanets(useSolixStore.getState());
+  let active = 0;
+  let attention = 0;
+  for (const s of planets) {
+    if (s.status === 'active') active++;
+    else if (
+      s.status === 'awaiting_permission' ||
+      s.status === 'awaiting_input' ||
+      s.status === 'plan_review' ||
+      s.status === 'error'
+    )
+      attention++;
+  }
+  return { active, attention };
+}
 
 export function Sun(): JSX.Element {
+  const groupRef = useRef<Group>(null);
+  const lightRef = useRef<PointLight>(null);
+
+  // The living sun: brighten + grow slightly with active work, lerped so it
+  // breathes rather than snaps. Read imperatively in the frame loop (same
+  // pattern as SunBody's motion read) — no re-render churn.
+  useFrame(() => {
+    const { active } = readSunActivity();
+    const load = Math.min(active, 8) / 8; // 0..1
+    if (lightRef.current) {
+      const target = SUN_LIGHT_BASE * (1 + load * 0.7);
+      lightRef.current.intensity = MathUtils.lerp(
+        lightRef.current.intensity,
+        target,
+        0.05,
+      );
+    }
+    if (groupRef.current) {
+      const target = 1 + load * 0.12;
+      const s = MathUtils.lerp(groupRef.current.scale.x, target, 0.05);
+      groupRef.current.scale.set(s, s, s);
+    }
+  });
+
   return (
-    <group>
+    <group ref={groupRef}>
       {/*
         Sun's pointLight: meaningful illumination on inner planets,
         steeper falloff so outer planets keep the cool nebula tint of
         the background. decay=2 is physically correct inverse-square.
+        Intensity is animated by the living-sun frame loop above.
       */}
       <pointLight
+        ref={lightRef}
         position={[0, 0, 0]}
-        intensity={18}
+        intensity={SUN_LIGHT_BASE}
         distance={70}
         decay={2}
         color="#ffd486"
@@ -37,6 +89,27 @@ export function Sun(): JSX.Element {
       </Suspense>
       <SunHaloes />
       <SolarProminences />
+      {/*
+        Invisible pick sphere. The sun body is a meshBasicMaterial with no
+        handler, so this transparent sphere (opacity 0, NOT visible={false} —
+        the raycaster skips invisible objects) is the click/hover target that
+        opens Mission Control. Sized just past the corona so it's easy to hit.
+      */}
+      <mesh
+        onClick={(e) => {
+          e.stopPropagation();
+          useSolixStore.getState().openWorkspace();
+        }}
+        onPointerOver={() => {
+          document.body.style.cursor = 'pointer';
+        }}
+        onPointerOut={() => {
+          document.body.style.cursor = '';
+        }}
+      >
+        <sphereGeometry args={[SUN_RADIUS * 1.3, 24, 24]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      </mesh>
     </group>
   );
 }
@@ -202,13 +275,23 @@ function SolarProminences(): JSX.Element {
 
   useFrame(() => {
     const t = performance.now() * 0.001;
+    // When any session needs a human, the prominences flick faster, grow,
+    // brighten, and tint red — so the sun flares before you click anything.
+    const attention = readSunActivity().attention > 0;
+    const wobbleFreq = attention ? 3.4 : 1.4;
+    const opFreq = attention ? 4.0 : 1.7;
+    const scaleBoost = attention ? 1.35 : 1;
+    const opBoost = attention ? 1.5 : 1;
     refs.current.forEach((sprite, i) => {
       if (!sprite) return;
       const spec = flames[i]!;
-      const wobble = 0.85 + Math.sin(t * 1.4 + spec.phase) * 0.25;
-      sprite.scale.set(spec.size * wobble, spec.size * wobble * 1.4, 1);
+      const wobble = 0.85 + Math.sin(t * wobbleFreq + spec.phase) * 0.25;
+      const sz = spec.size * wobble * scaleBoost;
+      sprite.scale.set(sz, sz * 1.4, 1);
       const m = sprite.material;
-      m.opacity = spec.baseOpacity * (0.7 + Math.sin(t * 1.7 + spec.phase) * 0.3);
+      m.opacity =
+        spec.baseOpacity * opBoost * (0.7 + Math.sin(t * opFreq + spec.phase) * 0.3);
+      m.color.setHex(attention ? 0xff4444 : 0xffffff);
     });
   });
 

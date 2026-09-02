@@ -31,6 +31,7 @@ export function Scene(): JSX.Element {
   const selectSession = useSolixStore((s) => s.selectSession);
   const selectAdvisor = useSolixStore((s) => s.selectAdvisor);
   const selectSkill = useSolixStore((s) => s.selectSkill);
+  const closeWorkspace = useSolixStore((s) => s.closeWorkspace);
 
   const allOuter = [...planets, ...advisorPlanets];
   const orbitSlots = Array.from(
@@ -53,6 +54,7 @@ export function Scene(): JSX.Element {
         selectSession(null);
         selectAdvisor(null);
         selectSkill(null);
+        closeWorkspace();
       }}
     >
       <color attach="background" args={['#05060c']} />
