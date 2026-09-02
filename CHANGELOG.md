@@ -5,6 +5,19 @@ All notable changes to Solix (`@shmulikdav/solix`) are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.2] — 2026-09-02
+
+**macOS observability fix — hooks work on BSD `date`, and status pings stop opening "unknown" permission cards.**
+
+### Fixed
+- **macOS: session and tool observability were silently broken** ([#2](https://github.com/shmulikdav/Solix/issues/2)). On macOS a fresh `solix install` left the dashboard stuck on "EMPTY SYSTEM" — no planets, no comets — with no error anywhere. Three combined causes, all fixed:
+  - 6 of the 9 hook scripts POSTed to the token-guarded `/events` endpoint **without** the `X-Solix-Token` header, so every event got a 401 and was silently swallowed. All 9 hooks now send the token.
+  - Every hook built its timestamp with `date +%s%3N`; `%N` is a GNU extension, so BSD `date` on macOS emitted a literal `N` and produced invalid JSON the server dropped. Hooks now use POSIX arithmetic (`$(($(date +%s) * 1000))`), which yields millisecond timestamps on both BSD and GNU.
+  - `Notification` events were all treated as permission requests, so Claude Code's benign "waiting for your input" pings rendered as **"unknown"** Approve/Deny modals and flipped the planet red. The server now promotes a notification to a permission decision only when it carries a `tool_name`; otherwise it just surfaces a toast.
+- **Panels and modals are fully opaque.** The `solix.panel` color had baked-in alpha, capping every `bg-solix-panel/NN` at 0.8 so scene labels bled through the modals; it's now a solid color, with darker modal backdrops.
+
+Thanks to the detailed macOS onboarding report in [#2](https://github.com/shmulikdav/Solix/issues/2).
+
 ## [1.9.1] — 2026-09-01
 
 **Getting-started docs go npm-first, and the stale-UI service-worker trap is fixed.**
@@ -183,6 +196,7 @@ For releases before this changelog was introduced, see the
 [Git history](https://github.com/shmulikdav/Solix/commits/main) and
 [GitHub releases](https://github.com/shmulikdav/Solix/releases).
 
+[1.9.2]: https://github.com/shmulikdav/Solix/releases/tag/v1.9.2
 [1.9.1]: https://github.com/shmulikdav/Solix/releases/tag/v1.9.1
 [1.9.0]: https://github.com/shmulikdav/Solix/releases/tag/v1.9.0
 [1.8.0]: https://github.com/shmulikdav/Solix/releases/tag/v1.8.0
