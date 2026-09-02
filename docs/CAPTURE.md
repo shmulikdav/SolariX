@@ -39,7 +39,8 @@ still, calm frame use `solix demo --no-ticker` (seeds once, no animation).
 
 In the browser tab (http://127.0.0.1:4242):
 
-- Press **F** to fit every planet in view.
+- The demo boots with the whole system framed. Scroll to zoom and drag to
+  rotate; `-` zooms out and `0` resets the view if you nudge it.
 - Hide DevTools; go full-screen for a clean frame.
 
 Capture these and drop them in `docs/` with these exact names (the README

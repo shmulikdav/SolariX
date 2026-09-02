@@ -72,8 +72,8 @@ async function main() {
     await sleep(SETTLE_MS);
   };
 
-  // 1) Hero — press F to fit every planet in view, then shoot the whole scene.
-  await key('f');
+  // 1) Hero — the demo boots with the whole system framed; shoot it as-is.
+  // (Press `0` first if you've nudged the camera; the default pose frames well.)
   await shot('galaxy.png');
 
   // 2) Crew — open the advisor-ring panel (C), shoot, then close.
