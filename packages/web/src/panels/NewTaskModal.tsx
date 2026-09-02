@@ -133,8 +133,8 @@ export function NewTaskModal({
   };
 
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="w-[520px] max-w-[92vw] rounded-xl border border-solix-accent/40 bg-solix-panel/95 shadow-2xl">
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md">
+      <div className="w-[520px] max-w-[92vw] rounded-xl border border-solix-accent/40 bg-solix-panel shadow-2xl">
         <div className="px-5 py-4 border-b border-solix-border flex items-start justify-between">
           <div>
             <div className="text-xs uppercase tracking-widest text-solix-accent">

@@ -17,7 +17,7 @@ SOLIX_PORT="${SOLIX_PORT:-4242}"
 EVENT="pre_tool_task"
 PAYLOAD=$(cat 2>/dev/null || echo '{}')
 [ -z "$PAYLOAD" ] && PAYLOAD='{}'
-TS=$(date +%s%3N 2>/dev/null || echo "0")
+TS=$(($(date +%s 2>/dev/null || echo 0) * 1000))
 TOKEN=$(cat "${SOLIX_HOME:-$HOME/.solix}/token" 2>/dev/null || echo "")
 BODY="{\"event\":\"$EVENT\",\"payload\":$PAYLOAD,\"pid\":$PPID,\"cwd\":\"$(pwd)\",\"ts\":$TS}"
 

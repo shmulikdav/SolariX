@@ -360,10 +360,23 @@ export class EventRouter {
     const sessionId = this.extractSessionId(event);
     const p = event.payload as Record<string, unknown>;
     const message =
-      typeof p.message === 'string' ? p.message : 'Permission requested';
-    const tool =
-      typeof p.tool_name === 'string' ? p.tool_name : 'unknown';
+      typeof p.message === 'string' ? p.message : 'Notification';
 
+    // Always surface as a toast so the user sees Claude Code's status pings.
+    this.broadcaster.broadcast({
+      type: 'toast',
+      level: 'warn',
+      message,
+    });
+
+    // Only promote to a permission decision when the notification actually
+    // describes a tool call. Claude Code fires Notification hooks for benign
+    // status pings (e.g. "Claude is waiting for your input") with no tool_name;
+    // those shouldn't render an Approve/Deny modal labelled "unknown" or flip
+    // the session into `awaiting_permission`.
+    if (typeof p.tool_name !== 'string') return;
+
+    const tool = p.tool_name;
     const requestId = nanoid();
     this.permissions.set(requestId, {
       requestId,
@@ -386,11 +399,6 @@ export class EventRouter {
       tool,
       args: (p.tool_input as Record<string, unknown>) ?? {},
       requestId,
-    });
-    this.broadcaster.broadcast({
-      type: 'toast',
-      level: 'warn',
-      message: `Permission requested: ${message}`,
     });
   }
 
