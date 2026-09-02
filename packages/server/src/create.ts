@@ -6,6 +6,7 @@ import { Broadcaster } from './broadcaster.js';
 import { getDb } from './db.js';
 import { createHttpApp } from './http.js';
 import { Launcher } from './launcher.js';
+import { DB_PATH } from './paths.js';
 import { EventRouter } from './router.js';
 import { attachWs } from './ws.js';
 import { seedAdvisors } from './state/advisors.js';
@@ -50,6 +51,22 @@ export async function createSolixServer(
   db.prepare(
     `UPDATE sessions SET wrapper_socket_path = NULL WHERE wrapper_socket_path IS NOT NULL`,
   ).run();
+  // Boot diagnostic — prints the resolved DB path + row counts so a user
+  // reporting an empty UI can confirm in one line which DB the server opened
+  // and whether it actually has data. Best-effort; never blocks startup.
+  try {
+    const advisorCount = (
+      db.prepare('SELECT count(*) AS n FROM advisors').get() as { n: number }
+    ).n;
+    const sessionCount = (
+      db.prepare('SELECT count(*) AS n FROM sessions').get() as { n: number }
+    ).n;
+    console.log(
+      `[solix] db      -> ${DB_PATH} (advisors=${advisorCount}, sessions=${sessionCount})`,
+    );
+  } catch {
+    /* counts are best-effort */
+  }
   const broadcaster = new Broadcaster();
   const launcher = new Launcher(db, broadcaster);
   const transcripts = new TranscriptWatcherManager(db, broadcaster);
