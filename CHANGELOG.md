@@ -5,6 +5,21 @@ All notable changes to Solix (`@shmulikdav/solix`) are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.0] — 2026-09-02
+
+**The sun comes alive — click it for Mission Control.**
+
+### Added
+- **Clickable sun → "Mission Control."** The central sun was decorative; now
+  clicking it (or pressing `w`) opens a right-docked overview of the whole
+  workspace: total spend, cost per completed mission, interventions (from the
+  audit log), active / needs-you / idle counts, mission tallies, context
+  pressure, and a clickable "needs-you" list that jumps you to whichever agent
+  is waiting. All figures are real — no new tracking.
+- **A living star.** The sun's light brightens and it grows slightly as more
+  agents work, and its solar flares flick faster and redder whenever a session
+  needs a human — so the center of the screen signals status before you click.
+
 ## [1.9.3] — 2026-09-02
 
 **Decision-card polish and a crew self-heal salvaged from earlier PRs.**
@@ -204,6 +219,7 @@ For releases before this changelog was introduced, see the
 [Git history](https://github.com/shmulikdav/Solix/commits/main) and
 [GitHub releases](https://github.com/shmulikdav/Solix/releases).
 
+[1.10.0]: https://github.com/shmulikdav/Solix/releases/tag/v1.10.0
 [1.9.3]: https://github.com/shmulikdav/Solix/releases/tag/v1.9.3
 [1.9.2]: https://github.com/shmulikdav/Solix/releases/tag/v1.9.2
 [1.9.1]: https://github.com/shmulikdav/Solix/releases/tag/v1.9.1
