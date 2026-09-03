@@ -6,7 +6,19 @@ interface NewTaskModalProps {
   onClose: () => void;
 }
 
-const MODELS = ['default', 'opus', 'sonnet', 'haiku'] as const;
+// `value` is passed straight to Claude Code's --model. The lowercase tier
+// aliases auto-resolve to the newest of each tier; the capitalized entries pin
+// a specific model (they only launch if the user's Claude Code + plan support it).
+const MODELS: { value: string; label: string }[] = [
+  { value: 'default', label: 'default' },
+  { value: 'opus', label: 'opus' },
+  { value: 'sonnet', label: 'sonnet' },
+  { value: 'haiku', label: 'haiku' },
+  { value: 'claude-opus-5', label: 'Opus 5' },
+  { value: 'claude-sonnet-5', label: 'Sonnet 5' },
+  { value: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5' },
+  { value: 'claude-fable-5-1', label: 'Fable 5.1' },
+];
 
 export function NewTaskModal({
   open,
@@ -232,18 +244,18 @@ export function NewTaskModal({
             <div className="text-[10px] uppercase tracking-wide text-slate-400 mb-1">
               Model
             </div>
-            <div className="flex gap-1.5">
+            <div className="flex flex-wrap gap-1.5">
               {MODELS.map((m) => (
                 <button
-                  key={m}
-                  onClick={() => setModel(m)}
+                  key={m.value}
+                  onClick={() => setModel(m.value)}
                   className={`text-xs px-3 py-1.5 rounded border ${
-                    model === m
+                    model === m.value
                       ? 'bg-solix-accent/20 border-solix-accent text-solix-accent'
                       : 'border-solix-border text-slate-300 hover:bg-solix-border/30'
                   }`}
                 >
-                  {m}
+                  {m.label}
                 </button>
               ))}
             </div>

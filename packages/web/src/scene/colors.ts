@@ -1,18 +1,14 @@
 import type { Model, SessionStatus } from '@solix/shared';
 
 export function modelColor(model: Model): string {
-  switch (model) {
-    case 'opus':
-      return '#a855f7';
-    case 'sonnet':
-      return '#3b82f6';
-    case 'haiku':
-      return '#06b6d4';
-    case 'default':
-      return '#94a3b8';
-    default:
-      return '#94a3b8';
-  }
+  // Substring match so pinned model ids (e.g. `claude-opus-5`) still map to
+  // their tier color — same tier-detection approach as pricing.ts.
+  const m = model.toLowerCase();
+  if (m.includes('opus')) return '#a855f7'; // purple
+  if (m.includes('sonnet')) return '#3b82f6'; // blue
+  if (m.includes('haiku')) return '#06b6d4'; // cyan
+  if (m.includes('fable')) return '#ec4899'; // pink — new tier
+  return '#94a3b8'; // default / unknown — slate
 }
 
 export function statusEmissive(status: SessionStatus): {
