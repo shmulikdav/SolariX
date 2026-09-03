@@ -153,7 +153,7 @@ export function NewTaskModal({
         the galaxy bled through the form. Keeping the blur on a sibling (the way
         GalaxyPanel keeps it on its own element) makes the panel render solid.
       */}
-      <div className="absolute inset-0 bg-black/90 backdrop-blur-md" />
+      <div className="absolute inset-0 bg-solix-bg" />
       <div className="relative z-10 w-[520px] max-w-[92vw] rounded-xl border border-solix-accent/40 bg-solix-panel shadow-2xl">
         <div className="px-5 py-4 border-b border-solix-border flex items-start justify-between">
           <div>
