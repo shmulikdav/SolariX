@@ -13,6 +13,14 @@ const DEMO_DB_PATH = join(SOLIX_HOME, 'demo.db');
 const DEMO_PID_PATH = join(SOLIX_HOME, 'demo.pid');
 const TOKEN_PATH = join(SOLIX_HOME, 'token');
 
+// How long to wait for the freshly-spawned sandbox server to answer
+// /api/health. A cold first run (right after `npm i -g`) loads the native
+// better-sqlite3 addon, seeds 14 advisors from disk, and scans skills — all
+// synchronously before the HTTP port binds — so 8s was too tight and killed
+// servers that were about to be fine. 30s absorbs a cold boot comfortably;
+// a healthy server answers on the first poll (~150ms) regardless.
+const SERVER_BOOT_TIMEOUT_MS = 30_000;
+
 // The sandbox server enforces the same x-solix-token gate on /events that a
 // real install does (it reads ~/.solix/token via SOLIX_HOME, which the demo
 // does NOT override). Read that token here so our seed POSTs authenticate.
@@ -60,7 +68,7 @@ async function sleep(ms: number): Promise<void> {
 async function isPortFree(port: number): Promise<boolean> {
   try {
     await fetch(`${baseUrl(port)}/api/health`, {
-      signal: AbortSignal.timeout(300),
+      signal: AbortSignal.timeout(1000),
     });
     return false;
   } catch {
@@ -216,8 +224,12 @@ async function bootSandbox(preferredPort: number): Promise<BootResult | null> {
     }
   });
 
-  if (!(await waitForServer(port))) {
-    console.error(`[solix demo] sandbox server failed to start within 8s.`);
+  if (!(await waitForServer(port, SERVER_BOOT_TIMEOUT_MS))) {
+    console.error(
+      `[solix demo] sandbox server failed to start within ${Math.round(
+        SERVER_BOOT_TIMEOUT_MS / 1000,
+      )}s.`,
+    );
     try {
       child.kill();
     } catch {

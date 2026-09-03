@@ -15,7 +15,13 @@ CREATE TABLE IF NOT EXISTS sessions (
   pid INTEGER,
   project_id TEXT NOT NULL REFERENCES projects(id),
   parent_session_id TEXT REFERENCES sessions(id),
-  origin TEXT NOT NULL CHECK (origin IN ('external','internal')),
+  -- origin is enforced at the app layer via the SessionOrigin union
+  -- ('external' | 'internal' | 'agentview', and future multi-tool origins
+  -- like 'codex'). We deliberately do NOT put a CHECK here: SQLite can't
+  -- ALTER a CHECK, so every new origin value would otherwise require a
+  -- table-rebuild migration — and a stale CHECK once silently broke Agent
+  -- View sync for months. The migration in getDb() relaxes it on old DBs.
+  origin TEXT NOT NULL,
   model TEXT,
   status TEXT NOT NULL,
   context_usage_pct REAL DEFAULT 0,
@@ -164,6 +170,92 @@ function ensureColumn(
   }
 }
 
+/**
+ * One-time relaxation of the legacy `sessions.origin` CHECK constraint.
+ *
+ * DBs created before this fix declared
+ *   origin TEXT NOT NULL CHECK (origin IN ('external','internal'))
+ * which rejects Agent View sessions (`origin = 'agentview'`) — so every
+ * Agent View sync threw `CHECK constraint failed` and no background session
+ * ever appeared as a planet. SQLite can't ALTER an existing table's CHECK,
+ * and better-sqlite3 forbids editing sqlite_master directly, so we use the
+ * standard table-rebuild: recreate `sessions` from its OWN stored DDL minus
+ * the CHECK, copy every row across, and swap it in.
+ *
+ * SQLite keeps the *full* current DDL for a table in sqlite_master — every
+ * `ALTER TABLE ... ADD COLUMN` from prior upgrades is folded into it — so
+ * rebuilding from that DDL preserves all columns, types, and defaults with
+ * no hand-maintained column list. Data-preserving and column-order agnostic.
+ *
+ * Best-effort: the whole rebuild runs in a transaction (rolled back on any
+ * error) with FK enforcement disabled around it (so dropping the referenced
+ * `sessions` table is allowed). On failure the original table is untouched
+ * and boot continues — Agent View simply stays unsynced, exactly as before.
+ */
+function relaxLegacyOriginCheck(db: DB): void {
+  let ddl = '';
+  try {
+    const row = db
+      .prepare(
+        `SELECT sql FROM sqlite_master WHERE type='table' AND name='sessions'`,
+      )
+      .get() as { sql?: string } | undefined;
+    ddl = row?.sql ?? '';
+  } catch {
+    return;
+  }
+  if (!/CHECK\s*\(\s*origin\s+IN/i.test(ddl)) return; // already relaxed / new DB
+
+  const relaxed = ddl.replace(
+    /,?\s*CHECK\s*\(\s*origin\s+IN\s*\([^)]*\)\s*\)/i,
+    '',
+  );
+  if (relaxed === ddl) return; // couldn't excise cleanly — leave untouched
+
+  // Recreate under a temp name (keep every column + the now-CHECK-free
+  // constraints exactly as they were), copy, drop, rename.
+  const tempDdl = relaxed.replace(
+    /CREATE\s+TABLE\s+(?:"sessions"|`sessions`|\[sessions\]|sessions)/i,
+    'CREATE TABLE "_sessions_migrate_new"',
+  );
+  if (!tempDdl.includes('_sessions_migrate_new')) return; // rename failed — bail
+
+  const cols = (
+    db.prepare(`PRAGMA table_info(sessions)`).all() as { name: string }[]
+  )
+    .map((c) => `"${c.name}"`)
+    .join(', ');
+
+  // FK enforcement can only be toggled outside a transaction.
+  db.pragma('foreign_keys = OFF');
+  try {
+    db.transaction(() => {
+      db.exec(tempDdl);
+      db.exec(
+        `INSERT INTO "_sessions_migrate_new" (${cols}) SELECT ${cols} FROM sessions`,
+      );
+      db.exec(`DROP TABLE sessions`);
+      db.exec(`ALTER TABLE "_sessions_migrate_new" RENAME TO sessions`);
+      // Indexes were dropped with the old table — recreate them.
+      db.exec(
+        `CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id)`,
+      );
+      db.exec(
+        `CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status)`,
+      );
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_sessions_kind ON sessions(kind)`);
+    })();
+    console.log('[solix] migrated sessions.origin CHECK (Agent View enabled)');
+  } catch (err) {
+    console.warn(
+      '[solix] origin CHECK migration skipped:',
+      (err as Error).message,
+    );
+  } finally {
+    db.pragma('foreign_keys = ON');
+  }
+}
+
 export function getDb(): DB {
   if (_db) return _db;
   ensureSolixHome();
@@ -171,6 +263,7 @@ export function getDb(): DB {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.exec(SCHEMA);
+  relaxLegacyOriginCheck(db);
   // Idempotent column adds for repos upgrading from M0+M1.
   ensureColumn(db, 'sessions', 'kind', "kind TEXT NOT NULL DEFAULT 'user'");
   ensureColumn(db, 'sessions', 'advisor_role', 'advisor_role TEXT');

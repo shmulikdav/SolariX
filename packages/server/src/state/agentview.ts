@@ -258,8 +258,16 @@ export function startAgentViewBridge(
   };
   const debounced = debounce(sync, 50);
 
-  // Initial scan, then watch.
-  sync();
+  // Initial scan — deferred off the boot critical path. syncFromDisk walks
+  // ~/.claude/jobs synchronously (readdir + statSync + readFile per job),
+  // which for a heavy Agent View user can block the event loop long enough
+  // that the freshly-bound HTTP port can't answer /api/health yet — the demo
+  // orchestrator then times out waiting for a server that was about to be
+  // fine. Running the first scan on the next tick lets the server start
+  // serving immediately; the scan (and its broadcasts) land a beat later. The
+  // fs watchers below are still registered synchronously so no on-disk change
+  // is missed in the gap.
+  setImmediate(sync);
 
   const watchers: FSWatcher[] = [];
   // roster.json is the most important — watch its containing dir so
