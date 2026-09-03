@@ -5,6 +5,23 @@ All notable changes to Solix (`@shmulikdav/solix`) are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.0] — 2026-09-02
+
+**More models to pick from, and the modals stop showing the galaxy through them.**
+
+### Added
+- **Claude 5 model options in the New Task picker.** Alongside the auto-updating tier
+  aliases (default / opus / sonnet / haiku), you can now pin **Opus 5, Sonnet 5, Haiku 4.5,
+  and Fable 5.1** explicitly. Planets stay color-coded by tier (Fable gets its own pink).
+  Pinned model ids only launch if your Claude Code + plan can access them.
+
+### Fixed
+- **Galaxy no longer bleeds through the New Task / Crew modals.** The opaque panel was
+  nested inside a `backdrop-blur` element, which some browsers composite translucently, so
+  the busy scene showed through the form (worst in the dense center). The blurred backdrop is
+  now a sibling layer behind the panel (matching the docked panels that never bled), and it's
+  darkened so the panel reads solid.
+
 ## [1.10.0] — 2026-09-02
 
 **The sun comes alive — click it for Mission Control.**
@@ -219,6 +236,7 @@ For releases before this changelog was introduced, see the
 [Git history](https://github.com/shmulikdav/Solix/commits/main) and
 [GitHub releases](https://github.com/shmulikdav/Solix/releases).
 
+[1.11.0]: https://github.com/shmulikdav/Solix/releases/tag/v1.11.0
 [1.10.0]: https://github.com/shmulikdav/Solix/releases/tag/v1.10.0
 [1.9.3]: https://github.com/shmulikdav/Solix/releases/tag/v1.9.3
 [1.9.2]: https://github.com/shmulikdav/Solix/releases/tag/v1.9.2
