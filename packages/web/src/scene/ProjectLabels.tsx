@@ -56,6 +56,7 @@ export function ProjectLabels(): JSX.Element {
             key={project.id}
             position={[x, 1.6, z]}
             center
+            zIndexRange={[20, 0]}
             distanceFactor={14}
             style={{ pointerEvents: 'none', userSelect: 'none' }}
           >

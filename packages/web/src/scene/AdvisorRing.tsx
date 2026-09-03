@@ -142,6 +142,7 @@ function AdvisorPlanet({
 
       <Html
         center
+        zIndexRange={[20, 0]}
         distanceFactor={9}
         style={{ pointerEvents: 'none', userSelect: 'none' }}
         position={[0, PLANET_SIZE + 0.32, 0]}
@@ -383,6 +384,7 @@ function GhostAdvisorPlanet({
       </mesh>
       <Html
         center
+        zIndexRange={[20, 0]}
         distanceFactor={9}
         style={{ pointerEvents: 'none', userSelect: 'none' }}
         position={[0, PLANET_SIZE + 0.28, 0]}
