@@ -145,8 +145,16 @@ export function NewTaskModal({
   };
 
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md">
-      <div className="w-[520px] max-w-[92vw] rounded-xl border border-solix-accent/40 bg-solix-panel shadow-2xl">
+    <div className="absolute inset-0 z-50 flex items-center justify-center">
+      {/*
+        Dimmed, blurred backdrop as a SEPARATE layer behind the panel — NOT an
+        ancestor of it. When the opaque panel was nested inside a
+        `backdrop-blur` element, some browsers composited it translucently and
+        the galaxy bled through the form. Keeping the blur on a sibling (the way
+        GalaxyPanel keeps it on its own element) makes the panel render solid.
+      */}
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-md" />
+      <div className="relative z-10 w-[520px] max-w-[92vw] rounded-xl border border-solix-accent/40 bg-solix-panel shadow-2xl">
         <div className="px-5 py-4 border-b border-solix-border flex items-start justify-between">
           <div>
             <div className="text-xs uppercase tracking-widest text-solix-accent">

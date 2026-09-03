@@ -53,8 +53,11 @@ export function CrewPanel({ open, onClose }: CrewPanelProps): JSX.Element | null
   const optIn = advisors.filter((a) => !a.enabled);
 
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md">
-      <div className="w-[620px] max-w-[94vw] max-h-[88vh] flex flex-col rounded-xl border border-solix-accent/40 bg-solix-panel shadow-2xl">
+    <div className="absolute inset-0 z-50 flex items-center justify-center">
+      {/* Blurred backdrop as a sibling, not an ancestor of the opaque panel —
+          see NewTaskModal for why (backdrop-filter compositing bleed-through). */}
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-md" />
+      <div className="relative z-10 w-[620px] max-w-[94vw] max-h-[88vh] flex flex-col rounded-xl border border-solix-accent/40 bg-solix-panel shadow-2xl">
         <div className="px-5 py-4 border-b border-solix-border flex items-start justify-between">
           <div>
             <div className="text-xs uppercase tracking-widest text-solix-accent">
