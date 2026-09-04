@@ -197,6 +197,7 @@ interface SolixState {
   selectedAdvisorId: string | null;
   selectedSkillId: string | null;
   workspaceOpen: boolean;
+  planPanelOpen: boolean;
   motionEnabled: boolean;
   viewMode: 'galaxy' | 'list' | 'missions';
   playback: PlaybackState;
@@ -209,6 +210,21 @@ interface SolixState {
   selectSkill: (id: string | null) => void;
   openWorkspace: () => void;
   closeWorkspace: () => void;
+  openPlanPanel: () => void;
+  closePlanPanel: () => void;
+  /** v2 Maestro — POST a goal to the orchestrator; returns the created plan id
+   *  (draft → awaiting_approval) or validation errors. */
+  createPlanFromGoal: (
+    goal: string,
+    cwd: string,
+    opts?: {
+      name?: string;
+      autoMode?: boolean;
+      goalId?: string;
+      budgetUsd?: number;
+    },
+  ) => Promise<{ ok: boolean; planId?: string; errors?: string[] }>;
+  approvePlan: (planId: string) => Promise<void>;
   dismissToast: (id: string) => void;
   resolvePermission: (requestId: string, approved: boolean) => void;
   invokeAdvisor: (advisorId: string, prompt?: string) => void;
@@ -310,6 +326,7 @@ export const useSolixStore = create<SolixState>((set, get) => ({
   selectedAdvisorId: null,
   selectedSkillId: null,
   workspaceOpen: false,
+  planPanelOpen: false,
   motionEnabled: readMotionPref(),
   viewMode: readViewPref(),
   playback: EMPTY_PLAYBACK,
@@ -602,6 +619,7 @@ export const useSolixStore = create<SolixState>((set, get) => ({
       selectedAdvisorId: id ? null : get().selectedAdvisorId,
       selectedSkillId: id ? null : get().selectedSkillId,
       workspaceOpen: id ? false : get().workspaceOpen,
+      planPanelOpen: id ? false : get().planPanelOpen,
     }),
 
   selectAdvisor: (id) =>
@@ -610,6 +628,7 @@ export const useSolixStore = create<SolixState>((set, get) => ({
       selectedSessionId: id ? null : get().selectedSessionId,
       selectedSkillId: id ? null : get().selectedSkillId,
       workspaceOpen: id ? false : get().workspaceOpen,
+      planPanelOpen: id ? false : get().planPanelOpen,
     }),
 
   selectSkill: (id) =>
@@ -618,6 +637,7 @@ export const useSolixStore = create<SolixState>((set, get) => ({
       selectedSessionId: id ? null : get().selectedSessionId,
       selectedAdvisorId: id ? null : get().selectedAdvisorId,
       workspaceOpen: id ? false : get().workspaceOpen,
+      planPanelOpen: id ? false : get().planPanelOpen,
     }),
 
   // The sun opens Mission Control; keep it mutually exclusive with the
@@ -625,12 +645,56 @@ export const useSolixStore = create<SolixState>((set, get) => ({
   openWorkspace: () =>
     set({
       workspaceOpen: true,
+      planPanelOpen: false,
       selectedSessionId: null,
       selectedAdvisorId: null,
       selectedSkillId: null,
     }),
 
   closeWorkspace: () => set({ workspaceOpen: false }),
+
+  openPlanPanel: () =>
+    set({
+      planPanelOpen: true,
+      workspaceOpen: false,
+      selectedSessionId: null,
+      selectedAdvisorId: null,
+      selectedSkillId: null,
+    }),
+
+  closePlanPanel: () => set({ planPanelOpen: false }),
+
+  createPlanFromGoal: async (goal, cwd, opts) => {
+    try {
+      const res = await fetch('/api/plans/from-goal', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ goal, cwd, ...opts }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        planId?: string;
+        errors?: string[];
+      };
+      return {
+        ok: Boolean(data.ok),
+        planId: data.planId,
+        errors: data.errors,
+      };
+    } catch (err) {
+      return { ok: false, errors: [(err as Error).message] };
+    }
+  },
+
+  approvePlan: async (planId) => {
+    try {
+      await fetch(`/api/plans/${encodeURIComponent(planId)}/approve`, {
+        method: 'POST',
+      });
+    } catch {
+      /* offline; the plan_upsert broadcast will reconcile if it lands */
+    }
+  },
 
   dismissToast: (id) =>
     set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),

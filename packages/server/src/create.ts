@@ -9,13 +9,33 @@ import { Launcher } from './launcher.js';
 import { DB_PATH } from './paths.js';
 import { EventRouter } from './router.js';
 import { attachWs } from './ws.js';
-import { seedAdvisors } from './state/advisors.js';
+import {
+  getAdvisor,
+  listAdvisors,
+  readAdvisorAgentMd,
+  seedAdvisors,
+} from './state/advisors.js';
+import { Orchestrator } from './orchestrator/index.js';
+import { LauncherSessionRunner } from './orchestrator/launcher-runner.js';
 import { discoverSkills } from './state/skills.js';
 import { TranscriptWatcherManager } from './state/transcript.js';
 import { cleanupOrphanedSockets } from './state/wrappers.js';
 import { startAgentViewBridge } from './state/agentview.js';
 import { listDueSchedules, markScheduleRun } from './state/schedules.js';
 import { now } from './util.js';
+
+// Models a plan task may be dispatched with (mirrors the New Task picker).
+// Used to allowlist the planner's JSON output before it can reach a launch.
+const KNOWN_MODELS = [
+  'default',
+  'opus',
+  'sonnet',
+  'haiku',
+  'claude-opus-5',
+  'claude-sonnet-5',
+  'claude-haiku-4-5-20251001',
+  'claude-fable-5-1',
+];
 
 export interface SolixServerOptions {
   port?: number;
@@ -72,6 +92,26 @@ export async function createSolixServer(
   const transcripts = new TranscriptWatcherManager(db, broadcaster);
   const router = new EventRouter(db, broadcaster, launcher, transcripts);
 
+  // v2 Maestro orchestrator (Phase 1: goal → plan → approve; no dispatch yet).
+  const orchestrator = new Orchestrator({
+    db,
+    runner: new LauncherSessionRunner(launcher),
+    broadcast: (msg) => broadcaster.broadcast(msg),
+    getKnownAdvisorRoles: () =>
+      listAdvisors(db)
+        .filter((a) => a.role !== 'conductor')
+        .map((a) => a.id),
+    knownModels: KNOWN_MODELS,
+    getMaestroPrompt: () => {
+      const a = getAdvisor(db, 'maestro');
+      if (!a) return '';
+      // Strip the YAML frontmatter → a clean planner system prompt.
+      return readAdvisorAgentMd(a)
+        .replace(/^---\n[\s\S]*?\n---\n/, '')
+        .trim();
+    },
+  });
+
   // Shared secret written by `solix install`. When present, the server
   // requires it on the spoofable /events ingestion surface. Absent (e.g. an
   // older install that predates the token) → no enforcement, same as before.
@@ -86,7 +126,13 @@ export async function createSolixServer(
     token = null;
   }
 
-  const app = createHttpApp({ db, router, token, version: opts.version });
+  const app = createHttpApp({
+    db,
+    router,
+    orchestrator,
+    token,
+    version: opts.version,
+  });
 
   const server = serve({
     fetch: app.fetch,

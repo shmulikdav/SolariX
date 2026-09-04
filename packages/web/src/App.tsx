@@ -45,6 +45,9 @@ const WorkspacePanel = lazy(() =>
     default: m.WorkspacePanel,
   })),
 );
+const PlanPanel = lazy(() =>
+  import('./panels/PlanPanel.js').then((m) => ({ default: m.PlanPanel })),
+);
 
 export default function App(): JSX.Element {
   const [galaxyOpen, setGalaxyOpen] = useState(false);
@@ -60,6 +63,9 @@ export default function App(): JSX.Element {
   const selectedSkillId = useSolixStore((s) => s.selectedSkillId);
   const workspaceOpen = useSolixStore((s) => s.workspaceOpen);
   const closeWorkspace = useSolixStore((s) => s.closeWorkspace);
+  const planPanelOpen = useSolixStore((s) => s.planPanelOpen);
+  const openPlanPanel = useSolixStore((s) => s.openPlanPanel);
+  const closePlanPanel = useSolixStore((s) => s.closePlanPanel);
   const panelOffsetPx = selectedSessionId
     ? 460
     : selectedAdvisorId
@@ -70,7 +76,9 @@ export default function App(): JSX.Element {
           ? 480
           : workspaceOpen
             ? 480
-            : 0;
+            : planPanelOpen
+              ? 480
+              : 0;
 
   useEffect(() => {
     startWsClient();
@@ -92,6 +100,7 @@ export default function App(): JSX.Element {
         state.selectAdvisor(null);
         state.selectSkill(null);
         state.closeWorkspace();
+        state.closePlanPanel();
         setGalaxyOpen(false);
         setNewTaskOpen(false);
         setHelpOpen(false);
@@ -110,6 +119,9 @@ export default function App(): JSX.Element {
         setGalaxyOpen((v) => !v);
       } else if (!isTextField && (e.key === 'c' || e.key === 'C')) {
         setCrewOpen((v) => !v);
+      } else if (!isTextField && (e.key === 'p' || e.key === 'P')) {
+        if (state.planPanelOpen) state.closePlanPanel();
+        else state.openPlanPanel();
       } else if (!isTextField && (e.key === 'l' || e.key === 'L')) {
         setNewTaskOpen(true);
       } else if (!isTextField && (e.key === '+' || e.key === '=')) {
@@ -157,6 +169,7 @@ export default function App(): JSX.Element {
         onOpenTimeline={() => setTimelineOpen(true)}
         onOpenHelp={() => setHelpOpen(true)}
         onOpenCrew={() => setCrewOpen(true)}
+        onOpenPlan={openPlanPanel}
       />
       <DecisionQueue panelOffsetPx={panelOffsetPx} />
       <SidePanel />
@@ -175,6 +188,11 @@ export default function App(): JSX.Element {
       {workspaceOpen && (
         <Suspense fallback={null}>
           <WorkspacePanel open={workspaceOpen} onClose={closeWorkspace} />
+        </Suspense>
+      )}
+      {planPanelOpen && (
+        <Suspense fallback={null}>
+          <PlanPanel open={planPanelOpen} onClose={closePlanPanel} />
         </Suspense>
       )}
       <NewTaskModal

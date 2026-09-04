@@ -27,6 +27,7 @@ import { cors } from 'hono/cors';
 import type { HookEvent } from '@solix/shared';
 import type { DB } from './db.js';
 import type { EventRouter } from './router.js';
+import type { Orchestrator } from './orchestrator/index.js';
 import { listProjects } from './state/projects.js';
 import {
   getSession,
@@ -90,6 +91,7 @@ import type { GalaxyManifest } from '@solix/shared';
 export function createHttpApp(opts: {
   db: DB;
   router: EventRouter;
+  orchestrator: Orchestrator;
   token?: string | null;
   /** Product version to report from /api/health. The CLI injects its own
    * package version; absent when the server is embedded directly. */
@@ -704,6 +706,39 @@ export function createHttpApp(opts: {
     const ok = deletePlanTask(opts.db, taskId);
     if (ok) opts.router.broadcastPlanTaskRemove(taskId);
     return c.json({ ok });
+  });
+
+  // v2 Maestro — Phase 1 planner endpoints. `from-goal` runs a planner session
+  // (via the orchestrator's SessionRunner), parses + validates its JSON into a
+  // draft plan, and parks it at awaiting_approval; `approve` advances it to
+  // running. (Dispatch is Phase 2.) Origin-gated like the other /api/* mutating
+  // routes; token-gating the trigger lands with Phase-2 execution.
+  app.post('/api/plans/from-goal', async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      goal?: string;
+      cwd?: string;
+      name?: string;
+      autoMode?: boolean;
+      goalId?: string;
+      budgetUsd?: number;
+    };
+    if (!body.goal || !body.cwd) {
+      return c.json({ ok: false, errors: ['goal and cwd are required'] }, 400);
+    }
+    const res = await opts.orchestrator.createPlanFromGoal({
+      goal: body.goal,
+      cwd: body.cwd,
+      name: body.name,
+      autoMode: body.autoMode,
+      goalId: body.goalId,
+      budgetUsd: body.budgetUsd,
+    });
+    return c.json(res, res.ok ? 200 : 422);
+  });
+
+  app.post('/api/plans/:id/approve', (c) => {
+    const res = opts.orchestrator.approvePlan(c.req.param('id'));
+    return c.json(res, res.ok ? 200 : 409);
   });
 
   // Preflight check used by the NewTaskModal to warn before the user
