@@ -16,6 +16,10 @@ export interface RunOnceOpts {
    *  the worker↔task correlation is deterministic, not cwd-keyed). Optional for
    *  the Phase-1 planner, which is a transient one-shot. */
   sessionId?: string;
+  /** The plan's kill-switch. When it aborts, the runner must terminate the
+   *  child process and resolve `{ ok:false, error:'aborted' }` (Sentinel:
+   *  containment needs a real kill, not a status flip). */
+  signal?: AbortSignal;
 }
 
 export interface RunOnceResult {

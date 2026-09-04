@@ -748,6 +748,12 @@ export function createHttpApp(opts: {
     return c.json(res, res.ok ? 200 : 409);
   });
 
+  // Kill-switch: abort a plan's in-flight worker/verifier and pause it.
+  app.post('/api/plans/:id/abort', (c) => {
+    const res = opts.orchestrator.abortPlan(c.req.param('id'));
+    return c.json(res, res.ok ? 200 : 404);
+  });
+
   // Preflight check used by the NewTaskModal to warn before the user
   // clicks Launch. Cached for the process lifetime — installing claude
   // requires a server restart anyway.

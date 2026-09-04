@@ -139,11 +139,18 @@ const PLAN_STATUS_COLOR: Record<Plan['status'], string> = {
 function PlanCard({ plan }: { plan: Plan }): JSX.Element {
   const tasks = useSolixStore((s) => selectPlanTasks(s, plan.id));
   const approvePlan = useSolixStore((s) => s.approvePlan);
+  const abortPlan = useSolixStore((s) => s.abortPlan);
   const [busy, setBusy] = useState(false);
 
   const onApprove = async (): Promise<void> => {
     setBusy(true);
     await approvePlan(plan.id);
+    setBusy(false);
+  };
+
+  const onAbort = async (): Promise<void> => {
+    setBusy(true);
+    await abortPlan(plan.id);
     setBusy(false);
   };
 
@@ -180,6 +187,16 @@ function PlanCard({ plan }: { plan: Plan }): JSX.Element {
           className="mt-3 w-full py-1.5 rounded bg-solix-ok/20 border border-solix-ok text-solix-ok text-xs hover:bg-solix-ok/30 disabled:opacity-40"
         >
           {busy ? 'Approving…' : 'Approve & run'}
+        </button>
+      )}
+
+      {plan.status === 'running' && (
+        <button
+          onClick={() => void onAbort()}
+          disabled={busy}
+          className="mt-3 w-full py-1.5 rounded bg-solix-danger/15 border border-solix-danger/60 text-solix-danger text-xs hover:bg-solix-danger/25 disabled:opacity-40"
+        >
+          {busy ? 'Stopping…' : 'Abort run (stop agents)'}
         </button>
       )}
     </div>

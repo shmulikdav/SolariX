@@ -225,6 +225,7 @@ interface SolixState {
     },
   ) => Promise<{ ok: boolean; planId?: string; errors?: string[] }>;
   approvePlan: (planId: string) => Promise<void>;
+  abortPlan: (planId: string) => Promise<void>;
   dismissToast: (id: string) => void;
   resolvePermission: (requestId: string, approved: boolean) => void;
   invokeAdvisor: (advisorId: string, prompt?: string) => void;
@@ -689,6 +690,16 @@ export const useSolixStore = create<SolixState>((set, get) => ({
   approvePlan: async (planId) => {
     try {
       await fetch(`/api/plans/${encodeURIComponent(planId)}/approve`, {
+        method: 'POST',
+      });
+    } catch {
+      /* offline; the plan_upsert broadcast will reconcile if it lands */
+    }
+  },
+
+  abortPlan: async (planId) => {
+    try {
+      await fetch(`/api/plans/${encodeURIComponent(planId)}/abort`, {
         method: 'POST',
       });
     } catch {

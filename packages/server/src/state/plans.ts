@@ -121,6 +121,20 @@ export function updatePlan(
   return getPlan(db, id);
 }
 
+/**
+ * Total spend across every session (worker + verifier, all attempts) that
+ * belongs to a plan. Keyed off `sessions.plan_id` — NOT `plan_tasks.session_id`,
+ * which a retry overwrites — so retried attempts still count toward the budget.
+ */
+export function getPlanSpendUsd(db: DB, planId: string): number {
+  const row = db
+    .prepare(
+      'SELECT COALESCE(SUM(cost_usd), 0) AS total FROM sessions WHERE plan_id = ?',
+    )
+    .get(planId) as { total: number };
+  return row.total ?? 0;
+}
+
 export function deletePlan(db: DB, id: string): boolean {
   db.prepare('DELETE FROM plan_tasks WHERE plan_id = ?').run(id);
   const res = db.prepare('DELETE FROM plans WHERE id = ?').run(id);

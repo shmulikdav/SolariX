@@ -5,6 +5,7 @@ import {
   computePlanOutcome,
   computeReadyTasks,
   decideRetryOrEscalate,
+  isBudgetExceeded,
   validatePlanGraph,
   withinParallelLimit,
   type SchedulableTask,
@@ -79,6 +80,17 @@ describe('withinParallelLimit', () => {
   it('allows up to the limit and no more', () => {
     expect(withinParallelLimit(3, 4)).toBe(true);
     expect(withinParallelLimit(4, 4)).toBe(false);
+  });
+});
+
+describe('isBudgetExceeded', () => {
+  it('never trips without a budget', () => {
+    expect(isBudgetExceeded(9999, undefined)).toBe(false);
+  });
+  it('trips at or over the cap, not under', () => {
+    expect(isBudgetExceeded(0.99, 1)).toBe(false);
+    expect(isBudgetExceeded(1, 1)).toBe(true);
+    expect(isBudgetExceeded(1.5, 1)).toBe(true);
   });
 });
 

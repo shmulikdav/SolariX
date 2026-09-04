@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import type { ServerMessage } from '@solix/shared';
 import { resetDbForTests, type DB } from '../db.js';
+import { ensureProject } from '../state/projects.js';
+import { setSessionCost, upsertSession } from '../state/sessions.js';
 import { Orchestrator } from './index.js';
 import type { RunOnceOpts, RunOnceResult, SessionRunner } from './runner.js';
 
@@ -204,5 +206,99 @@ describe('Orchestrator dispatch (advance)', () => {
     const b = orch.getPlanWithTasks(planId!)!;
     expect(b.plan.status).toBe('awaiting_approval');
     expect(b.tasks.every((t) => t.status === 'pending')).toBe(true);
+  });
+
+  it('pauses at the budget cap instead of dispatching', async () => {
+    const orch = makeDispatchOrchestrator(db, true);
+    const { planId } = await orch.createPlanFromGoal({
+      goal: 'g',
+      cwd: '/tmp/p',
+      budgetUsd: 1,
+    });
+    orch.approvePlan(planId!);
+    // Simulate prior spend on this plan at/over the cap (keyed by plan_id).
+    const project = ensureProject(db, '/tmp/p');
+    upsertSession(db, {
+      id: 'seed-1',
+      pid: 0,
+      projectId: project.id,
+      cwd: '/tmp/p',
+      origin: 'internal',
+      model: 'default',
+      kind: 'user',
+      planId: planId!,
+    });
+    setSessionCost(db, 'seed-1', 2);
+
+    await orch.advance(planId!);
+
+    const b = orch.getPlanWithTasks(planId!)!;
+    expect(b.plan.status).toBe('paused');
+    // No task was dispatched — they stay pending/ready.
+    expect(
+      b.tasks.every((t) => t.status === 'pending' || t.status === 'ready'),
+    ).toBe(true);
+  });
+});
+
+// A worker that blocks until the plan is aborted, so we can test the kill-switch
+// mid-flight. Planner + verifier resolve immediately.
+class AbortableWorkerRunner implements SessionRunner {
+  runOnce(o: RunOnceOpts): Promise<RunOnceResult> {
+    if (o.role === 'planner') return Promise.resolve({ ok: true, output: PLAN_JSON });
+    if (o.role === 'verifier') {
+      return Promise.resolve({
+        ok: true,
+        output: JSON.stringify({ pass: true, reason: 'r' }),
+      });
+    }
+    return new Promise((resolve) => {
+      const done = (): void =>
+        resolve({ ok: false, output: '', error: 'aborted' });
+      if (o.signal?.aborted) done();
+      else o.signal?.addEventListener('abort', done, { once: true });
+    });
+  }
+}
+
+describe('Orchestrator abort (kill-switch)', () => {
+  let db: DB;
+  beforeEach(() => {
+    db = resetDbForTests();
+  });
+
+  it('aborts an in-flight plan, pauses it, and parks the task', async () => {
+    const orch = new Orchestrator({
+      db,
+      runner: new AbortableWorkerRunner(),
+      broadcast: () => {},
+      getKnownAdvisorRoles: () => ['forge', 'argus', 'mira'],
+      knownModels: ['opus', 'sonnet', 'haiku', 'default'],
+      getMaestroPrompt: () => 'MAESTRO PROMPT',
+    });
+    const { planId } = await orch.createPlanFromGoal({ goal: 'g', cwd: '/tmp/p' });
+    orch.approvePlan(planId!);
+
+    const running = orch.advance(planId!); // worker hangs until aborted
+    await new Promise((r) => setImmediate(r)); // let the worker go in-flight
+    expect(orch.abortPlan(planId!)).toEqual({ ok: true });
+    await running;
+
+    const b = orch.getPlanWithTasks(planId!)!;
+    expect(b.plan.status).toBe('paused');
+    const t1 = b.tasks.find((t) => t.title === 'Build form')!;
+    expect(t1.status).toBe('pending'); // parked, not escalated
+  });
+
+  it('errors on an unknown plan id', () => {
+    const orch = new Orchestrator({
+      db,
+      runner: new AbortableWorkerRunner(),
+      broadcast: () => {},
+      getKnownAdvisorRoles: () => ['forge', 'argus', 'mira'],
+      knownModels: ['opus', 'sonnet', 'haiku', 'default'],
+      getMaestroPrompt: () => 'MAESTRO PROMPT',
+    });
+    expect(orch.abortPlan('nope').ok).toBe(false);
   });
 });

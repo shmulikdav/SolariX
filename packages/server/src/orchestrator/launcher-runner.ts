@@ -21,6 +21,7 @@ export class LauncherSessionRunner implements SessionRunner {
       cwd: opts.cwd,
       prompt: opts.prompt,
       model: opts.model,
+      signal: opts.signal,
     });
     return {
       ok: res.ok,

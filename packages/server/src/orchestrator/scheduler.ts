@@ -94,6 +94,19 @@ export function withinParallelLimit(inFlight: number, limit: number): boolean {
 }
 
 /**
+ * Whether a plan's spend has reached its budget cap. An undefined/absent budget
+ * means no cap (returns false). Checked BEFORE each dispatch (Ledger): the next
+ * worker only runs while spend is still under the ceiling, so a runaway plan
+ * pauses instead of billing unboundedly.
+ */
+export function isBudgetExceeded(
+  spentUsd: number,
+  budgetUsd: number | undefined,
+): boolean {
+  return budgetUsd != null && spentUsd >= budgetUsd;
+}
+
+/**
  * Validate a plan's task graph before it runs. Catches the failure modes an LLM
  * planner can emit: a dependency on an id that doesn't exist, a self-dependency,
  * and cycles (via Kahn's algorithm). Returns all problems found (empty = valid).

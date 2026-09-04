@@ -5,6 +5,7 @@ import {
   createPlan,
   createPlanTask,
   getPlan,
+  getPlanSpendUsd,
   getPlanTask,
   listPlanTasks,
   updatePlan,
@@ -18,6 +19,7 @@ import {
   computePlanOutcome,
   computeReadyTasks,
   decideRetryOrEscalate,
+  isBudgetExceeded,
 } from './scheduler.js';
 import type { SessionRunner } from './runner.js';
 
@@ -66,7 +68,20 @@ export class Orchestrator {
    *  R2 decision), so this doubles as the per-plan write lock. */
   private readonly inFlight = new Set<string>();
 
+  /** Per-plan kill-switch. `abortPlan` fires the controller, which SIGTERMs the
+   *  in-flight worker/verifier child (via the SessionRunner's `signal`). */
+  private readonly aborters = new Map<string, AbortController>();
+
   constructor(private readonly deps: OrchestratorDeps) {}
+
+  private aborterFor(planId: string): AbortController {
+    let a = this.aborters.get(planId);
+    if (!a) {
+      a = new AbortController();
+      this.aborters.set(planId, a);
+    }
+    return a;
+  }
 
   private emitPlan(plan: Plan): void {
     this.deps.broadcast({ type: 'plan_upsert', plan });
@@ -216,6 +231,7 @@ export class Orchestrator {
     if (outcome !== 'running') {
       const done = updatePlan(db, planId, { status: outcome });
       if (done) this.emitPlan(done);
+      this.aborters.delete(planId); // run is over — drop the kill-switch
       return;
     }
 
@@ -224,9 +240,18 @@ export class Orchestrator {
     const next = tasks.find((t) => t.status === 'ready');
     if (!next) return; // waiting on an in-flight task or unmet deps
 
+    // 4a. Budget gate (Ledger): pause before spending past the cap rather than
+    //     after. Spend keys off sessions.plan_id so retried attempts count.
+    if (isBudgetExceeded(getPlanSpendUsd(db, planId), plan.budgetUsd)) {
+      const paused = updatePlan(db, planId, { status: 'paused' });
+      if (paused) this.emitPlan(paused);
+      return;
+    }
+
+    const signal = this.aborterFor(planId).signal;
     this.inFlight.add(planId);
     try {
-      await this.dispatchTask(plan, next);
+      await this.dispatchTask(plan, next, signal);
     } finally {
       this.inFlight.delete(planId);
     }
@@ -234,7 +259,28 @@ export class Orchestrator {
     await this.advance(planId);
   }
 
-  private async dispatchTask(plan: Plan, task: PlanTask): Promise<void> {
+  /**
+   * Kill-switch: abort the plan's in-flight worker/verifier child and pause the
+   * plan so `advance()` stops dispatching. Idempotent — aborting a non-running
+   * plan just ensures it isn't running.
+   */
+  abortPlan(planId: string): { ok: boolean; error?: string } {
+    const plan = getPlan(this.deps.db, planId);
+    if (!plan) return { ok: false, error: 'plan not found' };
+    this.aborters.get(planId)?.abort();
+    this.aborters.delete(planId);
+    if (plan.status === 'running' || plan.status === 'awaiting_approval') {
+      const paused = updatePlan(this.deps.db, planId, { status: 'paused' });
+      if (paused) this.emitPlan(paused);
+    }
+    return { ok: true };
+  }
+
+  private async dispatchTask(
+    plan: Plan,
+    task: PlanTask,
+    signal: AbortSignal,
+  ): Promise<void> {
     const { db, runner } = this.deps;
     const cwd = task.cwd ?? plan.cwd;
     const attempts = task.attempts + 1;
@@ -255,8 +301,15 @@ export class Orchestrator {
       model: task.model,
       prompt: workerPrompt,
       sessionId: workerId,
+      signal,
     });
     this.terminateRow(workerId);
+    // An aborted run is a deliberate human stop, not a task failure — return the
+    // task to `pending` (a clean, re-dispatchable state) and never escalate.
+    if (signal.aborted) {
+      this.parkAborted(task.id);
+      return;
+    }
     if (!run.ok) {
       this.handleTaskFailure(task.id, `worker failed: ${run.error ?? 'unknown'}`);
       return;
@@ -284,8 +337,13 @@ export class Orchestrator {
       model: 'haiku',
       prompt: verifierPrompt,
       sessionId: verifierId,
+      signal,
     });
     this.terminateRow(verifierId);
+    if (signal.aborted) {
+      this.parkAborted(task.id);
+      return;
+    }
 
     const verdict = parseVerifierOutput(vRun.ok ? vRun.output : '');
     if (verdict.pass && !verdict.ambiguous) {
@@ -309,6 +367,13 @@ export class Orchestrator {
     if (!t) return;
     const next = decideRetryOrEscalate(t) === 'retry' ? 'pending' : 'escalated';
     const updated = updatePlanTask(this.deps.db, taskId, { status: next });
+    if (updated) this.emitTask(updated);
+  }
+
+  /** An aborted attempt (kill-switch) returns the task to `pending` without
+   *  counting as a failure, so a later resume re-dispatches it cleanly. */
+  private parkAborted(taskId: string): void {
+    const updated = updatePlanTask(this.deps.db, taskId, { status: 'pending' });
     if (updated) this.emitTask(updated);
   }
 

@@ -704,8 +704,14 @@ export class Launcher {
     cwd: string;
     prompt: string;
     model?: Model;
+    signal?: AbortSignal;
   }): Promise<{ ok: boolean; output: string; error?: string }> {
     return new Promise((resolve) => {
+      // Honor an already-aborted signal before spawning anything.
+      if (opts.signal?.aborted) {
+        resolve({ ok: false, output: '', error: 'aborted' });
+        return;
+      }
       const args = ['--print'];
       if (opts.model && opts.model !== 'default') {
         args.push('--model', opts.model);
@@ -730,19 +736,49 @@ export class Launcher {
       }
       let stdout = '';
       let stderr = '';
+      let aborted = false;
+      // Kill-switch: SIGTERM, then SIGKILL after a short grace if it lingers.
+      const onAbort = (): void => {
+        aborted = true;
+        try {
+          child.kill('SIGTERM');
+        } catch {
+          /* already gone */
+        }
+        const grace = setTimeout(() => {
+          try {
+            child.kill('SIGKILL');
+          } catch {
+            /* already gone */
+          }
+        }, 2000);
+        grace.unref?.();
+      };
+      if (opts.signal) {
+        if (opts.signal.aborted) onAbort();
+        else opts.signal.addEventListener('abort', onAbort, { once: true });
+      }
+      const cleanup = (): void =>
+        opts.signal?.removeEventListener('abort', onAbort);
       child.stdout?.setEncoding('utf8').on('data', (c: string) => (stdout += c));
       child.stderr?.setEncoding('utf8').on('data', (c: string) => (stderr += c));
-      child.on('error', (err) =>
-        resolve({ ok: false, output: stdout, error: err.message }),
-      );
+      child.on('error', (err) => {
+        cleanup();
+        resolve({ ok: false, output: stdout, error: err.message });
+      });
       child.on('exit', (code) => {
-        if (code === 0) resolve({ ok: true, output: stdout });
-        else
+        cleanup();
+        if (aborted) {
+          resolve({ ok: false, output: stdout, error: 'aborted' });
+        } else if (code === 0) {
+          resolve({ ok: true, output: stdout });
+        } else {
           resolve({
             ok: false,
             output: stdout,
             error: stderr.trim().slice(0, 300) || `claude exited with code ${code}`,
           });
+        }
       });
     });
   }
