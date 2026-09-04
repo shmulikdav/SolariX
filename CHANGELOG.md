@@ -5,6 +5,15 @@ All notable changes to Solix (`@shmulikdav/solix`) are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.6] — 2026-09-04
+
+### Fixed
+- **The New Task modal no longer runs off the top/bottom of the screen.** On shorter
+  windows the form grew to its full content height and overflowed the viewport (the
+  title and footer were clipped). It now uses the same centered, height-capped layout
+  as the Crew roster — pinned header and footer with the form scrolling in between —
+  so it always fits on screen with the Launch button reachable.
+
 ## [1.11.5] — 2026-09-04
 
 **The demo starts reliably even with a large Agent View history.**

@@ -154,8 +154,8 @@ export function NewTaskModal({
         GalaxyPanel keeps it on its own element) makes the panel render solid.
       */}
       <div className="absolute inset-0 bg-black/80 backdrop-blur-lg" />
-      <div className="relative z-10 w-[520px] max-w-[92vw] rounded-xl border border-solix-accent/40 bg-solix-panel shadow-2xl">
-        <div className="px-5 py-4 border-b border-solix-border flex items-start justify-between">
+      <div className="relative z-10 w-[520px] max-w-[92vw] max-h-[88vh] flex flex-col rounded-xl border border-solix-accent/40 bg-solix-panel shadow-2xl">
+        <div className="shrink-0 px-5 py-4 border-b border-solix-border flex items-start justify-between">
           <div>
             <div className="text-xs uppercase tracking-widest text-solix-accent">
               new task
@@ -218,7 +218,7 @@ export function NewTaskModal({
           </button>
         </div>
 
-        <div className="px-5 py-4 space-y-4">
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           <label className="block">
             <div className="text-[10px] uppercase tracking-wide text-slate-400 mb-1">
               Working directory
@@ -414,7 +414,7 @@ export function NewTaskModal({
           </label>
         </div>
 
-        <div className="px-5 py-3 border-t border-solix-border flex items-center gap-2">
+        <div className="shrink-0 px-5 py-3 border-t border-solix-border flex items-center gap-2">
           <button
             onClick={onClose}
             className="px-3 py-1.5 rounded border border-solix-border text-xs text-slate-300 hover:text-white"
