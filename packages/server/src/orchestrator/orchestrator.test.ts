@@ -50,6 +50,7 @@ function makeOrchestrator(db: DB, runResult: RunOnceResult, autoMode = false) {
     getKnownAdvisorRoles: () => ['forge', 'argus', 'mira'],
     knownModels: ['opus', 'sonnet', 'haiku', 'default'],
     getMaestroPrompt: () => 'MAESTRO PROMPT',
+    fullAutoStatus: () => ({ ok: true, reasons: [] }), // containment satisfied
   });
   return { orch, msgs, autoMode };
 }
@@ -85,6 +86,28 @@ describe('Orchestrator.createPlanFromGoal', () => {
       autoMode: true,
     });
     expect(orch.getPlanWithTasks(res.planId!)!.plan.status).toBe('running');
+  });
+
+  it('refuses full-auto without containment and parks for approval', async () => {
+    // Containment not satisfied → autoMode is downgraded to supervised.
+    const orch = new Orchestrator({
+      db,
+      runner: new FakeRunner({ ok: true, output: PLAN_JSON }),
+      broadcast: () => {},
+      getKnownAdvisorRoles: () => ['forge', 'argus', 'mira'],
+      knownModels: ['opus', 'sonnet', 'haiku', 'default'],
+      getMaestroPrompt: () => 'MAESTRO PROMPT',
+      fullAutoStatus: () => ({ ok: false, reasons: ['gate off'] }),
+    });
+    const res = await orch.createPlanFromGoal({
+      goal: 'add login',
+      cwd: '/tmp/p',
+      autoMode: true,
+    });
+    const bundle = orch.getPlanWithTasks(res.planId!)!;
+    expect(bundle.plan.status).toBe('awaiting_approval');
+    expect(bundle.plan.autoMode).toBe(false);
+    expect(res.warnings?.some((w) => w.includes('Full-auto refused'))).toBe(true);
   });
 
   it('marks the plan failed when the planner output is unparseable', async () => {
@@ -165,6 +188,7 @@ function makeDispatchOrchestrator(db: DB, verifierPass: boolean) {
     getKnownAdvisorRoles: () => ['forge', 'argus', 'mira'],
     knownModels: ['opus', 'sonnet', 'haiku', 'default'],
     getMaestroPrompt: () => 'MAESTRO PROMPT',
+    fullAutoStatus: () => ({ ok: true, reasons: [] }),
   });
 }
 

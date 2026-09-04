@@ -116,8 +116,9 @@ const FAKE_CLAUDE = process.env.SOLIX_FAKE_CLAUDE === '1';
  * secrets don't leak into agent subprocesses. Auth + the gate vars are always
  * preserved so `claude` and the agent's own hooks still work.
  */
-function buildSpawnEnv(): NodeJS.ProcessEnv | undefined {
+function buildSpawnEnv(forceScrub = false): NodeJS.ProcessEnv | undefined {
   const scrub =
+    forceScrub ||
     process.env.SOLIX_ENV_SCRUB === '1' ||
     (process.env.SOLIX_SANDBOX_CMD ?? '').trim() !== '';
   if (!scrub) return undefined;
@@ -705,6 +706,9 @@ export class Launcher {
     prompt: string;
     model?: Model;
     signal?: AbortSignal;
+    /** Force env-scrub (Maestro workers/verifiers run contained by default,
+     *  not only when the global SOLIX_ENV_SCRUB/sandbox flags are set). */
+    contain?: boolean;
   }): Promise<{ ok: boolean; output: string; error?: string }> {
     return new Promise((resolve) => {
       // Honor an already-aborted signal before spawning anything.
@@ -724,7 +728,7 @@ export class Launcher {
           cwd: opts.cwd,
           stdio: ['ignore', 'pipe', 'pipe'],
           detached: false,
-          env: buildSpawnEnv(),
+          env: buildSpawnEnv(opts.contain),
         });
       } catch (err) {
         resolve({

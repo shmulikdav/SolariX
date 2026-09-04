@@ -15,6 +15,7 @@ import {
 import { ensureProject } from '../state/projects.js';
 import { gitHead } from '../state/git.js';
 import { setSessionStatus, upsertSession } from '../state/sessions.js';
+import { fullAutoContainmentStatus } from '../containment.js';
 import { parsePlannerOutput, parseVerifierOutput } from './planner.js';
 import {
   computeNewlyBlocked,
@@ -39,6 +40,9 @@ export interface OrchestratorDeps {
   knownModels: string[];
   /** The Maestro planner system prompt (maestro.md body). */
   getMaestroPrompt: () => string;
+  /** Whether full-auto is allowed right now (containment check). Injectable so
+   *  tests don't depend on process env; defaults to the real env-based check. */
+  fullAutoStatus?: () => { ok: boolean; reasons: string[] };
 }
 
 export interface CreatePlanInput {
@@ -95,6 +99,21 @@ export class Orchestrator {
 
   async createPlanFromGoal(input: CreatePlanInput): Promise<CreatePlanResult> {
     const { db, runner, broadcast } = this.deps;
+    const warnings: string[] = [];
+
+    // Full-auto refusal (Sentinel): only honor autoMode when containment is in
+    // place (gate enabled + fail-closed), so autonomous workers can't run
+    // ungoverned. Otherwise fall back to the supervised approval gate.
+    let autoMode = input.autoMode ?? false;
+    if (autoMode) {
+      const status = (this.deps.fullAutoStatus ?? fullAutoContainmentStatus)();
+      if (!status.ok) {
+        autoMode = false;
+        warnings.push(
+          `Full-auto refused (${status.reasons.join('; ')}). Parked for your approval instead.`,
+        );
+      }
+    }
 
     // 1. Persist a draft plan immediately so the UI shows "planning…".
     let plan = createPlan(db, {
@@ -102,7 +121,7 @@ export class Orchestrator {
       goalPrompt: input.goal,
       cwd: input.cwd,
       status: 'draft',
-      autoMode: input.autoMode,
+      autoMode,
       goalId: input.goalId,
       budgetUsd: input.budgetUsd,
     });
@@ -167,8 +186,8 @@ export class Orchestrator {
       broadcast({ type: 'plan_task_upsert', task: updated });
     });
 
-    // 5. Name the plan from the planner + move to the approval gate
-    //    (or straight to running in autoMode — dispatch happens in Phase 2).
+    // 5. Name the plan from the planner + move to the approval gate (or straight
+    //    to running in autoMode, which is only true when containment allows it).
     plan =
       updatePlan(db, plan.id, {
         name: input.name?.trim() || parsed.plan.name,
@@ -179,7 +198,11 @@ export class Orchestrator {
       }) ?? plan;
     this.emitPlan(plan);
 
-    return { ok: true, planId: plan.id, warnings: parsed.warnings };
+    return {
+      ok: true,
+      planId: plan.id,
+      warnings: [...warnings, ...parsed.warnings],
+    };
   }
 
   /**

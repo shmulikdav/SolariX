@@ -22,6 +22,8 @@ export class LauncherSessionRunner implements SessionRunner {
       prompt: opts.prompt,
       model: opts.model,
       signal: opts.signal,
+      // Workers/verifiers run autonomously → contained (env-scrubbed) by default.
+      contain: opts.role === 'worker' || opts.role === 'verifier',
     });
     return {
       ok: res.ok,

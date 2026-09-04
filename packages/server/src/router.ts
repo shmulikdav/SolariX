@@ -30,6 +30,7 @@ import {
 } from './state/advisors.js';
 import { buildContextEnvelope } from './state/context.js';
 import { recordAudit } from './state/audit.js';
+import { evaluateContainment } from './containment.js';
 import {
   bindWrapperToSession,
   claimWrapperForCwd,
@@ -433,6 +434,34 @@ export class EventRouter {
         addTouchedFile(this.db, session.currentMissionId, args.file_path);
       }
       this.broadcaster.broadcast({ type: 'tool_call', toolCall });
+
+      // Containment (Sentinel): an autonomous worker/verifier tool call that
+      // hits the denylist or writes outside the project is HARD-denied here —
+      // before the human/full-auto path — so full-auto can't degrade to
+      // auto-allow. Non-contained roles fall through to the normal gate.
+      const containment = evaluateContainment({
+        role: session.sessionRole,
+        tool,
+        command: typeof args.command === 'string' ? args.command : undefined,
+        filePath: typeof args.file_path === 'string' ? args.file_path : undefined,
+        cwd: session.cwd,
+      });
+      if (containment.blocked) {
+        recordAudit(this.db, {
+          kind: 'permission_denied',
+          sessionId,
+          summary: `Containment blocked ${tool}: ${containment.reason}`,
+        });
+        this.broadcaster.broadcast({
+          type: 'toast',
+          level: 'warn',
+          message: `Containment blocked ${tool}: ${containment.reason}`,
+        });
+        const active = setSessionStatus(this.db, sessionId, 'active');
+        if (active)
+          this.broadcaster.broadcast({ type: 'session_upsert', session: active });
+        return Promise.resolve({ approved: false, timedOut: false });
+      }
     }
 
     const requestId = nanoid();
