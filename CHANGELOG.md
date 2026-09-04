@@ -5,6 +5,29 @@ All notable changes to Solix (`@shmulikdav/solix`) are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.7] — 2026-09-04
+
+**Launch hardening: `solix demo` can't get stuck, and the UI tells you when it's stale.**
+
+### Fixed
+- **`solix demo` no longer gets permanently stuck after a failed run.** A demo that
+  failed to start used to leave its sandbox server orphaned (a `SIGTERM` that a
+  mid-boot process could ignore), and only the most recent PID was ever cleaned up — so
+  orphans piled up, held the port and the sandbox DB, and made every later run fail. Now
+  the demo reaps **all** stale sandbox servers on startup and kills its own child
+  reliably (SIGTERM → SIGKILL) on both failure and Ctrl+C, so a bad run can never
+  poison the next one.
+- **Clearer demo startup error.** Instead of a generic "failed to start", the demo now
+  says whether the server *crashed* (pointing you at the error above) or *started but
+  isn't reachable* (pointing at a firewall / security tool blocking localhost, or a
+  stuck server) — with a suggestion to try a fresh `--port`.
+
+### Added
+- **"New version — Reload" banner.** When the running Solix server is newer than the UI
+  bundle your browser is showing (a stale service worker / cached shell after an
+  upgrade), a banner now offers a one-click hard refresh (unregister service workers +
+  clear caches + reload) — no more hunting through DevTools to see a shipped fix.
+
 ## [1.11.6] — 2026-09-04
 
 ### Fixed

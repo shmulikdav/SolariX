@@ -1,5 +1,11 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, unlinkSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -145,6 +151,92 @@ interface BootResult {
   base: string;
 }
 
+/**
+ * Kill a child process reliably: SIGTERM for a graceful shutdown, then SIGKILL
+ * if it hasn't exited within a short grace period. A demo child whose event
+ * loop is busy (e.g. mid-boot) can ignore SIGTERM long enough to become an
+ * orphan that squats on the port and the sandbox DB — which is what made
+ * repeated `solix demo` runs get "stuck". Escalating to SIGKILL prevents that.
+ */
+async function killChildHard(child: ChildProcess): Promise<void> {
+  if (child.exitCode != null || child.signalCode != null) return; // already dead
+  try {
+    child.kill('SIGTERM');
+  } catch {
+    /* ignore */
+  }
+  for (let i = 0; i < 20; i++) {
+    if (child.exitCode != null || child.signalCode != null) return;
+    await sleep(100); // up to ~2s for a graceful exit
+  }
+  try {
+    child.kill('SIGKILL');
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Reap any demo sandbox servers left behind by previous runs. Each spawned
+ * child's PID is recorded in DEMO_PID_PATH (one per line); a crashed or
+ * force-killed orchestrator can't clean up its child, so on the next run we
+ * SIGTERM then SIGKILL every recorded PID that's still alive. Without this,
+ * orphaned servers accumulate and hold the port + sandbox DB, and every later
+ * `solix demo` fails to start.
+ */
+async function reapStaleDemoServers(): Promise<void> {
+  if (!existsSync(DEMO_PID_PATH)) return;
+  let pids: number[] = [];
+  try {
+    pids = readFileSync(DEMO_PID_PATH, 'utf8')
+      .split('\n')
+      .map((l) => parseInt(l.trim(), 10))
+      .filter((n) => Number.isInteger(n) && n > 0);
+  } catch {
+    pids = [];
+  }
+  const alive = pids.filter((pid) => {
+    try {
+      process.kill(pid, 0); // signal 0 just probes; throws if not running
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  if (alive.length === 0) {
+    try {
+      unlinkSync(DEMO_PID_PATH);
+    } catch {
+      /* ignore */
+    }
+    return;
+  }
+  console.log(
+    `[solix demo] cleaning up ${alive.length} stale sandbox server(s) from a previous run…`,
+  );
+  for (const pid of alive) {
+    try {
+      process.kill(pid, 'SIGTERM');
+    } catch {
+      /* ignore */
+    }
+  }
+  await sleep(400);
+  for (const pid of alive) {
+    try {
+      process.kill(pid, 0);
+      process.kill(pid, 'SIGKILL'); // still alive → force it
+    } catch {
+      /* gone */
+    }
+  }
+  try {
+    unlinkSync(DEMO_PID_PATH);
+  } catch {
+    /* ignore */
+  }
+}
+
 async function bootSandbox(preferredPort: number): Promise<BootResult | null> {
   // If someone is already listening on the preferred port AND it's our own
   // sandbox DB, reuse it. We can't introspect their DB path remotely, so we
@@ -164,27 +256,9 @@ async function bootSandbox(preferredPort: number): Promise<BootResult | null> {
     }
   }
 
-  // Reap any stale demo pid from a previous run.
-  if (existsSync(DEMO_PID_PATH)) {
-    try {
-      const pid = parseInt(readFileSync(DEMO_PID_PATH, 'utf8').trim(), 10);
-      if (pid > 0) {
-        try {
-          process.kill(pid, 0);
-          // still alive
-          try {
-            process.kill(pid);
-          } catch {
-            /* ignore */
-          }
-        } catch {
-          /* not running */
-        }
-      }
-    } catch {
-      /* ignore */
-    }
-  }
+  // Reap every stale demo server left by previous runs (not just the last
+  // one) before we spawn a fresh one.
+  await reapStaleDemoServers();
 
   mkdirSync(SOLIX_HOME, { recursive: true });
 
@@ -209,14 +283,11 @@ async function bootSandbox(preferredPort: number): Promise<BootResult | null> {
     },
   );
 
-  // Track the spawned PID so a stale demo from a crashed orchestrator can
-  // be reaped on the next run.
+  // Record the spawned PID so a stale demo from a crashed orchestrator can be
+  // reaped on the next run (reapStaleDemoServers just cleared the file).
   if (child.pid) {
     try {
-      (await import('node:fs')).writeFileSync(
-        DEMO_PID_PATH,
-        String(child.pid),
-      );
+      writeFileSync(DEMO_PID_PATH, `${child.pid}\n`);
     } catch {
       /* ignore */
     }
@@ -229,16 +300,24 @@ async function bootSandbox(preferredPort: number): Promise<BootResult | null> {
   });
 
   if (!(await waitForServer(port, SERVER_BOOT_TIMEOUT_MS))) {
-    console.error(
-      `[solix demo] sandbox server failed to start within ${Math.round(
-        SERVER_BOOT_TIMEOUT_MS / 1000,
-      )}s.`,
-    );
-    try {
-      child.kill();
-    } catch {
-      /* ignore */
+    const secs = Math.round(SERVER_BOOT_TIMEOUT_MS / 1000);
+    if (child.exitCode != null || child.signalCode != null) {
+      console.error(
+        `[solix demo] the sandbox server exited during startup (see the error above).`,
+      );
+    } else {
+      console.error(
+        `[solix demo] the sandbox server started but isn't responding on ${baseUrl(
+          port,
+        )} after ${secs}s.`,
+      );
+      console.error(
+        `[solix demo] this usually means a firewall or security tool is blocking localhost, or a stale server is stuck. Try a fresh --port, or check that ${baseUrl(
+          port,
+        )} opens in your browser.`,
+      );
     }
+    await killChildHard(child);
     return null;
   }
 
@@ -607,18 +686,14 @@ function registerTeardown(opts: {
   keep: boolean;
 }): void {
   let torn = false;
-  const onSignal = (sig: NodeJS.Signals): void => {
+  const onSignal = async (sig: NodeJS.Signals): Promise<void> => {
     if (torn) return;
     torn = true;
     console.log(`\n[solix demo] received ${sig} — tearing down…`);
     if (opts.stopTicker) opts.stopTicker();
-    if (opts.child) {
-      try {
-        opts.child.kill();
-      } catch {
-        /* ignore */
-      }
-    }
+    // Kill the child reliably (SIGTERM → SIGKILL) and wait for it to exit, so
+    // Ctrl+C never leaves an orphaned server squatting on the port/DB.
+    if (opts.child) await killChildHard(opts.child);
     if (!opts.keep) {
       for (const p of [DEMO_DB_PATH, `${DEMO_DB_PATH}-shm`, `${DEMO_DB_PATH}-wal`, DEMO_PID_PATH]) {
         try {
@@ -633,8 +708,8 @@ function registerTeardown(opts: {
     }
     process.exit(0);
   };
-  process.on('SIGINT', onSignal);
-  process.on('SIGTERM', onSignal);
+  process.on('SIGINT', () => void onSignal('SIGINT'));
+  process.on('SIGTERM', () => void onSignal('SIGTERM'));
 }
 
 // ---------------------------------------------------------------------------

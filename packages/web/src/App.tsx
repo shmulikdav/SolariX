@@ -6,6 +6,7 @@ import { Toasts } from './hud/Toasts.js';
 import { Welcome } from './hud/Welcome.js';
 import { DecisionQueue } from './hud/DecisionQueue.js';
 import { SceneControls } from './hud/SceneControls.js';
+import { UpdateBanner } from './hud/UpdateBanner.js';
 import {
   panDown,
   panLeft,
@@ -196,6 +197,7 @@ export default function App(): JSX.Element {
       />
       <Toasts />
       <EmptyHint />
+      <UpdateBanner />
     </div>
   );
 }
