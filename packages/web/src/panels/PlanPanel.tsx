@@ -258,7 +258,15 @@ function PlanCard({ plan }: { plan: Plan }): JSX.Element {
   const tasks = useSolixStore((s) => selectPlanTasks(s, plan.id));
   const approvePlan = useSolixStore((s) => s.approvePlan);
   const abortPlan = useSolixStore((s) => s.abortPlan);
+  const createPlanFromGoal = useSolixStore((s) => s.createPlanFromGoal);
   const [busy, setBusy] = useState(false);
+  const [refine, setRefine] = useState('');
+  const [refining, setRefining] = useState(false);
+
+  const finished =
+    plan.status === 'completed' ||
+    plan.status === 'failed' ||
+    plan.status === 'paused';
 
   const onApprove = async (): Promise<void> => {
     setBusy(true);
@@ -270,6 +278,16 @@ function PlanCard({ plan }: { plan: Plan }): JSX.Element {
     setBusy(true);
     await abortPlan(plan.id);
     setBusy(false);
+  };
+
+  const onRefine = async (): Promise<void> => {
+    const g = refine.trim();
+    if (!g || refining) return;
+    setRefining(true);
+    // Iterate: a follow-up goal against the SAME project → a fresh plan.
+    const res = await createPlanFromGoal(g, plan.cwd);
+    setRefining(false);
+    if (res.ok) setRefine('');
   };
 
   return (
@@ -320,6 +338,43 @@ function PlanCard({ plan }: { plan: Plan }): JSX.Element {
 
       {plan.status !== 'draft' && plan.status !== 'awaiting_approval' && (
         <PlanReviewSection planId={plan.id} />
+      )}
+
+      {finished && (
+        <div className="mt-2 space-y-2">
+          <button
+            onClick={() =>
+              window.open(
+                `/api/plans/${encodeURIComponent(plan.id)}/preview/`,
+                '_blank',
+                'noopener',
+              )
+            }
+            className="w-full py-1.5 rounded bg-solix-accent/15 border border-solix-accent/50 text-solix-accent text-xs hover:bg-solix-accent/25"
+          >
+            Open preview ↗
+          </button>
+
+          {/* Iterate: describe a follow-up and Maestro plans the next build. */}
+          <div className="flex gap-2">
+            <input
+              value={refine}
+              onChange={(e) => setRefine(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void onRefine();
+              }}
+              placeholder="Refine or add a follow-up goal…"
+              className="flex-1 text-xs bg-black/40 border border-solix-border rounded p-2 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-solix-accent"
+            />
+            <button
+              onClick={() => void onRefine()}
+              disabled={refining || !refine.trim()}
+              className="px-3 rounded bg-amber-500/20 border border-amber-400/60 text-amber-100 text-xs hover:bg-amber-500/30 disabled:opacity-40"
+            >
+              {refining ? '…' : 'Plan'}
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

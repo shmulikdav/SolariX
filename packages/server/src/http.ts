@@ -34,7 +34,7 @@ import {
 } from './state/projects.js';
 import { defaultProjectsDir, scaffoldProject } from './state/scaffold.js';
 import { buildPlanReview } from './state/git.js';
-import { slugifyProjectName } from './util.js';
+import { previewTargetPath, slugifyProjectName } from './util.js';
 import {
   getSession,
   listSessionsForProject,
@@ -795,6 +795,43 @@ export function createHttpApp(opts: {
     if (!plan) return c.json({ ok: false, error: 'plan not found' }, 404);
     return c.json(buildPlanReview(plan.cwd, plan.baseRef));
   });
+
+  // Build-studio preview: serve the built result (static files) straight from
+  // the plan's working tree so the user can SEE what was built. Read-only GET,
+  // strictly confined to plan.cwd (path-traversal guarded). For static sites;
+  // running dev servers for node/python is deliberately out of scope for now.
+  const servePreview = (c: import('hono').Context): Response => {
+    const plan = getPlan(opts.db, c.req.param('id') ?? '');
+    if (!plan) return new Response('not found', { status: 404 });
+    const rest = c.req.param('rest') ?? '';
+    // Containment: the resolved path must stay inside the project (pure guard).
+    let target = previewTargetPath(plan.cwd, rest);
+    if (target == null) {
+      return new Response('forbidden', { status: 403 });
+    }
+    try {
+      if (existsSync(target) && statSync(target).isDirectory()) {
+        target = join(target, 'index.html');
+      }
+    } catch {
+      /* fall through to the not-found handling below */
+    }
+    if (!existsSync(target)) {
+      return new Response(
+        `<!doctype html><meta charset="utf-8"><body style="font-family:system-ui;background:#0b0e17;color:#cbd5e1;padding:3rem"><h2>Nothing to preview yet</h2><p>This project has no <code>index.html</code>. Preview supports static sites; run other stacks from a terminal.</p></body>`,
+        { headers: { 'Content-Type': 'text/html; charset=utf-8' } },
+      );
+    }
+    // Cap the served file size to keep the local server responsive.
+    if (statSync(target).size > 25 * 1024 * 1024) {
+      return new Response('file too large to preview', { status: 413 });
+    }
+    return new Response(readFileSync(target), {
+      headers: { 'Content-Type': mimeFor(target) },
+    });
+  };
+  app.get('/api/plans/:id/preview', servePreview);
+  app.get('/api/plans/:id/preview/:rest{.*}', servePreview);
 
   // Preflight check used by the NewTaskModal to warn before the user
   // clicks Launch. Cached for the process lifetime — installing claude
