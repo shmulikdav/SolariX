@@ -296,6 +296,7 @@ export function Planet({ session }: PlanetProps): JSX.Element {
 
       <Html
         center
+        zIndexRange={[20, 0]}
         distanceFactor={10}
         style={{ pointerEvents: 'none', userSelect: 'none' }}
         position={[0, planetSize + 0.4, 0]}

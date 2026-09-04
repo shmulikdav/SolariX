@@ -6,7 +6,19 @@ interface NewTaskModalProps {
   onClose: () => void;
 }
 
-const MODELS = ['default', 'opus', 'sonnet', 'haiku'] as const;
+// `value` is passed straight to Claude Code's --model. The lowercase tier
+// aliases auto-resolve to the newest of each tier; the capitalized entries pin
+// a specific model (they only launch if the user's Claude Code + plan support it).
+const MODELS: { value: string; label: string }[] = [
+  { value: 'default', label: 'default' },
+  { value: 'opus', label: 'opus' },
+  { value: 'sonnet', label: 'sonnet' },
+  { value: 'haiku', label: 'haiku' },
+  { value: 'claude-opus-5', label: 'Opus 5' },
+  { value: 'claude-sonnet-5', label: 'Sonnet 5' },
+  { value: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5' },
+  { value: 'claude-fable-5-1', label: 'Fable 5.1' },
+];
 
 export function NewTaskModal({
   open,
@@ -133,9 +145,17 @@ export function NewTaskModal({
   };
 
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md">
-      <div className="w-[520px] max-w-[92vw] rounded-xl border border-solix-accent/40 bg-solix-panel shadow-2xl">
-        <div className="px-5 py-4 border-b border-solix-border flex items-start justify-between">
+    <div className="absolute inset-0 z-50 flex items-center justify-center">
+      {/*
+        Dimmed, blurred backdrop as a SEPARATE layer behind the panel — NOT an
+        ancestor of it. When the opaque panel was nested inside a
+        `backdrop-blur` element, some browsers composited it translucently and
+        the galaxy bled through the form. Keeping the blur on a sibling (the way
+        GalaxyPanel keeps it on its own element) makes the panel render solid.
+      */}
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-lg" />
+      <div className="relative z-10 w-[520px] max-w-[92vw] max-h-[88vh] flex flex-col rounded-xl border border-solix-accent/40 bg-solix-panel shadow-2xl">
+        <div className="shrink-0 px-5 py-4 border-b border-solix-border flex items-start justify-between">
           <div>
             <div className="text-xs uppercase tracking-widest text-solix-accent">
               new task
@@ -198,7 +218,7 @@ export function NewTaskModal({
           </button>
         </div>
 
-        <div className="px-5 py-4 space-y-4">
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           <label className="block">
             <div className="text-[10px] uppercase tracking-wide text-slate-400 mb-1">
               Working directory
@@ -232,18 +252,18 @@ export function NewTaskModal({
             <div className="text-[10px] uppercase tracking-wide text-slate-400 mb-1">
               Model
             </div>
-            <div className="flex gap-1.5">
+            <div className="flex flex-wrap gap-1.5">
               {MODELS.map((m) => (
                 <button
-                  key={m}
-                  onClick={() => setModel(m)}
+                  key={m.value}
+                  onClick={() => setModel(m.value)}
                   className={`text-xs px-3 py-1.5 rounded border ${
-                    model === m
+                    model === m.value
                       ? 'bg-solix-accent/20 border-solix-accent text-solix-accent'
                       : 'border-solix-border text-slate-300 hover:bg-solix-border/30'
                   }`}
                 >
-                  {m}
+                  {m.label}
                 </button>
               ))}
             </div>
@@ -394,7 +414,7 @@ export function NewTaskModal({
           </label>
         </div>
 
-        <div className="px-5 py-3 border-t border-solix-border flex items-center gap-2">
+        <div className="shrink-0 px-5 py-3 border-t border-solix-border flex items-center gap-2">
           <button
             onClick={onClose}
             className="px-3 py-1.5 rounded border border-solix-border text-xs text-slate-300 hover:text-white"

@@ -6,6 +6,7 @@ import { Broadcaster } from './broadcaster.js';
 import { getDb } from './db.js';
 import { createHttpApp } from './http.js';
 import { Launcher } from './launcher.js';
+import { DB_PATH } from './paths.js';
 import { EventRouter } from './router.js';
 import { attachWs } from './ws.js';
 import { seedAdvisors } from './state/advisors.js';
@@ -50,6 +51,22 @@ export async function createSolixServer(
   db.prepare(
     `UPDATE sessions SET wrapper_socket_path = NULL WHERE wrapper_socket_path IS NOT NULL`,
   ).run();
+  // Boot diagnostic — prints the resolved DB path + row counts so a user
+  // reporting an empty UI can confirm in one line which DB the server opened
+  // and whether it actually has data. Best-effort; never blocks startup.
+  try {
+    const advisorCount = (
+      db.prepare('SELECT count(*) AS n FROM advisors').get() as { n: number }
+    ).n;
+    const sessionCount = (
+      db.prepare('SELECT count(*) AS n FROM sessions').get() as { n: number }
+    ).n;
+    console.log(
+      `[solix] db      -> ${DB_PATH} (advisors=${advisorCount}, sessions=${sessionCount})`,
+    );
+  } catch {
+    /* counts are best-effort */
+  }
   const broadcaster = new Broadcaster();
   const launcher = new Launcher(db, broadcaster);
   const transcripts = new TranscriptWatcherManager(db, broadcaster);
@@ -87,7 +104,16 @@ export async function createSolixServer(
   // + ~/.claude/jobs to mirror background sessions managed by the
   // claude-agents supervisor into Solix. No-op if Agent View isn't
   // installed locally.
-  const stopAgentViewBridge = startAgentViewBridge({ db, broadcaster });
+  //
+  // The demo sandbox (and any caller that sets SOLIX_DISABLE_AGENTVIEW) runs
+  // isolated from the user's real Agent View state: it has its own seeded DB
+  // and must not mirror external sessions into it. Skipping it also keeps a
+  // heavy ~/.claude/jobs from being scanned inside the throwaway sandbox.
+  const stopAgentViewBridge = process.env.SOLIX_DISABLE_AGENTVIEW
+    ? (): void => {
+        /* agent view bridge disabled for this process */
+      }
+    : startAgentViewBridge({ db, broadcaster });
 
   // Sprint M — heartbeat scheduler. Every ~30s, fire any enabled schedule
   // whose next_run_at has passed by launching it through the normal internal

@@ -4,6 +4,27 @@ The galaxy is a live WebGL scene, so the marketing shots have to be captured
 from a real browser (a headless/CI browser renders the 3D view black). It
 takes about two minutes with the built-in demo — no real Claude Code needed.
 
+## Fastest path — the capture script
+
+`scripts/capture-shots.mjs` drives a **headed** browser (headed is required —
+WebGL is black headless) and grabs the framed shots with the exact filenames
+the README expects. One-time, install the browser it drives:
+
+```sh
+npx playwright install chromium
+```
+
+Then, with the demo running in another terminal:
+
+```sh
+solix demo            # terminal 1
+pnpm capture          # terminal 2  → writes docs/galaxy.png, advisors.png, galaxy-panel.png
+```
+
+It captures the hero, the crew ring, and the Galaxy panel automatically.
+`decision-queue.png` still needs one manual click (a flaring planet) — see
+below. Prefer the fully-manual recipe? It's here too.
+
 ## 1. Boot the demo
 
 ```sh
@@ -18,7 +39,8 @@ still, calm frame use `solix demo --no-ticker` (seeds once, no animation).
 
 In the browser tab (http://127.0.0.1:4242):
 
-- Press **F** to fit every planet in view.
+- The demo boots with the whole system framed. Scroll to zoom and drag to
+  rotate; `-` zooms out and `0` resets the view if you nudge it.
 - Hide DevTools; go full-screen for a clean frame.
 
 Capture these and drop them in `docs/` with these exact names (the README

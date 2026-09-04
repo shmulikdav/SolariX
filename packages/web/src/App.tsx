@@ -6,6 +6,7 @@ import { Toasts } from './hud/Toasts.js';
 import { Welcome } from './hud/Welcome.js';
 import { DecisionQueue } from './hud/DecisionQueue.js';
 import { SceneControls } from './hud/SceneControls.js';
+import { UpdateBanner } from './hud/UpdateBanner.js';
 import {
   panDown,
   panLeft,
@@ -39,6 +40,11 @@ const GalaxyPanel = lazy(() =>
 const CrewPanel = lazy(() =>
   import('./panels/CrewPanel.js').then((m) => ({ default: m.CrewPanel })),
 );
+const WorkspacePanel = lazy(() =>
+  import('./panels/WorkspacePanel.js').then((m) => ({
+    default: m.WorkspacePanel,
+  })),
+);
 
 export default function App(): JSX.Element {
   const [galaxyOpen, setGalaxyOpen] = useState(false);
@@ -52,6 +58,8 @@ export default function App(): JSX.Element {
   const selectedSessionId = useSolixStore((s) => s.selectedSessionId);
   const selectedAdvisorId = useSolixStore((s) => s.selectedAdvisorId);
   const selectedSkillId = useSolixStore((s) => s.selectedSkillId);
+  const workspaceOpen = useSolixStore((s) => s.workspaceOpen);
+  const closeWorkspace = useSolixStore((s) => s.closeWorkspace);
   const panelOffsetPx = selectedSessionId
     ? 460
     : selectedAdvisorId
@@ -60,7 +68,9 @@ export default function App(): JSX.Element {
         ? 480
         : galaxyOpen
           ? 480
-          : 0;
+          : workspaceOpen
+            ? 480
+            : 0;
 
   useEffect(() => {
     startWsClient();
@@ -81,6 +91,7 @@ export default function App(): JSX.Element {
         state.selectSession(null);
         state.selectAdvisor(null);
         state.selectSkill(null);
+        state.closeWorkspace();
         setGalaxyOpen(false);
         setNewTaskOpen(false);
         setHelpOpen(false);
@@ -124,6 +135,9 @@ export default function App(): JSX.Element {
         state.setViewMode('missions');
       } else if (!isTextField && (e.key === 't' || e.key === 'T')) {
         setTimelineOpen((v) => !v);
+      } else if (!isTextField && (e.key === 'w' || e.key === 'W')) {
+        if (state.workspaceOpen) state.closeWorkspace();
+        else state.openWorkspace();
       } else if (!isTextField && top && (e.key === 'y' || e.key === 'Y')) {
         state.resolvePermission(top.requestId, true);
       } else if (!isTextField && top && (e.key === 'n' || e.key === 'N')) {
@@ -158,6 +172,11 @@ export default function App(): JSX.Element {
           <CrewPanel open={crewOpen} onClose={() => setCrewOpen(false)} />
         </Suspense>
       )}
+      {workspaceOpen && (
+        <Suspense fallback={null}>
+          <WorkspacePanel open={workspaceOpen} onClose={closeWorkspace} />
+        </Suspense>
+      )}
       <NewTaskModal
         open={newTaskOpen}
         onClose={() => setNewTaskOpen(false)}
@@ -178,6 +197,7 @@ export default function App(): JSX.Element {
       />
       <Toasts />
       <EmptyHint />
+      <UpdateBanner />
     </div>
   );
 }

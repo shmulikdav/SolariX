@@ -192,6 +192,7 @@ interface SolixState {
   selectedSessionId: string | null;
   selectedAdvisorId: string | null;
   selectedSkillId: string | null;
+  workspaceOpen: boolean;
   motionEnabled: boolean;
   viewMode: 'galaxy' | 'list' | 'missions';
   playback: PlaybackState;
@@ -202,6 +203,8 @@ interface SolixState {
   selectSession: (id: string | null) => void;
   selectAdvisor: (id: string | null) => void;
   selectSkill: (id: string | null) => void;
+  openWorkspace: () => void;
+  closeWorkspace: () => void;
   dismissToast: (id: string) => void;
   resolvePermission: (requestId: string, approved: boolean) => void;
   invokeAdvisor: (advisorId: string, prompt?: string) => void;
@@ -300,6 +303,7 @@ export const useSolixStore = create<SolixState>((set, get) => ({
   selectedSessionId: null,
   selectedAdvisorId: null,
   selectedSkillId: null,
+  workspaceOpen: false,
   motionEnabled: readMotionPref(),
   viewMode: readViewPref(),
   playback: EMPTY_PLAYBACK,
@@ -546,6 +550,7 @@ export const useSolixStore = create<SolixState>((set, get) => ({
       selectedSessionId: id,
       selectedAdvisorId: id ? null : get().selectedAdvisorId,
       selectedSkillId: id ? null : get().selectedSkillId,
+      workspaceOpen: id ? false : get().workspaceOpen,
     }),
 
   selectAdvisor: (id) =>
@@ -553,6 +558,7 @@ export const useSolixStore = create<SolixState>((set, get) => ({
       selectedAdvisorId: id,
       selectedSessionId: id ? null : get().selectedSessionId,
       selectedSkillId: id ? null : get().selectedSkillId,
+      workspaceOpen: id ? false : get().workspaceOpen,
     }),
 
   selectSkill: (id) =>
@@ -560,7 +566,20 @@ export const useSolixStore = create<SolixState>((set, get) => ({
       selectedSkillId: id,
       selectedSessionId: id ? null : get().selectedSessionId,
       selectedAdvisorId: id ? null : get().selectedAdvisorId,
+      workspaceOpen: id ? false : get().workspaceOpen,
     }),
+
+  // The sun opens Mission Control; keep it mutually exclusive with the
+  // planet/advisor/skill side panels so only one right-dock is ever open.
+  openWorkspace: () =>
+    set({
+      workspaceOpen: true,
+      selectedSessionId: null,
+      selectedAdvisorId: null,
+      selectedSkillId: null,
+    }),
+
+  closeWorkspace: () => set({ workspaceOpen: false }),
 
   dismissToast: (id) =>
     set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
@@ -764,6 +783,99 @@ export function selectMoons(state: SolixState, planetId: string): Session[] {
   return Object.values(effectiveSessions(state)).filter(
     (s) => s.parentSessionId === planetId,
   );
+}
+
+export interface WorkspaceSummary {
+  totalSpendUsd: number;
+  totalTokens: number;
+  completedMissions: number;
+  costPerCompletedMission: number;
+  interventions: number;
+  pendingPermissions: number;
+  activeCount: number;
+  attentionCount: number;
+  idleCount: number;
+  missions: { completed: number; failed: number; active: number; cancelled: number };
+  sessionCount: number;
+  projectCount: number;
+  advisorCount: number;
+  skillCount: number;
+  needsYou: Session[];
+  contextAvgPct: number;
+  contextMaxPct: number;
+}
+
+/**
+ * Whole-workspace aggregate for the Sun's "Mission Control" panel. Pure
+ * derivation over the current sessions/missions — no new tracking. `interventions`
+ * is filled from the persisted audit log by the panel itself (async); everything
+ * here is synchronous from store state.
+ */
+export function selectWorkspaceSummary(state: SolixState): WorkspaceSummary {
+  const planets = selectPlanets(state);
+  let totalSpendUsd = 0;
+  let activeCount = 0;
+  let attentionCount = 0;
+  let idleCount = 0;
+  let ctxSum = 0;
+  let ctxMax = 0;
+  let ctxN = 0;
+  const needsYou: Session[] = [];
+  for (const s of planets) {
+    totalSpendUsd += s.costUsd ?? 0;
+    if (s.status === 'active') activeCount++;
+    else if (
+      s.status === 'awaiting_permission' ||
+      s.status === 'awaiting_input' ||
+      s.status === 'plan_review'
+    )
+      attentionCount++;
+    else if (s.status === 'idle') idleCount++;
+    if (
+      s.status === 'awaiting_permission' ||
+      s.status === 'awaiting_input' ||
+      s.status === 'error'
+    )
+      needsYou.push(s);
+    if (typeof s.contextUsagePct === 'number') {
+      ctxSum += s.contextUsagePct;
+      ctxMax = Math.max(ctxMax, s.contextUsagePct);
+      ctxN++;
+    }
+  }
+
+  let totalTokens = 0;
+  let completed = 0;
+  let failed = 0;
+  let activeM = 0;
+  let cancelled = 0;
+  for (const m of Object.values(state.missions)) {
+    totalTokens += m.metrics?.totalTokens ?? 0;
+    if (m.status === 'completed') completed++;
+    else if (m.status === 'failed') failed++;
+    else if (m.status === 'active') activeM++;
+    else if (m.status === 'cancelled') cancelled++;
+  }
+
+  return {
+    totalSpendUsd,
+    totalTokens,
+    completedMissions: completed,
+    costPerCompletedMission: completed > 0 ? totalSpendUsd / completed : 0,
+    interventions: 0,
+    pendingPermissions: Object.keys(state.pendingPermissions).length,
+    activeCount,
+    attentionCount,
+    idleCount,
+    missions: { completed, failed, active: activeM, cancelled },
+    sessionCount: planets.length,
+    projectCount: Object.keys(state.projects).length,
+    advisorCount: Object.keys(state.advisors).length,
+    skillCount: Object.keys(state.skills).length,
+    needsYou,
+    contextAvgPct: ctxN > 0 ? ctxSum / ctxN : 0,
+    contextMaxPct: ctxMax,
+  };
 }
 
 export function selectVisibleToolCalls(state: SolixState): RecentToolCall[] {

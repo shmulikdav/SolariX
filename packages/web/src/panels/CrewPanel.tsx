@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import type { Advisor } from '@solix/shared';
 import { selectAllAdvisors, useSolixStore } from '../store/index.js';
 
@@ -19,14 +20,44 @@ export function CrewPanel({ open, onClose }: CrewPanelProps): JSX.Element | null
   const unpinAdvisor = useSolixStore((s) => s.unpinAdvisor);
   const selectAdvisor = useSolixStore((s) => s.selectAdvisor);
 
+  // Self-heal the advisor list when the panel opens. If the WS snapshot
+  // arrived empty (server hadn't seeded yet, race on reconnect, stale
+  // socket), the Zustand cache stays empty until something *changes* an
+  // advisor — which the user can't trigger because they see nothing to
+  // click. Re-reading from /api/advisors on open guarantees the panel is
+  // populated within ~200ms regardless of WS state. Same pattern as
+  // NewTaskModal's /api/system/preflight fetch.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    fetch('/api/advisors')
+      .then((r) => (r.ok ? (r.json() as Promise<Advisor[]>) : []))
+      .then((list) => {
+        if (cancelled) return;
+        const { applyMessage } = useSolixStore.getState();
+        for (const a of list) {
+          applyMessage({ type: 'advisor_upsert', advisor: a });
+        }
+      })
+      .catch(() => {
+        /* offline; render whatever the store already has */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
   if (!open) return null;
 
   const active = advisors.filter((a) => a.enabled);
   const optIn = advisors.filter((a) => !a.enabled);
 
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md">
-      <div className="w-[620px] max-w-[94vw] max-h-[88vh] flex flex-col rounded-xl border border-solix-accent/40 bg-solix-panel shadow-2xl">
+    <div className="absolute inset-0 z-50 flex items-center justify-center">
+      {/* Blurred backdrop as a sibling, not an ancestor of the opaque panel —
+          see NewTaskModal for why (backdrop-filter compositing bleed-through). */}
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-lg" />
+      <div className="relative z-10 w-[620px] max-w-[94vw] max-h-[88vh] flex flex-col rounded-xl border border-solix-accent/40 bg-solix-panel shadow-2xl">
         <div className="px-5 py-4 border-b border-solix-border flex items-start justify-between">
           <div>
             <div className="text-xs uppercase tracking-widest text-solix-accent">

@@ -61,6 +61,7 @@ function HeartbeatNode({
       </mesh>
       <Html
         center
+        zIndexRange={[20, 0]}
         distanceFactor={14}
         style={{ pointerEvents: 'none', userSelect: 'none' }}
         position={[0, 0.7, 0]}

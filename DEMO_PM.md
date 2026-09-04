@@ -21,8 +21,8 @@ This walkthrough takes about 15 minutes. By the end you'll have:
 - An exportable "team standard" you could share with engineers tomorrow
 
 You don't need to be technical, but you'll spend ~5 minutes in
-Terminal. If you've ever run `git clone` once, you'll be fine. If you
-haven't, the install steps below walk you through it.
+Terminal. If you've ever pasted one command into it, you'll be fine. If
+you haven't, the install steps below walk you through it.
 
 ---
 
@@ -32,7 +32,6 @@ haven't, the install steps below walk you through it.
 |---|---|
 | A Mac (or Linux) | Walkthrough is written for macOS Terminal |
 | **Node.js 20+** | Runs Solix |
-| **pnpm** | Code installer |
 
 You **don't** need Claude Code itself for the demo. We'll use a
 built-in dummy mode so you can see the full visual story before
@@ -52,66 +51,35 @@ Close Terminal, reopen it, then:
 
 ```sh
 fnm install 22
-npm install -g pnpm
 ```
 
 Verify it worked:
 
 ```sh
 node --version    # should print v22.x.x
-pnpm --version    # should print 9.x.x
 ```
 
-If either errors, message me — I'll help.
+If it errors, message me — I'll help.
 
 ---
 
 ## Step 1 — Get Solix
 
 ```sh
-git clone https://github.com/shmulikdav/Solix.git
-cd Solix
-git checkout claude/solix-command-center-z1y95
+npm i -g @shmulikdav/solix
 ```
 
-**You should see:** "Cloning..." text, then your prompt comes back.
+**You should see:** "added N packages" text, then your prompt comes back.
 
-**The PM read:** you're pulling down a working prototype.
+**The PM read:** Solix is a real, published npm package — one command to
+install, no repo to clone, and the `solix` command works from any folder.
 
 ---
 
-## Step 2 — Install (2-3 min)
+## Step 2 — Start Solix
 
 ```sh
-pnpm install
-```
-
-**You should see:** lots of scrolling text, then a pause to compile a
-small piece, then your prompt comes back.
-
-**While you wait:** this is roughly the same kind of install your
-engineers do every time they start on a new project. The reason
-"set up your dev environment" is a backlog item is that there's
-*always* something that doesn't quite work. Solix's whole point is
-that *running* AI agents shouldn't have that problem — once it's set
-up once, the agents work everywhere.
-
----
-
-## Step 3 — Build the visual
-
-```sh
-pnpm --filter @solix/web build
-```
-
-**You should see:** a few "transforming" lines, then `✓ built in X.Xs`.
-
----
-
-## Step 4 — Start Solix
-
-```sh
-pnpm --filter @shmulikdav/solix exec tsx src/index.ts start
+solix start
 ```
 
 **You should see:** a big ASCII **SOLIX** banner, then:
@@ -126,7 +94,7 @@ pnpm --filter @shmulikdav/solix exec tsx src/index.ts start
 
 ---
 
-## Step 5 — Open the dashboard
+## Step 3 — Open the dashboard
 
 In any browser: **http://127.0.0.1:4242**
 
@@ -156,13 +124,12 @@ once.
 
 ---
 
-## Step 6 — Light up the system with simulated activity
+## Step 4 — Light up the system with simulated activity
 
 Open a **second Terminal** (in Terminal: **Cmd+N**), then:
 
 ```sh
-cd ~/Solix
-pnpm --filter @shmulikdav/solix exec tsx src/index.ts demo
+solix demo
 ```
 
 **You should now see in the browser:**
@@ -195,7 +162,7 @@ not to walls of log text.
 
 ---
 
-## Step 7 — Use the PM advisor
+## Step 5 — Use the PM advisor
 
 Click the **purple Compass** planet in the inner ring.
 
@@ -235,7 +202,7 @@ think?"
 
 ---
 
-## Step 8 — Standardize across the team
+## Step 6 — Standardize across the team
 
 Press **G** on the keyboard. The **Galaxy panel** slides in.
 
@@ -291,7 +258,7 @@ Mike?"
 
 ---
 
-## Step 9 — (Optional) Watch a real Claude Code session
+## Step 7 — (Optional) Watch a real Claude Code session
 
 If you have **Claude Code** installed (or want to install it now from
 [claude.ai/code](https://claude.ai/code)), this is the live-fire demo.
@@ -299,8 +266,7 @@ If you have **Claude Code** installed (or want to install it now from
 Open a **third Terminal** (**Cmd+N**):
 
 ```sh
-cd ~/Solix
-pnpm --filter @shmulikdav/solix exec tsx src/index.ts install
+solix install
 ```
 
 Green checkmarks confirm Solix is now wired into Claude Code. **One
@@ -334,7 +300,7 @@ doing. Solix makes their cognitive load drop to a single glance.
 
 ---
 
-## Step 10 — Stopping
+## Step 8 — Stopping
 
 In the **first Terminal** (with the SOLIX banner), press **Ctrl+C**.
 
@@ -349,10 +315,10 @@ again, your history, advisors, and pinned crew are all still there.
 
 | Symptom | Fix |
 |---|---|
-| `command not found: pnpm` | `npm install -g pnpm` |
+| `command not found: solix` | Re-run `npm i -g @shmulikdav/solix`; check `node --version` prints v20+ |
 | `EADDRINUSE :::4242` (port in use) | Add `--port 5454` and use that URL instead |
 | Browser shows OFFLINE | The Terminal with the SOLIX banner closed — start it again |
-| Step 9: nothing happens when I run `claude` | Make sure you ran `solix install` first |
+| Step 7: nothing happens when I run `claude` | Make sure you ran `solix install` first |
 
 If you hit something not on this list, take a screenshot of the
 Terminal and send it to me.
