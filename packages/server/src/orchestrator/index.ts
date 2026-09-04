@@ -13,6 +13,7 @@ import {
   updatePlanTask,
 } from '../state/plans.js';
 import { ensureProject } from '../state/projects.js';
+import { gitHead } from '../state/git.js';
 import { setSessionStatus, upsertSession } from '../state/sessions.js';
 import { parsePlannerOutput, parseVerifierOutput } from './planner.js';
 import {
@@ -172,6 +173,9 @@ export class Orchestrator {
       updatePlan(db, plan.id, {
         name: input.name?.trim() || parsed.plan.name,
         status: plan.autoMode ? 'running' : 'awaiting_approval',
+        // Capture the git baseline the moment we start running (autoMode),
+        // so the review surface diffs against a clean pre-build tree.
+        ...(plan.autoMode ? { baseRef: gitHead(input.cwd) ?? undefined } : {}),
       }) ?? plan;
     this.emitPlan(plan);
 
@@ -189,7 +193,11 @@ export class Orchestrator {
     if (plan.status !== 'awaiting_approval') {
       return { ok: false, error: `plan is ${plan.status}, not awaiting_approval` };
     }
-    const updated = updatePlan(this.deps.db, planId, { status: 'running' });
+    const updated = updatePlan(this.deps.db, planId, {
+      status: 'running',
+      // Baseline for the review diff, captured at the approve→run transition.
+      baseRef: gitHead(plan.cwd) ?? undefined,
+    });
     if (updated) this.emitPlan(updated);
     return { ok: true };
   }

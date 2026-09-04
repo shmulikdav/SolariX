@@ -33,6 +33,7 @@ import {
   listProjects,
 } from './state/projects.js';
 import { defaultProjectsDir, scaffoldProject } from './state/scaffold.js';
+import { buildPlanReview } from './state/git.js';
 import { slugifyProjectName } from './util.js';
 import {
   getSession,
@@ -785,6 +786,14 @@ export function createHttpApp(opts: {
   app.post('/api/plans/:id/abort', (c) => {
     const res = opts.orchestrator.abortPlan(c.req.param('id'));
     return c.json(res, res.ok ? 200 : 404);
+  });
+
+  // Build-studio review surface: what the fleet changed on disk since the plan
+  // started (git diff of plan.cwd vs the baseline captured at run start).
+  app.get('/api/plans/:id/review', (c) => {
+    const plan = getPlan(opts.db, c.req.param('id'));
+    if (!plan) return c.json({ ok: false, error: 'plan not found' }, 404);
+    return c.json(buildPlanReview(plan.cwd, plan.baseRef));
   });
 
   // Preflight check used by the NewTaskModal to warn before the user

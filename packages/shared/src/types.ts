@@ -165,8 +165,33 @@ export interface Plan {
   cwd: string;
   /** Optional plan-wide budget cap (USD) across all tasks. */
   budgetUsd?: number;
+  /** Git HEAD of `cwd` captured when the plan started running — the baseline
+   *  the review surface diffs against to show everything the fleet changed. */
+  baseRef?: string;
   createdAt: number;
   updatedAt: number;
+}
+
+/** One file the plan touched, for the review surface. */
+export interface PlanReviewFile {
+  path: string;
+  status: 'added' | 'modified' | 'deleted';
+  additions: number;
+  deletions: number;
+}
+
+/** What a plan changed on disk since it started (git diff vs `baseRef`). */
+export interface PlanReview {
+  ok: boolean;
+  error?: string;
+  /** True when `cwd` isn't a git repo (nothing to diff). */
+  notARepo?: boolean;
+  baseRef?: string;
+  files: PlanReviewFile[];
+  /** Unified diff text (tracked changes + synthesized new-file diffs). */
+  diff: string;
+  /** True when the diff was capped for size. */
+  truncated?: boolean;
 }
 
 export interface PlanTask {

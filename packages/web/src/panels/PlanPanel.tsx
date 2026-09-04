@@ -1,5 +1,10 @@
 import { useMemo, useState } from 'react';
-import type { Plan, PlanTask, PlanTaskStatus } from '@solix/shared';
+import type {
+  Plan,
+  PlanReview,
+  PlanTask,
+  PlanTaskStatus,
+} from '@solix/shared';
 import {
   selectPlansArray,
   selectPlanTasks,
@@ -311,6 +316,139 @@ function PlanCard({ plan }: { plan: Plan }): JSX.Element {
         >
           {busy ? 'Stopping…' : 'Abort run (stop agents)'}
         </button>
+      )}
+
+      {plan.status !== 'draft' && plan.status !== 'awaiting_approval' && (
+        <PlanReviewSection planId={plan.id} />
+      )}
+    </div>
+  );
+}
+
+/** On-demand "what did the fleet change?" — fetches the git diff of the plan's
+ *  working tree against the baseline captured when it started running. */
+function PlanReviewSection({ planId }: { planId: string }): JSX.Element {
+  const [review, setReview] = useState<PlanReview | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  const load = async (): Promise<void> => {
+    setLoading(true);
+    try {
+      const res = await fetch(
+        `/api/plans/${encodeURIComponent(planId)}/review`,
+      );
+      setReview((await res.json()) as PlanReview);
+      setOpen(true);
+    } catch {
+      setReview({ ok: false, error: 'Could not load the diff.', files: [], diff: '' });
+      setOpen(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="mt-3">
+      <button
+        onClick={() => (open ? setOpen(false) : void load())}
+        disabled={loading}
+        className="w-full py-1.5 rounded bg-black/30 border border-solix-border text-slate-300 text-xs hover:bg-black/50 disabled:opacity-40"
+      >
+        {loading ? 'Loading diff…' : open ? 'Hide changes' : 'Review changes'}
+      </button>
+
+      {open && review && (
+        <div className="mt-2 space-y-2">
+          {review.notARepo ? (
+            <div className="text-[11px] text-slate-500 italic">
+              This project isn’t a git repo, so there’s nothing to diff.
+            </div>
+          ) : review.error ? (
+            <div className="text-[11px] text-solix-danger">{review.error}</div>
+          ) : review.files.length === 0 ? (
+            <div className="text-[11px] text-slate-500 italic">
+              No file changes since the plan started.
+            </div>
+          ) : (
+            <>
+              <ul className="space-y-0.5">
+                {review.files.map((f) => (
+                  <li
+                    key={f.path}
+                    className="flex items-center gap-2 text-[11px] font-mono"
+                  >
+                    <span
+                      className={
+                        f.status === 'added'
+                          ? 'text-solix-ok'
+                          : f.status === 'deleted'
+                            ? 'text-solix-danger'
+                            : 'text-amber-300'
+                      }
+                      title={f.status}
+                    >
+                      {f.status === 'added'
+                        ? 'A'
+                        : f.status === 'deleted'
+                          ? 'D'
+                          : 'M'}
+                    </span>
+                    <span className="text-slate-300 truncate flex-1">
+                      {f.path}
+                    </span>
+                    {f.additions > 0 && (
+                      <span className="text-solix-ok">+{f.additions}</span>
+                    )}
+                    {f.deletions > 0 && (
+                      <span className="text-solix-danger">−{f.deletions}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              <DiffView diff={review.diff} truncated={review.truncated} />
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Minimal unified-diff renderer: red/green lines in a scrollable monospace box. */
+function DiffView({
+  diff,
+  truncated,
+}: {
+  diff: string;
+  truncated?: boolean;
+}): JSX.Element | null {
+  if (!diff.trim()) return null;
+  const lines = diff.split('\n');
+  return (
+    <div className="max-h-64 overflow-auto rounded border border-solix-border bg-black/40 p-2">
+      <pre className="text-[10px] leading-tight font-mono whitespace-pre">
+        {lines.map((l, i) => {
+          const color = l.startsWith('+') && !l.startsWith('+++')
+            ? 'text-solix-ok'
+            : l.startsWith('-') && !l.startsWith('---')
+              ? 'text-solix-danger'
+              : l.startsWith('@@')
+                ? 'text-solix-accent'
+                : l.startsWith('diff ') || l.startsWith('index ')
+                  ? 'text-slate-500'
+                  : 'text-slate-400';
+          return (
+            <div key={i} className={color}>
+              {l || ' '}
+            </div>
+          );
+        })}
+      </pre>
+      {truncated && (
+        <div className="text-[10px] text-slate-500 mt-1">
+          Diff truncated — open the project to see the rest.
+        </div>
       )}
     </div>
   );

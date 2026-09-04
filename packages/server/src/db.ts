@@ -341,6 +341,9 @@ function applySchema(db: DB): void {
   // distinct from auto-observed ones; `template` records how to scaffold/preview.
   ensureColumn(db, 'projects', 'managed', 'managed INTEGER NOT NULL DEFAULT 0');
   ensureColumn(db, 'projects', 'template', 'template TEXT');
+  // Git baseline captured when a plan starts running — the review surface diffs
+  // the working tree against it to show everything the fleet changed.
+  ensureColumn(db, 'plans', 'base_ref', 'base_ref TEXT');
   // Indexes on the plan back-link columns — must run AFTER ensureColumn has
   // added the columns to the sessions table (they aren't in the base schema).
   db.exec(
