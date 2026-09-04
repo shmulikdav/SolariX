@@ -16,7 +16,8 @@ type SortKey =
   | 'context'
   | 'lastActivity'
   | 'needs'
-  | 'health';
+  | 'health'
+  | 'cost';
 
 interface Row {
   session: Session;
@@ -139,6 +140,8 @@ export function ListView(): JSX.Element {
         return a.needsAttention ? -1 * dir : 1 * dir;
       case 'health':
         return (a.health - b.health) * dir;
+      case 'cost':
+        return (a.session.costUsd - b.session.costUsd) * dir;
     }
   };
 
@@ -266,9 +269,13 @@ export function ListView(): JSX.Element {
                       <Th onClick={() => onSort('context')} numeric>
                         Context{sortIndicator('context')}
                       </Th>
+                      <Th onClick={() => onSort('cost')} numeric>
+                        Cost{sortIndicator('cost')}
+                      </Th>
                       <Th onClick={() => onSort('lastActivity')} numeric>
                         Last activity{sortIndicator('lastActivity')}
                       </Th>
+                      <Th numeric>Actions</Th>
                     </tr>
                   </thead>
                   <tbody>
@@ -276,7 +283,7 @@ export function ListView(): JSX.Element {
                       <tr
                         key={row.session.id}
                         onClick={() => selectSession(row.session.id)}
-                        className={`border-t border-solix-border hover:bg-solix-border/20 cursor-pointer ${
+                        className={`group border-t border-solix-border hover:bg-solix-border/20 cursor-pointer ${
                           row.needsAttention ? 'bg-solix-danger/5' : ''
                         } ${
                           selectedSessionIds.has(row.session.id)
@@ -399,8 +406,32 @@ export function ListView(): JSX.Element {
                         <td className="px-3 py-2 text-right">
                           <ContextBar pct={row.session.contextUsagePct} />
                         </td>
+                        <td className="px-3 py-2 text-right text-[11px] font-mono">
+                          <span
+                            className={
+                              row.session.costUsd > 0
+                                ? 'text-slate-200'
+                                : 'text-slate-600'
+                            }
+                            title="Estimated spend for this agent (from transcript tokens × model pricing)"
+                          >
+                            ${row.session.costUsd.toFixed(2)}
+                          </span>
+                        </td>
                         <td className="px-3 py-2 text-right text-[11px] text-slate-500 font-mono">
                           {relativeTime(row.session.updatedAt)}
+                        </td>
+                        <td
+                          className="px-3 py-2 text-right"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            onClick={() => terminateSessions([row.session.id])}
+                            className="opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity text-[10px] px-2 py-0.5 rounded border border-solix-danger/50 text-solix-danger hover:bg-solix-danger/15"
+                            title="Terminate this agent"
+                          >
+                            Terminate
+                          </button>
                         </td>
                       </tr>
                     ))}

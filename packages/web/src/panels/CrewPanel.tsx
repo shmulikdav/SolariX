@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import type { Advisor } from '@solix/shared';
+import type { Advisor, Session } from '@solix/shared';
 import { selectAllAdvisors, useSolixStore } from '../store/index.js';
 
 interface CrewPanelProps {
@@ -19,6 +19,9 @@ export function CrewPanel({ open, onClose }: CrewPanelProps): JSX.Element | null
   const pinAdvisor = useSolixStore((s) => s.pinAdvisor);
   const unpinAdvisor = useSolixStore((s) => s.unpinAdvisor);
   const selectAdvisor = useSolixStore((s) => s.selectAdvisor);
+  // For per-advisor cost transparency: a pinned advisor runs an always-on
+  // session, so we surface that session's live spend on its card.
+  const sessions = useSolixStore((s) => s.sessions);
 
   // Self-heal the advisor list when the panel opens. If the WS snapshot
   // arrived empty (server hadn't seeded yet, race on reconnect, stale
@@ -68,6 +71,12 @@ export function CrewPanel({ open, onClose }: CrewPanelProps): JSX.Element | null
               {active.length} active · {optIn.length} available. Enable an
               advisor to add it to the inner ring and the + Task picker.
             </div>
+            <div className="text-[11px] text-slate-500 mt-1 leading-snug">
+              <span className="text-solix-ok">Enabling is free</span> — no API
+              calls. An advisor costs tokens only when you{' '}
+              <span className="text-amber-300">pin</span> it (an always-on
+              session) or invoke it on a task.
+            </div>
           </div>
           <button
             onClick={onClose}
@@ -82,6 +91,7 @@ export function CrewPanel({ open, onClose }: CrewPanelProps): JSX.Element | null
           <CrewSection
             title={`Active crew · ${active.length}`}
             advisors={active}
+            sessions={sessions}
             enableAdvisor={enableAdvisor}
             disableAdvisor={disableAdvisor}
             pinAdvisor={pinAdvisor}
@@ -93,6 +103,7 @@ export function CrewPanel({ open, onClose }: CrewPanelProps): JSX.Element | null
             <CrewSection
               title={`Available (opt-in) · ${optIn.length}`}
               advisors={optIn}
+              sessions={sessions}
               enableAdvisor={enableAdvisor}
               disableAdvisor={disableAdvisor}
               pinAdvisor={pinAdvisor}
@@ -110,6 +121,7 @@ export function CrewPanel({ open, onClose }: CrewPanelProps): JSX.Element | null
 interface CrewSectionProps {
   title: string;
   advisors: Advisor[];
+  sessions: Record<string, Session>;
   enableAdvisor: (id: string) => void;
   disableAdvisor: (id: string) => void;
   pinAdvisor: (id: string) => void;
@@ -121,6 +133,7 @@ interface CrewSectionProps {
 function CrewSection({
   title,
   advisors,
+  sessions,
   enableAdvisor,
   disableAdvisor,
   pinAdvisor,
@@ -149,10 +162,26 @@ function CrewSection({
                   <span className="text-[10px] uppercase tracking-wide text-slate-500">
                     {a.name} · {String(a.defaultModel)}
                   </span>
-                  {a.pinned && (
-                    <span className="text-[9px] uppercase tracking-wider text-amber-300 border border-amber-300/40 rounded px-1 py-0.5">
+                  {a.pinned ? (
+                    <span
+                      className="text-[9px] uppercase tracking-wider text-amber-300 border border-amber-300/40 rounded px-1 py-0.5"
+                      title="Always-on session — this is where an advisor costs tokens."
+                    >
                       pinned
+                      {a.pinnedSessionId &&
+                      sessions[a.pinnedSessionId] != null
+                        ? ` · $${sessions[a.pinnedSessionId]!.costUsd.toFixed(2)}`
+                        : ''}
                     </span>
+                  ) : (
+                    a.enabled && (
+                      <span
+                        className="text-[9px] uppercase tracking-wider text-solix-ok/80 border border-solix-ok/30 rounded px-1 py-0.5"
+                        title="Enabled advisors make no API calls until pinned or invoked."
+                      >
+                        free
+                      </span>
+                    )
                   )}
                 </div>
                 <div className="mt-1 text-xs text-slate-400 leading-snug">
