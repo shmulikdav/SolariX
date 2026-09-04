@@ -449,3 +449,71 @@ describe('Orchestrator.reconcile', () => {
     expect(b.tasks.every((t) => t.status === 'pending')).toBe(true);
   });
 });
+
+// A 4-task plan for exercising the Community task cap (free ≤ 3).
+const BIG_PLAN_JSON = JSON.stringify({
+  name: 'Big build',
+  tasks: [1, 2, 3, 4].map((n) => ({
+    id: `t${n}`,
+    title: `Task ${n}`,
+    prompt: `Do task ${n}`,
+    acceptanceCriteria: 'done',
+    dependsOn: [],
+  })),
+});
+
+describe('Orchestrator Pro gate (approvePlan)', () => {
+  let db: DB;
+  beforeEach(() => {
+    db = resetDbForTests();
+  });
+
+  function makeGated(planJson: string, tier: 'pro' | 'community') {
+    return new Orchestrator({
+      db,
+      runner: new FakeRunner({ ok: true, output: planJson }),
+      broadcast: () => {},
+      getKnownAdvisorRoles: () => ['forge', 'argus', 'mira'],
+      knownModels: ['opus', 'sonnet', 'haiku', 'default'],
+      getMaestroPrompt: () => 'MAESTRO PROMPT',
+      fullAutoStatus: () => ({ ok: true, reasons: [] }),
+      getEntitlement: () => ({ tier, reason: tier === 'pro' ? 'licensed' : 'x' }),
+    });
+  }
+
+  it('Community can run a small (≤3-task) plan', async () => {
+    const orch = makeGated(PLAN_JSON, 'community'); // 2 tasks
+    const { planId } = await orch.createPlanFromGoal({ goal: 'g', cwd: '/tmp/p' });
+    expect(orch.approvePlan(planId!)).toEqual({ ok: true });
+    expect(orch.getPlanWithTasks(planId!)!.plan.status).toBe('running');
+  });
+
+  it('Community is upsold on a large (>3-task) plan; the plan stays parked', async () => {
+    const orch = makeGated(BIG_PLAN_JSON, 'community'); // 4 tasks
+    const { planId } = await orch.createPlanFromGoal({ goal: 'g', cwd: '/tmp/p' });
+    const res = orch.approvePlan(planId!);
+    expect(res.ok).toBe(false);
+    expect(res.upsell).toBe(true);
+    expect(orch.getPlanWithTasks(planId!)!.plan.status).toBe('awaiting_approval');
+  });
+
+  it('Pro can run a large plan', async () => {
+    const orch = makeGated(BIG_PLAN_JSON, 'pro');
+    const { planId } = await orch.createPlanFromGoal({ goal: 'g', cwd: '/tmp/p' });
+    expect(orch.approvePlan(planId!).ok).toBe(true);
+    expect(orch.getPlanWithTasks(planId!)!.plan.status).toBe('running');
+  });
+
+  it('Community full-auto is downgraded to the approval gate', async () => {
+    const orch = makeGated(PLAN_JSON, 'community');
+    const res = await orch.createPlanFromGoal({
+      goal: 'g',
+      cwd: '/tmp/p',
+      autoMode: true,
+    });
+    const b = orch.getPlanWithTasks(res.planId!)!;
+    expect(b.plan.status).toBe('awaiting_approval');
+    expect(b.plan.autoMode).toBe(false);
+    expect(res.warnings?.some((w) => w.includes('Pro feature'))).toBe(true);
+  });
+});

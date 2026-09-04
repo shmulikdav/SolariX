@@ -229,8 +229,13 @@ interface SolixState {
     errors?: string[];
     warnings?: string[];
   }>;
-  approvePlan: (planId: string) => Promise<void>;
+  approvePlan: (
+    planId: string,
+  ) => Promise<{ ok: boolean; error?: string; upsell?: boolean }>;
   abortPlan: (planId: string) => Promise<void>;
+  activateLicense: (
+    key: string,
+  ) => Promise<{ ok: boolean; error?: string }>;
   createProject: (
     name: string,
     opts?: { path?: string; template?: string },
@@ -706,11 +711,35 @@ export const useSolixStore = create<SolixState>((set, get) => ({
 
   approvePlan: async (planId) => {
     try {
-      await fetch(`/api/plans/${encodeURIComponent(planId)}/approve`, {
-        method: 'POST',
-      });
+      const res = await fetch(
+        `/api/plans/${encodeURIComponent(planId)}/approve`,
+        { method: 'POST' },
+      );
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        upsell?: boolean;
+      };
+      return { ok: Boolean(data.ok), error: data.error, upsell: data.upsell };
     } catch {
-      /* offline; the plan_upsert broadcast will reconcile if it lands */
+      return { ok: false, error: 'Could not reach the server.' };
+    }
+  },
+
+  activateLicense: async (key) => {
+    try {
+      const res = await fetch('/api/license/activate', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ key }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+      };
+      return { ok: Boolean(data.ok), error: data.error };
+    } catch {
+      return { ok: false, error: 'Could not reach the server.' };
     }
   },
 

@@ -16,6 +16,11 @@ import { ensureProject } from '../state/projects.js';
 import { gitHead } from '../state/git.js';
 import { setSessionStatus, upsertSession } from '../state/sessions.js';
 import { fullAutoContainmentStatus } from '../containment.js';
+import {
+  evaluateRunGate,
+  getEntitlement,
+  type Entitlement,
+} from '../licensing.js';
 import { parsePlannerOutput, parseVerifierOutput } from './planner.js';
 import {
   computeNewlyBlocked,
@@ -43,6 +48,9 @@ export interface OrchestratorDeps {
   /** Whether full-auto is allowed right now (containment check). Injectable so
    *  tests don't depend on process env; defaults to the real env-based check. */
   fullAutoStatus?: () => { ok: boolean; reasons: string[] };
+  /** Current Pro entitlement. Injectable for tests; defaults to the real
+   *  license-file/enforcement check (which is "pro" during the free beta). */
+  getEntitlement?: () => Entitlement;
 }
 
 export interface CreatePlanInput {
@@ -101,13 +109,19 @@ export class Orchestrator {
     const { db, runner, broadcast } = this.deps;
     const warnings: string[] = [];
 
-    // Full-auto refusal (Sentinel): only honor autoMode when containment is in
-    // place (gate enabled + fail-closed), so autonomous workers can't run
-    // ungoverned. Otherwise fall back to the supervised approval gate.
+    // Full-auto is honored only when it's both allowed (Pro) and safe
+    // (containment: gate enabled + fail-closed). Otherwise fall back to the
+    // supervised approval gate rather than running ungoverned.
     let autoMode = input.autoMode ?? false;
     if (autoMode) {
+      const ent = (this.deps.getEntitlement ?? getEntitlement)();
       const status = (this.deps.fullAutoStatus ?? fullAutoContainmentStatus)();
-      if (!status.ok) {
+      if (ent.tier !== 'pro') {
+        autoMode = false;
+        warnings.push(
+          'Full-auto is a Pro feature. Parked for your approval instead.',
+        );
+      } else if (!status.ok) {
         autoMode = false;
         warnings.push(
           `Full-auto refused (${status.reasons.join('; ')}). Parked for your approval instead.`,
@@ -210,11 +224,23 @@ export class Orchestrator {
    * 2; here we only advance the status (idempotent — a non-awaiting plan is a
    * no-op).
    */
-  approvePlan(planId: string): { ok: boolean; error?: string } {
+  approvePlan(planId: string): { ok: boolean; error?: string; upsell?: boolean } {
     const plan = getPlan(this.deps.db, planId);
     if (!plan) return { ok: false, error: 'plan not found' };
     if (plan.status !== 'awaiting_approval') {
       return { ok: false, error: `plan is ${plan.status}, not awaiting_approval` };
+    }
+    // Pro gate at the RUN trigger (planning/preview were free): community may run
+    // small plans; larger runs + full-auto are Pro.
+    const ent = (this.deps.getEntitlement ?? getEntitlement)();
+    const taskCount = listPlanTasks(this.deps.db, planId).length;
+    const gate = evaluateRunGate({
+      tier: ent.tier,
+      taskCount,
+      autoMode: plan.autoMode,
+    });
+    if (!gate.allowed) {
+      return { ok: false, error: gate.reason, upsell: true };
     }
     const updated = updatePlan(this.deps.db, planId, {
       status: 'running',

@@ -56,6 +56,10 @@ export function PlanPanel({ open, onClose }: PlanPanelProps): JSX.Element | null
     ok: boolean;
     reasons: string[];
   } | null>(null);
+  const [entitlement, setEntitlement] = useState<{
+    tier: 'pro' | 'community';
+    reason: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -68,6 +72,12 @@ export function PlanPanel({ open, onClose }: PlanPanelProps): JSX.Element | null
       .catch(() => {
         if (live) setContainment({ ok: false, reasons: ['status unavailable'] });
       });
+    void fetch('/api/system/entitlement')
+      .then((r) => r.json())
+      .then((e: { tier: 'pro' | 'community'; reason: string }) => {
+        if (live) setEntitlement(e);
+      })
+      .catch(() => {});
     return () => {
       live = false;
     };
@@ -121,8 +131,26 @@ export function PlanPanel({ open, onClose }: PlanPanelProps): JSX.Element | null
     <div className="absolute top-16 right-0 bottom-0 w-full sm:w-[480px] bg-solix-panel border-l border-solix-border backdrop-blur-md flex flex-col z-30">
       <div className="px-5 py-4 border-b border-solix-border flex items-start justify-between shrink-0">
         <div>
-          <div className="text-xs uppercase tracking-widest text-amber-300">
-            maestro
+          <div className="flex items-center gap-2">
+            <div className="text-xs uppercase tracking-widest text-amber-300">
+              maestro
+            </div>
+            {entitlement && (
+              <span
+                className={`text-[9px] uppercase tracking-wider rounded px-1.5 py-0.5 border ${
+                  entitlement.tier === 'pro'
+                    ? 'text-amber-200 border-amber-400/50'
+                    : 'text-slate-400 border-slate-600'
+                }`}
+                title={`Entitlement: ${entitlement.reason}`}
+              >
+                {entitlement.tier === 'pro'
+                  ? entitlement.reason === 'beta'
+                    ? 'Pro · beta'
+                    : 'Pro'
+                  : 'Community'}
+              </span>
+            )}
           </div>
           <div className="text-lg font-semibold mt-0.5">Plan a build</div>
           <div className="text-xs text-slate-400 mt-1 leading-snug">
@@ -335,9 +363,13 @@ function PlanCard({ plan }: { plan: Plan }): JSX.Element {
   const approvePlan = useSolixStore((s) => s.approvePlan);
   const abortPlan = useSolixStore((s) => s.abortPlan);
   const createPlanFromGoal = useSolixStore((s) => s.createPlanFromGoal);
+  const activateLicense = useSolixStore((s) => s.activateLicense);
   const [busy, setBusy] = useState(false);
   const [refine, setRefine] = useState('');
   const [refining, setRefining] = useState(false);
+  const [upsell, setUpsell] = useState<string | null>(null);
+  const [licenseKey, setLicenseKey] = useState('');
+  const [activateError, setActivateError] = useState<string | null>(null);
 
   const finished =
     plan.status === 'completed' ||
@@ -346,8 +378,24 @@ function PlanCard({ plan }: { plan: Plan }): JSX.Element {
 
   const onApprove = async (): Promise<void> => {
     setBusy(true);
-    await approvePlan(plan.id);
+    setUpsell(null);
+    const res = await approvePlan(plan.id);
     setBusy(false);
+    if (!res.ok && res.upsell) setUpsell(res.error ?? 'This run requires Pro.');
+  };
+
+  const onActivate = async (): Promise<void> => {
+    const key = licenseKey.trim();
+    if (!key) return;
+    setActivateError(null);
+    const res = await activateLicense(key);
+    if (res.ok) {
+      setUpsell(null);
+      setLicenseKey('');
+      await onApprove(); // retry the run now that we're Pro
+    } else {
+      setActivateError(res.error ?? 'Activation failed.');
+    }
   };
 
   const onAbort = async (): Promise<void> => {
@@ -400,6 +448,30 @@ function PlanCard({ plan }: { plan: Plan }): JSX.Element {
         >
           {busy ? 'Approving…' : 'Approve & run'}
         </button>
+      )}
+
+      {upsell && (
+        <div className="mt-2 rounded border border-amber-400/50 bg-amber-500/10 p-2 space-y-2">
+          <div className="text-[11px] text-amber-200">{upsell}</div>
+          <div className="flex gap-2">
+            <input
+              value={licenseKey}
+              onChange={(e) => setLicenseKey(e.target.value)}
+              placeholder="Paste your Pro license key"
+              className="flex-1 text-[11px] font-mono bg-black/40 border border-solix-border rounded p-1.5 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-400"
+            />
+            <button
+              onClick={() => void onActivate()}
+              disabled={!licenseKey.trim()}
+              className="px-3 rounded bg-amber-500/20 border border-amber-400/60 text-amber-100 text-[11px] hover:bg-amber-500/30 disabled:opacity-40"
+            >
+              Activate
+            </button>
+          </div>
+          {activateError && (
+            <div className="text-[10px] text-solix-danger">{activateError}</div>
+          )}
+        </div>
       )}
 
       {plan.status === 'running' && (

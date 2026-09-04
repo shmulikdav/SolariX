@@ -35,6 +35,7 @@ import {
 import { defaultProjectsDir, scaffoldProject } from './state/scaffold.js';
 import { buildPlanReview } from './state/git.js';
 import { fullAutoContainmentStatus } from './containment.js';
+import { activateLicense, getEntitlement } from './licensing.js';
 import { previewTargetPath, slugifyProjectName } from './util.js';
 import {
   getSession,
@@ -207,6 +208,29 @@ export function createHttpApp(opts: {
   app.get('/api/system/containment', (c) =>
     c.json(fullAutoContainmentStatus()),
   );
+
+  // Current Pro entitlement for the UI badge/upsell. Trimmed to tier/reason +
+  // a minimal license summary — purchaser PII is never sent to the browser.
+  app.get('/api/system/entitlement', (c) => {
+    const e = getEntitlement();
+    return c.json({
+      tier: e.tier,
+      reason: e.reason,
+      edition: e.license?.edition,
+      updatesUntil: e.license?.updatesUntil,
+    });
+  });
+
+  // Activate a license key: verify offline, persist to ~/.solix/license (0600),
+  // and reload so the running server picks it up without a restart.
+  app.post('/api/license/activate', async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as { key?: string };
+    if (!body.key || !body.key.trim()) {
+      return c.json({ ok: false, error: 'key is required' }, 400);
+    }
+    const res = activateLicense(body.key);
+    return c.json(res, res.ok ? 200 : 422);
+  });
 
   app.get('/api/projects', (c) => c.json(listProjects(opts.db)));
 
@@ -786,7 +810,9 @@ export function createHttpApp(opts: {
     const res = opts.orchestrator.approvePlan(id);
     // Approved → run the dispatch loop in the background (request returns now).
     if (res.ok) void opts.orchestrator.advance(id);
-    return c.json(res, res.ok ? 200 : 409);
+    // 402 when the run needs Pro (upsell), else 409 for a plain state conflict.
+    const status = res.ok ? 200 : res.upsell ? 402 : 409;
+    return c.json(res, status);
   });
 
   // Kill-switch: abort a plan's in-flight worker/verifier and pause it.
