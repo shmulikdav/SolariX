@@ -186,9 +186,9 @@ CREATE TABLE IF NOT EXISTS plan_tasks (
 CREATE INDEX IF NOT EXISTS idx_plan_tasks_plan ON plan_tasks(plan_id);
 CREATE INDEX IF NOT EXISTS idx_plan_tasks_status ON plan_tasks(status);
 
--- v2 Maestro — plan back-links + tool_calls hot paths (budget rollups, reaper).
-CREATE INDEX IF NOT EXISTS idx_sessions_plan ON sessions(plan_id);
-CREATE INDEX IF NOT EXISTS idx_sessions_plan_task ON sessions(plan_task_id);
+-- v2 Maestro — tool_calls hot paths (reaper). (The sessions.plan_id /
+-- plan_task_id indexes are created in applySchema() AFTER ensureColumn adds
+-- those columns — they don't exist in the base sessions table.)
 CREATE INDEX IF NOT EXISTS idx_tool_calls_session ON tool_calls(session_id);
 CREATE INDEX IF NOT EXISTS idx_tool_calls_status ON tool_calls(status);
 `;
@@ -301,10 +301,9 @@ function relaxLegacyOriginCheck(db: DB): void {
   }
 }
 
-export function getDb(): DB {
-  if (_db) return _db;
-  ensureSolixHome();
-  const db = new Database(DB_PATH);
+/** Apply pragmas + schema + all idempotent migrations to a freshly-opened DB.
+ *  Shared by getDb() (real ~/.solix DB) and resetDbForTests() (isolated DB). */
+function applySchema(db: DB): void {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.exec(SCHEMA);
@@ -335,6 +334,38 @@ export function getDb(): DB {
   // v2 Maestro — durable per-task retry ceiling (idempotent for DBs that
   // created plan_tasks before this column existed).
   ensureColumn(db, 'plan_tasks', 'max_attempts', 'max_attempts INTEGER NOT NULL DEFAULT 3');
+  // Indexes on the plan back-link columns — must run AFTER ensureColumn has
+  // added the columns to the sessions table (they aren't in the base schema).
+  db.exec(
+    `CREATE INDEX IF NOT EXISTS idx_sessions_plan ON sessions(plan_id);
+     CREATE INDEX IF NOT EXISTS idx_sessions_plan_task ON sessions(plan_task_id);`,
+  );
+}
+
+export function getDb(): DB {
+  if (_db) return _db;
+  ensureSolixHome();
+  const db = new Database(DB_PATH);
+  applySchema(db);
+  _db = db;
+  return db;
+}
+
+/**
+ * Test-only: close any cached connection and open a fresh, fully-migrated DB
+ * (default in-memory) so each test runs in isolation. Not used in production.
+ */
+export function resetDbForTests(path = ':memory:'): DB {
+  if (_db) {
+    try {
+      _db.close();
+    } catch {
+      /* ignore */
+    }
+    _db = null;
+  }
+  const db = new Database(path);
+  applySchema(db);
   _db = db;
   return db;
 }
