@@ -5,6 +5,21 @@ All notable changes to Solix (`@shmulikdav/solix`) are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.8] — 2026-09-04
+
+**Cost at a glance, and honest advisor economics.**
+
+### Added
+- **Cost column + per-row Terminate in the List view.** The dense table now shows each
+  agent's estimated spend ($) as a sortable column, and a hover **Terminate** button per
+  row — so the compact "matrix" board surfaces cost alongside status/context/health and
+  gives an inline action. (Approvals stay in the Decision Queue, which already shows the
+  exact command/diff.)
+- **Advisor cost transparency in the Crew panel.** Made the economics explicit: enabling
+  an advisor is free (no API calls); a `free` chip marks enabled advisors, and pinned
+  advisors show their live spend (`pinned · $X.XX`). Clarifies that advisors only cost
+  tokens when you pin or invoke one.
+
 ## [1.11.7] — 2026-09-04
 
 **Launch hardening: `solix demo` can't get stuck, and the UI tells you when it's stale.**
