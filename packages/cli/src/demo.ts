@@ -199,6 +199,10 @@ async function bootSandbox(preferredPort: number): Promise<BootResult | null> {
       env: {
         ...process.env,
         SOLIX_DB_PATH: DEMO_DB_PATH,
+        // The demo is an isolated, seeded sandbox — it must not mirror the
+        // user's real Agent View sessions into it, and scanning a heavy
+        // ~/.claude/jobs at boot would stall the sandbox before it's ready.
+        SOLIX_DISABLE_AGENTVIEW: '1',
       },
       stdio: ['ignore', 'inherit', 'inherit'],
       detached: false,

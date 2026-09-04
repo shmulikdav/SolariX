@@ -133,7 +133,10 @@ function readJobState(jobId: string): AgentViewStateFile | null {
  * sessions get inserted; sessions missing from the roster but
  * previously seen are marked terminated.
  */
-function syncFromDisk({ db, broadcaster }: AgentViewBridgeOpts): void {
+async function syncFromDisk({
+  db,
+  broadcaster,
+}: AgentViewBridgeOpts): Promise<void> {
   const roster = readRoster();
   const jobIds = readJobIds();
   // Union of ids known to disk. Some setups write state.json before
@@ -142,7 +145,16 @@ function syncFromDisk({ db, broadcaster }: AgentViewBridgeOpts): void {
   for (const e of roster) if (e.id) liveIds.add(e.id);
   for (const id of jobIds) liveIds.add(id);
 
+  let processed = 0;
   for (const agentViewId of liveIds) {
+    // Yield to the event loop every 16 jobs so a large ~/.claude/jobs (a
+    // heavy Agent View user can accumulate thousands) never blocks the HTTP
+    // server from answering /api/health during the initial scan. Each job
+    // does synchronous fs + DB work; without this the whole scan runs in one
+    // uninterruptible burst.
+    if ((processed++ & 15) === 0) {
+      await new Promise<void>((r) => setImmediate(r));
+    }
     const state = readJobState(agentViewId);
     if (!state) continue;
     const cwd = state.cwd ?? '';
@@ -249,25 +261,23 @@ export function startAgentViewBridge(
   const claudeRoot = join(homedir(), '.claude');
   if (!existsSync(claudeRoot)) return () => {/* no claude install */};
 
-  const sync = (): void => {
+  const sync = async (): Promise<void> => {
     try {
-      syncFromDisk(opts);
+      await syncFromDisk(opts);
     } catch (err) {
       console.warn('[agentview] sync failed:', (err as Error).message);
     }
   };
-  const debounced = debounce(sync, 50);
+  const debounced = debounce(() => void sync(), 50);
 
-  // Initial scan — deferred off the boot critical path. syncFromDisk walks
-  // ~/.claude/jobs synchronously (readdir + statSync + readFile per job),
-  // which for a heavy Agent View user can block the event loop long enough
-  // that the freshly-bound HTTP port can't answer /api/health yet — the demo
-  // orchestrator then times out waiting for a server that was about to be
-  // fine. Running the first scan on the next tick lets the server start
-  // serving immediately; the scan (and its broadcasts) land a beat later. The
-  // fs watchers below are still registered synchronously so no on-disk change
-  // is missed in the gap.
-  setImmediate(sync);
+  // Initial scan — kicked off without blocking boot. syncFromDisk yields to
+  // the event loop as it walks ~/.claude/jobs (readdir + statSync + readFile
+  // + DB upsert per job), so even a large jobs dir never stalls the freshly
+  // bound HTTP port — the server answers /api/health immediately while the
+  // scan proceeds and broadcasts sessions in as it finds them. The fs
+  // watchers below are registered synchronously so no on-disk change is
+  // missed while the first scan runs.
+  void sync();
 
   const watchers: FSWatcher[] = [];
   // roster.json is the most important — watch its containing dir so

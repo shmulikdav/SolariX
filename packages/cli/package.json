@@ -1,6 +1,6 @@
 {
   "name": "@shmulikdav/solix",
-  "version": "1.11.4",
+  "version": "1.11.5",
   "description": "Solix — a solar-system command center for Claude Code agents",
   "license": "MIT",
   "type": "module",

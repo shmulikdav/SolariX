@@ -104,7 +104,16 @@ export async function createSolixServer(
   // + ~/.claude/jobs to mirror background sessions managed by the
   // claude-agents supervisor into Solix. No-op if Agent View isn't
   // installed locally.
-  const stopAgentViewBridge = startAgentViewBridge({ db, broadcaster });
+  //
+  // The demo sandbox (and any caller that sets SOLIX_DISABLE_AGENTVIEW) runs
+  // isolated from the user's real Agent View state: it has its own seeded DB
+  // and must not mirror external sessions into it. Skipping it also keeps a
+  // heavy ~/.claude/jobs from being scanned inside the throwaway sandbox.
+  const stopAgentViewBridge = process.env.SOLIX_DISABLE_AGENTVIEW
+    ? (): void => {
+        /* agent view bridge disabled for this process */
+      }
+    : startAgentViewBridge({ db, broadcaster });
 
   // Sprint M — heartbeat scheduler. Every ~30s, fire any enabled schedule
   // whose next_run_at has passed by launching it through the normal internal
