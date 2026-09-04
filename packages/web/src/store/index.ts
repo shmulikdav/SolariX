@@ -226,6 +226,10 @@ interface SolixState {
   ) => Promise<{ ok: boolean; planId?: string; errors?: string[] }>;
   approvePlan: (planId: string) => Promise<void>;
   abortPlan: (planId: string) => Promise<void>;
+  createProject: (
+    name: string,
+    opts?: { path?: string; template?: string },
+  ) => Promise<{ ok: boolean; project?: Project; error?: string }>;
   dismissToast: (id: string) => void;
   resolvePermission: (requestId: string, approved: boolean) => void;
   invokeAdvisor: (advisorId: string, prompt?: string) => void;
@@ -549,6 +553,12 @@ export const useSolixStore = create<SolixState>((set, get) => ({
         });
         break;
       }
+      case 'project_upsert': {
+        set((s) => ({
+          projects: { ...s.projects, [msg.project.id]: msg.project },
+        }));
+        break;
+      }
       case 'plan_upsert': {
         set((s) => ({ plans: { ...s.plans, [msg.plan.id]: msg.plan } }));
         break;
@@ -704,6 +714,30 @@ export const useSolixStore = create<SolixState>((set, get) => ({
       });
     } catch {
       /* offline; the plan_upsert broadcast will reconcile if it lands */
+    }
+  },
+
+  createProject: async (name, opts) => {
+    try {
+      const res = await fetch('/api/projects', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name, ...opts }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        project?: Project;
+        error?: string;
+      };
+      // The project_upsert broadcast also lands it in the store; setting it here
+      // avoids a flicker if the socket round-trip is slow.
+      if (data.ok && data.project) {
+        const project = data.project;
+        set((s) => ({ projects: { ...s.projects, [project.id]: project } }));
+      }
+      return { ok: Boolean(data.ok), project: data.project, error: data.error };
+    } catch (err) {
+      return { ok: false, error: (err as Error).message };
     }
   },
 

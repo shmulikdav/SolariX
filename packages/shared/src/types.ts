@@ -224,6 +224,13 @@ export interface Project {
   name: string;
   firstSeenAt: number;
   lastActiveAt: number;
+  /** True when the user created this project inside Solix (the build-studio
+   *  flow) vs. it being auto-observed from a session's cwd. Managed projects
+   *  are durable — Solix owns them and Maestro builds into them. */
+  managed?: boolean;
+  /** The scaffold template it was created from ('empty' | 'node' | 'web' |
+   *  'python'); informs how the preview surface runs it. Managed only. */
+  template?: string;
 }
 
 export interface ScheduledTask {

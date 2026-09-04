@@ -28,7 +28,12 @@ import type { HookEvent } from '@solix/shared';
 import type { DB } from './db.js';
 import type { EventRouter } from './router.js';
 import type { Orchestrator } from './orchestrator/index.js';
-import { listProjects } from './state/projects.js';
+import {
+  createManagedProject,
+  listProjects,
+} from './state/projects.js';
+import { defaultProjectsDir, scaffoldProject } from './state/scaffold.js';
+import { slugifyProjectName } from './util.js';
 import {
   getSession,
   listSessionsForProject,
@@ -196,6 +201,34 @@ export function createHttpApp(opts: {
   });
 
   app.get('/api/projects', (c) => c.json(listProjects(opts.db)));
+
+  // Build-studio: create a durable, user-owned project — scaffold a directory,
+  // git-init it, register it managed. Maestro then builds into `project.cwd`.
+  app.post('/api/projects', async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      name?: string;
+      path?: string;
+      template?: string;
+    };
+    const name = body.name?.trim();
+    if (!name) return c.json({ ok: false, error: 'name is required' }, 400);
+
+    const cwd = body.path?.trim()
+      ? resolve(body.path.trim())
+      : join(defaultProjectsDir(), slugifyProjectName(name));
+
+    const scaffold = scaffoldProject({ cwd, name, template: body.template });
+    if (!scaffold.ok) {
+      return c.json({ ok: false, error: scaffold.error }, 422);
+    }
+    const project = createManagedProject(opts.db, {
+      cwd,
+      name,
+      template: body.template,
+    });
+    opts.router.broadcastProjectUpsert(project);
+    return c.json({ ok: true, project });
+  });
 
   app.get('/api/projects/:id/sessions', (c) => {
     const id = c.req.param('id');

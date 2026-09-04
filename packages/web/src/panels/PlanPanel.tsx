@@ -17,16 +17,26 @@ interface PlanPanelProps {
  * review it and approve (dispatch is Phase 2). Right-docked, same archetype as
  * WorkspacePanel / GalaxyPanel.
  */
+const TEMPLATE_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'empty', label: 'Empty' },
+  { value: 'node', label: 'Node' },
+  { value: 'web', label: 'Web (HTML/CSS)' },
+  { value: 'python', label: 'Python' },
+];
+
 export function PlanPanel({ open, onClose }: PlanPanelProps): JSX.Element | null {
   const plans = useSolixStore(selectPlansArray);
   const projects = useSolixStore((s) => s.projects);
   const createPlanFromGoal = useSolixStore((s) => s.createPlanFromGoal);
+  const createProject = useSolixStore((s) => s.createProject);
 
-  const defaultCwd = useMemo(() => {
-    const p = Object.values(projects).sort(
+  const { managed, observed, defaultCwd } = useMemo(() => {
+    const all = Object.values(projects).sort(
       (a, b) => b.lastActiveAt - a.lastActiveAt,
-    )[0];
-    return p?.cwd ?? '';
+    );
+    const managed = all.filter((p) => p.managed);
+    const observed = all.filter((p) => !p.managed);
+    return { managed, observed, defaultCwd: (managed[0] ?? all[0])?.cwd ?? '' };
   }, [projects]);
 
   const [goal, setGoal] = useState('');
@@ -34,9 +44,32 @@ export function PlanPanel({ open, onClose }: PlanPanelProps): JSX.Element | null
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
 
+  // Inline "New project" creator.
+  const [showNew, setShowNew] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newTemplate, setNewTemplate] = useState('empty');
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
   if (!open) return null;
 
   const effectiveCwd = cwd || defaultCwd;
+
+  const onCreateProject = async (): Promise<void> => {
+    const name = newName.trim();
+    if (!name || creating) return;
+    setCreating(true);
+    setCreateError(null);
+    const res = await createProject(name, { template: newTemplate });
+    setCreating(false);
+    if (res.ok && res.project) {
+      setCwd(res.project.cwd); // build into the project we just made
+      setShowNew(false);
+      setNewName('');
+    } else {
+      setCreateError(res.error ?? 'Could not create the project.');
+    }
+  };
 
   const onPlan = async (): Promise<void> => {
     const g = goal.trim();
@@ -58,9 +91,9 @@ export function PlanPanel({ open, onClose }: PlanPanelProps): JSX.Element | null
           </div>
           <div className="text-lg font-semibold mt-0.5">Plan a build</div>
           <div className="text-xs text-slate-400 mt-1 leading-snug">
-            Describe a goal. Maestro breaks it into a task plan you approve —
-            then it drives the fleet. <span className="text-slate-500">(Preview:
-            planning + approval; dispatch is coming.)</span>
+            Create or pick a project, describe a goal, and Maestro breaks it into
+            a task plan you approve — then it dispatches the fleet, verifies each
+            step, and drives the build to done.
           </div>
         </div>
         <button
@@ -73,6 +106,92 @@ export function PlanPanel({ open, onClose }: PlanPanelProps): JSX.Element | null
       </div>
 
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+        {/* Project chooser + inline creator */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="text-[10px] uppercase tracking-wide text-slate-400">
+              Project
+            </div>
+            <button
+              onClick={() => setShowNew((v) => !v)}
+              className="text-[11px] text-amber-300 hover:text-amber-200"
+            >
+              {showNew ? 'Cancel' : '＋ New project'}
+            </button>
+          </div>
+
+          {showNew && (
+            <div className="rounded border border-solix-border bg-black/20 p-2 space-y-2">
+              <input
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="Project name"
+                className="w-full text-sm bg-black/40 border border-solix-border rounded p-2 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-solix-accent"
+              />
+              <div className="flex gap-2">
+                <select
+                  value={newTemplate}
+                  onChange={(e) => setNewTemplate(e.target.value)}
+                  className="flex-1 text-xs bg-black/40 border border-solix-border rounded p-2 text-slate-200 focus:outline-none focus:border-solix-accent"
+                >
+                  {TEMPLATE_OPTIONS.map((t) => (
+                    <option key={t.value} value={t.value}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => void onCreateProject()}
+                  disabled={creating || !newName.trim()}
+                  className="px-3 rounded bg-amber-500/20 border border-amber-400/60 text-amber-100 text-xs hover:bg-amber-500/30 disabled:opacity-40"
+                >
+                  {creating ? 'Creating…' : 'Create'}
+                </button>
+              </div>
+              {createError && (
+                <div className="text-[11px] text-solix-danger">{createError}</div>
+              )}
+            </div>
+          )}
+
+          {(managed.length > 0 || observed.length > 0) && (
+            <select
+              value=""
+              onChange={(e) => {
+                if (e.target.value) setCwd(e.target.value);
+              }}
+              className="w-full text-xs bg-black/40 border border-solix-border rounded p-2 text-slate-200 focus:outline-none focus:border-solix-accent"
+            >
+              <option value="">Choose an existing project…</option>
+              {managed.length > 0 && (
+                <optgroup label="Your projects">
+                  {managed.map((p) => (
+                    <option key={p.id} value={p.cwd}>
+                      {p.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {observed.length > 0 && (
+                <optgroup label="Observed">
+                  {observed.map((p) => (
+                    <option key={p.id} value={p.cwd}>
+                      {p.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+          )}
+
+          <input
+            value={effectiveCwd}
+            onChange={(e) => setCwd(e.target.value)}
+            placeholder="/path/to/project"
+            className="w-full text-xs font-mono bg-black/40 border border-solix-border rounded p-2 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-solix-accent"
+          />
+        </div>
+
         {/* Goal composer */}
         <div className="space-y-2">
           <div className="text-[10px] uppercase tracking-wide text-slate-400">
@@ -84,12 +203,6 @@ export function PlanPanel({ open, onClose }: PlanPanelProps): JSX.Element | null
             placeholder="e.g. Add a login page with email + password and tests"
             rows={3}
             className="w-full text-sm bg-black/40 border border-solix-border rounded p-2 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-solix-accent resize-none"
-          />
-          <input
-            value={effectiveCwd}
-            onChange={(e) => setCwd(e.target.value)}
-            placeholder="/path/to/project"
-            className="w-full text-xs font-mono bg-black/40 border border-solix-border rounded p-2 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-solix-accent"
           />
           {errors.length > 0 && (
             <div className="text-[11px] text-solix-danger border border-solix-danger/40 bg-solix-danger/10 rounded px-2 py-1 space-y-0.5">

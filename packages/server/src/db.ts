@@ -337,6 +337,10 @@ function applySchema(db: DB): void {
   // Last rejection reason, fed back into the next attempt's worker prompt so a
   // retry knows why the previous try was rejected (Phase 3).
   ensureColumn(db, 'plan_tasks', 'last_error', 'last_error TEXT');
+  // Build-studio (Phase 5): user-created projects are durable + owned by Solix,
+  // distinct from auto-observed ones; `template` records how to scaffold/preview.
+  ensureColumn(db, 'projects', 'managed', 'managed INTEGER NOT NULL DEFAULT 0');
+  ensureColumn(db, 'projects', 'template', 'template TEXT');
   // Indexes on the plan back-link columns — must run AFTER ensureColumn has
   // added the columns to the sessions table (they aren't in the base schema).
   db.exec(

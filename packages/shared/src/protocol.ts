@@ -57,6 +57,7 @@ export type ServerMessage =
   | { type: 'schedule_remove'; scheduleId: string }
   | { type: 'goal_upsert'; goal: Goal }
   | { type: 'goal_remove'; goalId: string }
+  | { type: 'project_upsert'; project: Project }
   | { type: 'plan_upsert'; plan: Plan }
   | { type: 'plan_remove'; planId: string }
   | { type: 'plan_task_upsert'; task: PlanTask }
