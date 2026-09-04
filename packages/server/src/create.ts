@@ -92,7 +92,7 @@ export async function createSolixServer(
   const transcripts = new TranscriptWatcherManager(db, broadcaster);
   const router = new EventRouter(db, broadcaster, launcher, transcripts);
 
-  // v2 Maestro orchestrator (Phase 1: goal → plan → approve; no dispatch yet).
+  // v2 Maestro orchestrator: goal → plan → approve → dispatch → verify → report.
   const orchestrator = new Orchestrator({
     db,
     runner: new LauncherSessionRunner(launcher),
@@ -145,6 +145,11 @@ export async function createSolixServer(
     router,
     broadcaster,
   });
+
+  // Boot-time recovery: resume any plan left mid-run by a previous process,
+  // re-dispatching tasks whose worker sessions died with it. Fire-and-forget so
+  // startup isn't blocked; broadcasts reconcile connected clients.
+  void orchestrator.reconcile();
 
   // Sprint L: bridge to Anthropic's Agent View. Reads ~/.claude/daemon
   // + ~/.claude/jobs to mirror background sessions managed by the

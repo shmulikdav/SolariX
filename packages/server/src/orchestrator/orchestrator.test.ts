@@ -2,7 +2,13 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import type { ServerMessage } from '@solix/shared';
 import { resetDbForTests, type DB } from '../db.js';
 import { ensureProject } from '../state/projects.js';
-import { setSessionCost, upsertSession } from '../state/sessions.js';
+import { updatePlanTask } from '../state/plans.js';
+import {
+  getSession,
+  setSessionCost,
+  setSessionStatus,
+  upsertSession,
+} from '../state/sessions.js';
 import { Orchestrator } from './index.js';
 import type { RunOnceOpts, RunOnceResult, SessionRunner } from './runner.js';
 
@@ -300,5 +306,122 @@ describe('Orchestrator abort (kill-switch)', () => {
       getMaestroPrompt: () => 'MAESTRO PROMPT',
     });
     expect(orch.abortPlan('nope').ok).toBe(false);
+  });
+});
+
+const SINGLE_TASK_PLAN = JSON.stringify({
+  name: 'One',
+  tasks: [
+    {
+      id: 't1',
+      title: 'Only',
+      prompt: 'do the thing',
+      acceptanceCriteria: 'the thing is done',
+      dependsOn: [],
+    },
+  ],
+});
+
+// Captures every worker prompt and always fails verification, so we can assert
+// the retry carries the prior rejection reason.
+class FeedbackCaptureRunner implements SessionRunner {
+  workerPrompts: string[] = [];
+  constructor(private readonly verifierReason: string) {}
+  runOnce(o: RunOnceOpts): Promise<RunOnceResult> {
+    if (o.role === 'planner')
+      return Promise.resolve({ ok: true, output: SINGLE_TASK_PLAN });
+    if (o.role === 'verifier')
+      return Promise.resolve({
+        ok: true,
+        output: JSON.stringify({ pass: false, reason: this.verifierReason }),
+      });
+    this.workerPrompts.push(o.prompt);
+    return Promise.resolve({ ok: true, output: 'worker done' });
+  }
+}
+
+describe('Orchestrator retry feedback', () => {
+  let db: DB;
+  beforeEach(() => {
+    db = resetDbForTests();
+  });
+
+  it('feeds the prior rejection reason into the retry prompt', async () => {
+    const runner = new FeedbackCaptureRunner('the submit button is missing');
+    const orch = new Orchestrator({
+      db,
+      runner,
+      broadcast: () => {},
+      getKnownAdvisorRoles: () => ['forge', 'argus', 'mira'],
+      knownModels: ['opus', 'sonnet', 'haiku', 'default'],
+      getMaestroPrompt: () => 'MAESTRO PROMPT',
+    });
+    const { planId } = await orch.createPlanFromGoal({ goal: 'g', cwd: '/tmp/p' });
+    orch.approvePlan(planId!);
+    await orch.advance(planId!);
+
+    // maxAttempts=3 → three worker dispatches; attempts 2+ carry the feedback.
+    expect(runner.workerPrompts).toHaveLength(3);
+    expect(runner.workerPrompts[0]).not.toContain('PREVIOUS ATTEMPT');
+    expect(runner.workerPrompts[1]).toContain('the submit button is missing');
+    expect(runner.workerPrompts[2]).toContain('the submit button is missing');
+
+    const b = orch.getPlanWithTasks(planId!)!;
+    expect(b.tasks[0]!.status).toBe('escalated');
+    expect(b.tasks[0]!.lastError).toContain('the submit button is missing');
+  });
+});
+
+describe('Orchestrator.reconcile', () => {
+  let db: DB;
+  beforeEach(() => {
+    db = resetDbForTests();
+  });
+
+  it('resumes a plan orphaned mid-dispatch and terminates the dead planet', async () => {
+    const orch = makeDispatchOrchestrator(db, true);
+    const { planId } = await orch.createPlanFromGoal({ goal: 'g', cwd: '/tmp/p' });
+    orch.approvePlan(planId!);
+
+    // Simulate a crash: the first task is stuck `dispatched` with a live worker
+    // row, exactly as a killed process would leave the DB.
+    const t1 = orch.getPlanWithTasks(planId!)!.tasks[0]!;
+    const project = ensureProject(db, '/tmp/p');
+    upsertSession(db, {
+      id: 'orphan-w',
+      pid: 0,
+      projectId: project.id,
+      cwd: '/tmp/p',
+      origin: 'internal',
+      model: 'default',
+      kind: 'user',
+      planId: planId!,
+      planTaskId: t1.id,
+      sessionRole: 'worker',
+    });
+    setSessionStatus(db, 'orphan-w', 'active');
+    updatePlanTask(db, t1.id, {
+      status: 'dispatched',
+      attempts: 1,
+      sessionId: 'orphan-w',
+    });
+
+    await orch.reconcile();
+
+    const b = orch.getPlanWithTasks(planId!)!;
+    expect(b.plan.status).toBe('completed');
+    expect(b.tasks.every((t) => t.status === 'completed')).toBe(true);
+    // The orphaned worker planet was cleaned up.
+    expect(getSession(db, 'orphan-w')!.status).toBe('terminated');
+  });
+
+  it('does nothing to a plan that is not running', async () => {
+    const orch = makeDispatchOrchestrator(db, true);
+    const { planId } = await orch.createPlanFromGoal({ goal: 'g', cwd: '/tmp/p' });
+    // Left at awaiting_approval — reconcile must not touch it.
+    await orch.reconcile();
+    const b = orch.getPlanWithTasks(planId!)!;
+    expect(b.plan.status).toBe('awaiting_approval');
+    expect(b.tasks.every((t) => t.status === 'pending')).toBe(true);
   });
 });

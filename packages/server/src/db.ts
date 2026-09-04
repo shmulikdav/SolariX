@@ -334,6 +334,9 @@ function applySchema(db: DB): void {
   // v2 Maestro — durable per-task retry ceiling (idempotent for DBs that
   // created plan_tasks before this column existed).
   ensureColumn(db, 'plan_tasks', 'max_attempts', 'max_attempts INTEGER NOT NULL DEFAULT 3');
+  // Last rejection reason, fed back into the next attempt's worker prompt so a
+  // retry knows why the previous try was rejected (Phase 3).
+  ensureColumn(db, 'plan_tasks', 'last_error', 'last_error TEXT');
   // Indexes on the plan back-link columns — must run AFTER ensureColumn has
   // added the columns to the sessions table (they aren't in the base schema).
   db.exec(

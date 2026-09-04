@@ -160,6 +160,7 @@ interface PlanTaskRow {
   verifier_session_id: string | null;
   attempts: number;
   max_attempts: number;
+  last_error: string | null;
   order_index: number;
   created_at: number;
   updated_at: number;
@@ -189,6 +190,7 @@ function rowToPlanTask(row: PlanTaskRow): PlanTask {
     verifierSessionId: row.verifier_session_id ?? undefined,
     attempts: row.attempts,
     maxAttempts: row.max_attempts,
+    lastError: row.last_error ?? undefined,
     orderIndex: row.order_index,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -285,6 +287,7 @@ export function updatePlanTask(
       | 'verifierSessionId'
       | 'attempts'
       | 'maxAttempts'
+      | 'lastError'
       | 'orderIndex'
     >
   >,
@@ -313,6 +316,7 @@ export function updatePlanTask(
     put('verifier_session_id', patch.verifierSessionId ?? null);
   if (patch.attempts !== undefined) put('attempts', patch.attempts);
   if (patch.maxAttempts !== undefined) put('max_attempts', patch.maxAttempts);
+  if (patch.lastError !== undefined) put('last_error', patch.lastError ?? null);
   if (patch.orderIndex !== undefined) put('order_index', patch.orderIndex);
   if (sets.length === 0) return getPlanTask(db, id);
   put('updated_at', now());

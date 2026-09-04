@@ -216,27 +216,46 @@ const TASK_STATUS_COLOR: Record<PlanTaskStatus, string> = {
 };
 
 function TaskRow({ task }: { task: PlanTask }): JSX.Element {
+  // Surface the rejection reason once a task needs a human (escalated) or is
+  // mid-retry (failed) so the operator sees *why* without opening a session.
+  const showError =
+    task.lastError && (task.status === 'escalated' || task.status === 'failed');
   return (
-    <li className="flex items-center gap-2 text-xs">
-      <span
-        className={`inline-block w-2 h-2 rounded-full shrink-0 ${
-          TASK_STATUS_COLOR[task.status] ?? 'bg-slate-600'
-        }`}
-        title={task.status}
-      />
-      <span className="text-slate-200 truncate flex-1">{task.title}</span>
-      {task.assignedAdvisorRole && (
-        <span className="text-[9px] uppercase tracking-wide text-slate-500 shrink-0">
-          {task.assignedAdvisorRole}
-        </span>
-      )}
-      {task.dependsOn.length > 0 && (
+    <li className="text-xs">
+      <div className="flex items-center gap-2">
         <span
-          className="text-[9px] text-slate-600 shrink-0"
-          title={`depends on ${task.dependsOn.join(', ')}`}
-        >
-          ↳{task.dependsOn.length}
-        </span>
+          className={`inline-block w-2 h-2 rounded-full shrink-0 ${
+            TASK_STATUS_COLOR[task.status] ?? 'bg-slate-600'
+          }`}
+          title={task.status}
+        />
+        <span className="text-slate-200 truncate flex-1">{task.title}</span>
+        {task.attempts > 1 && (
+          <span
+            className="text-[9px] text-slate-500 shrink-0"
+            title={`${task.attempts} of ${task.maxAttempts} attempts`}
+          >
+            ×{task.attempts}
+          </span>
+        )}
+        {task.assignedAdvisorRole && (
+          <span className="text-[9px] uppercase tracking-wide text-slate-500 shrink-0">
+            {task.assignedAdvisorRole}
+          </span>
+        )}
+        {task.dependsOn.length > 0 && (
+          <span
+            className="text-[9px] text-slate-600 shrink-0"
+            title={`depends on ${task.dependsOn.join(', ')}`}
+          >
+            ↳{task.dependsOn.length}
+          </span>
+        )}
+      </div>
+      {showError && (
+        <div className="mt-0.5 ml-4 text-[10px] text-solix-danger/80 line-clamp-2">
+          {task.lastError}
+        </div>
       )}
     </li>
   );

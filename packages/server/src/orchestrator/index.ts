@@ -7,6 +7,7 @@ import {
   getPlan,
   getPlanSpendUsd,
   getPlanTask,
+  listPlans,
   listPlanTasks,
   updatePlan,
   updatePlanTask,
@@ -276,6 +277,34 @@ export class Orchestrator {
     return { ok: true };
   }
 
+  /**
+   * Boot-time recovery (Spire). After a restart the in-memory dispatch state
+   * (inFlight, child processes, in-flight runOnce promises) is gone, so any task
+   * left `dispatched`/`verifying` in a `running` plan is orphaned — its worker
+   * will never report back. Terminate its dead planet rows, reset it to
+   * `pending` (giving back the attempt it never finished), then resume every
+   * running plan so it picks up where it left off.
+   */
+  async reconcile(): Promise<void> {
+    const { db } = this.deps;
+    const running = listPlans(db).filter((p) => p.status === 'running');
+    for (const plan of running) {
+      for (const task of listPlanTasks(db, plan.id)) {
+        if (task.status !== 'dispatched' && task.status !== 'verifying') continue;
+        if (task.sessionId) this.terminateRow(task.sessionId);
+        if (task.verifierSessionId) this.terminateRow(task.verifierSessionId);
+        const reset = updatePlanTask(db, task.id, {
+          status: 'pending',
+          attempts: Math.max(0, task.attempts - 1), // the attempt never finished
+        });
+        if (reset) this.emitTask(reset);
+      }
+    }
+    for (const plan of running) {
+      await this.advance(plan.id);
+    }
+  }
+
   private async dispatchTask(
     plan: Plan,
     task: PlanTask,
@@ -294,7 +323,13 @@ export class Orchestrator {
     t = updatePlanTask(db, task.id, { sessionId: workerId });
     if (t) this.emitTask(t);
 
-    const workerPrompt = `${task.prompt}\n\n=== ACCEPTANCE CRITERIA (you must satisfy these) ===\n${task.acceptanceCriteria}`;
+    // On a retry, feed back WHY the last attempt was rejected so this attempt
+    // corrects the specific failure (a fresh worker, not `--continue`).
+    const feedback =
+      task.attempts > 0 && task.lastError
+        ? `\n\n=== PREVIOUS ATTEMPT WAS REJECTED — fix this ===\n${task.lastError}`
+        : '';
+    const workerPrompt = `${task.prompt}\n\n=== ACCEPTANCE CRITERIA (you must satisfy these) ===\n${task.acceptanceCriteria}${feedback}`;
     const run = await runner.runOnce({
       cwd,
       role: 'worker',
@@ -347,7 +382,10 @@ export class Orchestrator {
 
     const verdict = parseVerifierOutput(vRun.ok ? vRun.output : '');
     if (verdict.pass && !verdict.ambiguous) {
-      const done = updatePlanTask(db, task.id, { status: 'completed' });
+      const done = updatePlanTask(db, task.id, {
+        status: 'completed',
+        lastError: undefined, // clear stale feedback
+      });
       if (done) this.emitTask(done);
     } else {
       this.handleTaskFailure(
@@ -362,11 +400,14 @@ export class Orchestrator {
    * attempts already bumped) while attempts remain, else escalate (durable
    * "needs a human"). `_reason` is accepted for future audit logging.
    */
-  private handleTaskFailure(taskId: string, _reason: string): void {
+  private handleTaskFailure(taskId: string, reason: string): void {
     const t = getPlanTask(this.deps.db, taskId);
     if (!t) return;
     const next = decideRetryOrEscalate(t) === 'retry' ? 'pending' : 'escalated';
-    const updated = updatePlanTask(this.deps.db, taskId, { status: next });
+    const updated = updatePlanTask(this.deps.db, taskId, {
+      status: next,
+      lastError: reason, // a retry embeds this; an escalation surfaces it
+    });
     if (updated) this.emitTask(updated);
   }
 
