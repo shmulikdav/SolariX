@@ -733,11 +733,18 @@ export function createHttpApp(opts: {
       goalId: body.goalId,
       budgetUsd: body.budgetUsd,
     });
+    // Full-auto skips the approval gate → start dispatching in the background.
+    if (res.ok && body.autoMode && res.planId) {
+      void opts.orchestrator.advance(res.planId);
+    }
     return c.json(res, res.ok ? 200 : 422);
   });
 
   app.post('/api/plans/:id/approve', (c) => {
-    const res = opts.orchestrator.approvePlan(c.req.param('id'));
+    const id = c.req.param('id');
+    const res = opts.orchestrator.approvePlan(id);
+    // Approved → run the dispatch loop in the background (request returns now).
+    if (res.ok) void opts.orchestrator.advance(id);
     return c.json(res, res.ok ? 200 : 409);
   });
 

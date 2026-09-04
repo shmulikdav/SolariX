@@ -172,3 +172,50 @@ export function parsePlannerOutput(
   if (errors.length > 0) return { ok: false, errors, warnings };
   return { ok: true, errors, warnings, plan: { name, tasks } };
 }
+
+export interface Verdict {
+  pass: boolean;
+  reason: string;
+  /** True when the verifier output couldn't be parsed into a clear verdict.
+   *  The orchestrator treats ambiguous as NOT passing (escalate, never
+   *  auto-approve on unparseable output — Sentinel). */
+  ambiguous: boolean;
+}
+
+/**
+ * Parse a verifier session's output into a strict `{ pass, reason }` verdict.
+ * The verifier is the acceptance gate, and its output is untrusted (an LLM,
+ * influenced by attacker-crafted worker output), so anything that isn't a
+ * clean boolean `pass` is treated as ambiguous → the caller escalates. Never
+ * default to pass.
+ */
+export function parseVerifierOutput(raw: string): Verdict {
+  const jsonStr = extractJson(raw);
+  if (jsonStr == null) {
+    return { pass: false, reason: 'verifier produced no JSON verdict', ambiguous: true };
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch {
+    return { pass: false, reason: 'verifier verdict did not parse', ambiguous: true };
+  }
+  if (typeof parsed !== 'object' || parsed === null) {
+    return { pass: false, reason: 'verifier verdict was not an object', ambiguous: true };
+  }
+  const obj = parsed as Record<string, unknown>;
+  if (typeof obj.pass !== 'boolean') {
+    return {
+      pass: false,
+      reason: 'verifier verdict had no boolean "pass"',
+      ambiguous: true,
+    };
+  }
+  const reason =
+    typeof obj.reason === 'string' && obj.reason.trim()
+      ? obj.reason.trim()
+      : obj.pass
+        ? 'accepted'
+        : 'rejected';
+  return { pass: obj.pass, reason, ambiguous: false };
+}

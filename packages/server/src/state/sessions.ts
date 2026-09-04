@@ -3,6 +3,7 @@ import type {
   Session,
   SessionKind,
   SessionOrigin,
+  SessionRole,
   SessionStatus,
 } from '@solix/shared';
 import type { DB } from '../db.js';
@@ -33,6 +34,9 @@ interface SessionRow {
   current_goal_id: string | null;
   current_mission_id: string | null;
   last_completed_mission_id: string | null;
+  plan_id: string | null;
+  plan_task_id: string | null;
+  session_role: string | null;
   created_at: number;
   updated_at: number;
   terminated_at: number | null;
@@ -72,6 +76,9 @@ function rowToSession(row: SessionRow): Session {
     costUsd: row.cost_usd ?? 0,
     budgetUsd: row.budget_usd ?? undefined,
     currentGoalId: row.current_goal_id ?? undefined,
+    planId: row.plan_id ?? undefined,
+    planTaskId: row.plan_task_id ?? undefined,
+    sessionRole: (row.session_role as SessionRole | null) ?? undefined,
   };
 }
 
@@ -103,6 +110,10 @@ export interface CreateSessionInput {
   agentViewSummary?: string;
   prUrl?: string;
   prCheckStatus?: 'pending' | 'success' | 'failure' | 'neutral';
+  /** v2 Maestro — set when the orchestrator pre-creates a worker/verifier row. */
+  planId?: string;
+  planTaskId?: string;
+  sessionRole?: SessionRole;
 }
 
 export function upsertSession(db: DB, input: CreateSessionInput): Session {
@@ -137,9 +148,10 @@ export function upsertSession(db: DB, input: CreateSessionInput): Session {
        context_usage_pct, orbit_slot, cwd, name, kind, advisor_role,
        worktree_path, wrapper_socket_path,
        agent_view_id, agent_view_summary, pr_url, pr_check_status,
+       plan_id, plan_task_id, session_role,
        created_at, updated_at
      )
-     VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     input.id,
     input.pid,
@@ -158,6 +170,9 @@ export function upsertSession(db: DB, input: CreateSessionInput): Session {
     input.agentViewSummary ?? null,
     input.prUrl ?? null,
     input.prCheckStatus ?? null,
+    input.planId ?? null,
+    input.planTaskId ?? null,
+    input.sessionRole ?? null,
     ts,
     ts,
   );
@@ -184,6 +199,9 @@ export function upsertSession(db: DB, input: CreateSessionInput): Session {
     prUrl: input.prUrl,
     prCheckStatus: input.prCheckStatus,
     costUsd: 0,
+    planId: input.planId,
+    planTaskId: input.planTaskId,
+    sessionRole: input.sessionRole,
   };
 }
 

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import type { ServerMessage } from '@solix/shared';
 import { resetDbForTests, type DB } from '../db.js';
 import { Orchestrator } from './index.js';
-import type { RunOnceResult, SessionRunner } from './runner.js';
+import type { RunOnceOpts, RunOnceResult, SessionRunner } from './runner.js';
 
 class FakeRunner implements SessionRunner {
   constructor(private result: RunOnceResult) {}
@@ -62,7 +62,8 @@ describe('Orchestrator.createPlanFromGoal', () => {
     expect(bundle.plan.name).toBe('Ship login');
     expect(bundle.tasks).toHaveLength(2);
     expect(bundle.tasks[0]!.assignedAdvisorRole).toBe('forge');
-    expect(bundle.tasks[1]!.dependsOn).toEqual(['t1']);
+    // dependsOn is remapped from the planner's ids ("t1") to real db ids.
+    expect(bundle.tasks[1]!.dependsOn).toEqual([bundle.tasks[0]!.id]);
     // Broadcast a plan_upsert and one task upsert per task.
     expect(msgs.filter((m) => m.type === 'plan_upsert').length).toBeGreaterThanOrEqual(1);
     expect(msgs.filter((m) => m.type === 'plan_task_upsert')).toHaveLength(2);
@@ -124,5 +125,84 @@ describe('Orchestrator.approvePlan', () => {
   it('errors on an unknown plan id', () => {
     const { orch } = makeOrchestrator(db, { ok: true, output: PLAN_JSON });
     expect(orch.approvePlan('nope').ok).toBe(false);
+  });
+});
+
+// Role-aware fake: planner returns the plan, workers "do the work", the
+// verifier passes or fails per config — so the whole dispatch loop runs in CI
+// with no real claude.
+class RoleFakeRunner implements SessionRunner {
+  constructor(
+    private cfg: { plan: string; verifierPass: boolean },
+  ) {}
+  runOnce(o: RunOnceOpts): Promise<RunOnceResult> {
+    if (o.role === 'planner') {
+      return Promise.resolve({ ok: true, output: this.cfg.plan });
+    }
+    if (o.role === 'verifier') {
+      return Promise.resolve({
+        ok: true,
+        output: JSON.stringify({ pass: this.cfg.verifierPass, reason: 'r' }),
+      });
+    }
+    return Promise.resolve({ ok: true, output: 'worker done' });
+  }
+}
+
+function makeDispatchOrchestrator(db: DB, verifierPass: boolean) {
+  return new Orchestrator({
+    db,
+    runner: new RoleFakeRunner({ plan: PLAN_JSON, verifierPass }),
+    broadcast: () => {},
+    getKnownAdvisorRoles: () => ['forge', 'argus', 'mira'],
+    knownModels: ['opus', 'sonnet', 'haiku', 'default'],
+    getMaestroPrompt: () => 'MAESTRO PROMPT',
+  });
+}
+
+describe('Orchestrator dispatch (advance)', () => {
+  let db: DB;
+  beforeEach(() => {
+    db = resetDbForTests();
+  });
+
+  it('runs a plan to completion when every task verifies', async () => {
+    const orch = makeDispatchOrchestrator(db, true);
+    const { planId } = await orch.createPlanFromGoal({ goal: 'g', cwd: '/tmp/p' });
+    orch.approvePlan(planId!);
+    await orch.advance(planId!); // awaitable → runs to completion
+
+    const b = orch.getPlanWithTasks(planId!)!;
+    expect(b.plan.status).toBe('completed');
+    expect(b.tasks.map((t) => t.status)).toEqual(['completed', 'completed']);
+    // Each task got a worker + a verifier session row (a planet).
+    for (const t of b.tasks) {
+      expect(t.sessionId).toBeTruthy();
+      expect(t.verifierSessionId).toBeTruthy();
+    }
+  });
+
+  it('retries a failing task up to maxAttempts, then escalates and fails the plan', async () => {
+    const orch = makeDispatchOrchestrator(db, false); // verifier always fails
+    const { planId } = await orch.createPlanFromGoal({ goal: 'g', cwd: '/tmp/p' });
+    orch.approvePlan(planId!);
+    await orch.advance(planId!);
+
+    const b = orch.getPlanWithTasks(planId!)!;
+    const t1 = b.tasks.find((t) => t.title === 'Build form')!;
+    const t2 = b.tasks.find((t) => t.title === 'Review')!;
+    expect(t1.status).toBe('escalated');
+    expect(t1.attempts).toBe(t1.maxAttempts); // exhausted its retries
+    expect(t2.status).toBe('blocked'); // dependency escalated
+    expect(b.plan.status).toBe('failed');
+  });
+
+  it('does nothing for a plan still awaiting approval', async () => {
+    const orch = makeDispatchOrchestrator(db, true);
+    const { planId } = await orch.createPlanFromGoal({ goal: 'g', cwd: '/tmp/p' });
+    await orch.advance(planId!); // not approved → no dispatch
+    const b = orch.getPlanWithTasks(planId!)!;
+    expect(b.plan.status).toBe('awaiting_approval');
+    expect(b.tasks.every((t) => t.status === 'pending')).toBe(true);
   });
 });
