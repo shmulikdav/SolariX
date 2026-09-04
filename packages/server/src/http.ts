@@ -34,6 +34,7 @@ import {
 } from './state/projects.js';
 import { defaultProjectsDir, scaffoldProject } from './state/scaffold.js';
 import { buildPlanReview } from './state/git.js';
+import { fullAutoContainmentStatus } from './containment.js';
 import { previewTargetPath, slugifyProjectName } from './util.js';
 import {
   getSession,
@@ -200,6 +201,12 @@ export function createHttpApp(opts: {
         : 'deny';
     return c.json({ decision });
   });
+
+  // Whether full-auto (no approval gate) is safe to offer right now — the UI
+  // uses this to enable/disable the toggle and explain what's missing.
+  app.get('/api/system/containment', (c) =>
+    c.json(fullAutoContainmentStatus()),
+  );
 
   app.get('/api/projects', (c) => c.json(listProjects(opts.db)));
 

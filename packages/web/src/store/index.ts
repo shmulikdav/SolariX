@@ -223,7 +223,12 @@ interface SolixState {
       goalId?: string;
       budgetUsd?: number;
     },
-  ) => Promise<{ ok: boolean; planId?: string; errors?: string[] }>;
+  ) => Promise<{
+    ok: boolean;
+    planId?: string;
+    errors?: string[];
+    warnings?: string[];
+  }>;
   approvePlan: (planId: string) => Promise<void>;
   abortPlan: (planId: string) => Promise<void>;
   createProject: (
@@ -686,11 +691,13 @@ export const useSolixStore = create<SolixState>((set, get) => ({
         ok?: boolean;
         planId?: string;
         errors?: string[];
+        warnings?: string[];
       };
       return {
         ok: Boolean(data.ok),
         planId: data.planId,
         errors: data.errors,
+        warnings: data.warnings,
       };
     } catch (err) {
       return { ok: false, errors: [(err as Error).message] };

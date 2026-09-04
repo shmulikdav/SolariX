@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type {
   Plan,
   PlanReview,
@@ -48,6 +48,30 @@ export function PlanPanel({ open, onClose }: PlanPanelProps): JSX.Element | null
   const [cwd, setCwd] = useState('');
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
+  const [warnings, setWarnings] = useState<string[]>([]);
+
+  // Full-auto (no approval gate) — only offered when containment is in place.
+  const [autoMode, setAutoMode] = useState(false);
+  const [containment, setContainment] = useState<{
+    ok: boolean;
+    reasons: string[];
+  } | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    let live = true;
+    void fetch('/api/system/containment')
+      .then((r) => r.json())
+      .then((s: { ok: boolean; reasons: string[] }) => {
+        if (live) setContainment(s);
+      })
+      .catch(() => {
+        if (live) setContainment({ ok: false, reasons: ['status unavailable'] });
+      });
+    return () => {
+      live = false;
+    };
+  }, [open]);
 
   // Inline "New project" creator.
   const [showNew, setShowNew] = useState(false);
@@ -81,10 +105,16 @@ export function PlanPanel({ open, onClose }: PlanPanelProps): JSX.Element | null
     if (!g || !effectiveCwd.trim() || busy) return;
     setBusy(true);
     setErrors([]);
-    const res = await createPlanFromGoal(g, effectiveCwd.trim());
+    setWarnings([]);
+    const canAuto = autoMode && (containment?.ok ?? false);
+    const res = await createPlanFromGoal(g, effectiveCwd.trim(), {
+      autoMode: canAuto,
+    });
     setBusy(false);
-    if (res.ok) setGoal('');
-    else setErrors(res.errors ?? ['Planning failed.']);
+    if (res.ok) {
+      setGoal('');
+      setWarnings(res.warnings ?? []);
+    } else setErrors(res.errors ?? ['Planning failed.']);
   };
 
   return (
@@ -216,12 +246,58 @@ export function PlanPanel({ open, onClose }: PlanPanelProps): JSX.Element | null
               ))}
             </div>
           )}
+          {warnings.length > 0 && (
+            <div className="text-[11px] text-amber-300 border border-amber-400/40 bg-amber-500/10 rounded px-2 py-1 space-y-0.5">
+              {warnings.map((w) => (
+                <div key={w}>· {w}</div>
+              ))}
+            </div>
+          )}
+
+          {/* Full-auto toggle — gated on worker containment. */}
+          <label
+            className={`flex items-start gap-2 text-[11px] rounded px-2 py-1.5 border ${
+              containment?.ok
+                ? 'border-solix-border bg-black/20 cursor-pointer'
+                : 'border-solix-border/50 bg-black/10 opacity-70'
+            }`}
+            title={
+              containment?.ok
+                ? 'Skip the approval gate and dispatch immediately.'
+                : 'Full-auto needs worker containment enabled first.'
+            }
+          >
+            <input
+              type="checkbox"
+              checked={autoMode && (containment?.ok ?? false)}
+              disabled={!containment?.ok}
+              onChange={(e) => setAutoMode(e.target.checked)}
+              className="mt-0.5 accent-amber-400"
+            />
+            <span>
+              <span className="text-slate-200">⚡ Full-auto</span>
+              <span className="text-slate-500">
+                {' '}
+                — dispatch without approving the plan.
+              </span>
+              {containment && !containment.ok && (
+                <span className="block text-slate-500 mt-0.5">
+                  Unavailable: {containment.reasons.join('; ')}.
+                </span>
+              )}
+            </span>
+          </label>
+
           <button
             onClick={() => void onPlan()}
             disabled={busy || !goal.trim() || !effectiveCwd.trim()}
             className="w-full py-2 rounded bg-amber-500/20 border border-amber-400/60 text-amber-100 text-sm hover:bg-amber-500/30 disabled:opacity-40"
           >
-            {busy ? 'Planning…' : '✷ Plan it'}
+            {busy
+              ? 'Planning…'
+              : autoMode && containment?.ok
+                ? '⚡ Plan & run (full-auto)'
+                : '✷ Plan it'}
           </button>
         </div>
 
