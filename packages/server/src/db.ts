@@ -146,6 +146,44 @@ CREATE TABLE IF NOT EXISTS goals (
   color TEXT NOT NULL,
   created_at INTEGER NOT NULL
 );
+
+-- v2 Maestro orchestrator: a Plan is a goal decomposed into a DAG of tasks.
+CREATE TABLE IF NOT EXISTS plans (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  goal_prompt TEXT NOT NULL,
+  status TEXT NOT NULL,
+  auto_mode INTEGER NOT NULL DEFAULT 0,
+  goal_id TEXT,
+  cwd TEXT NOT NULL,
+  budget_usd REAL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_plans_status ON plans(status);
+
+CREATE TABLE IF NOT EXISTS plan_tasks (
+  id TEXT PRIMARY KEY,
+  plan_id TEXT NOT NULL REFERENCES plans(id),
+  title TEXT NOT NULL,
+  prompt TEXT NOT NULL,
+  acceptance_criteria TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL,
+  depends_on_json TEXT NOT NULL DEFAULT '[]',
+  assigned_advisor_role TEXT,
+  cwd TEXT,
+  model TEXT,
+  budget_usd REAL,
+  session_id TEXT,
+  mission_id TEXT,
+  verifier_session_id TEXT,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  order_index INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_plan_tasks_plan ON plan_tasks(plan_id);
+CREATE INDEX IF NOT EXISTS idx_plan_tasks_status ON plan_tasks(status);
 `;
 
 export type DB = Database.Database;
@@ -283,6 +321,10 @@ export function getDb(): DB {
   ensureColumn(db, 'missions', 'goal_id', 'goal_id TEXT');
   ensureColumn(db, 'scheduled_tasks', 'cwd', 'cwd TEXT');
   ensureColumn(db, 'scheduled_tasks', 'name', 'name TEXT');
+  // v2 Maestro — plan back-links on dispatched sessions.
+  ensureColumn(db, 'sessions', 'plan_id', 'plan_id TEXT');
+  ensureColumn(db, 'sessions', 'plan_task_id', 'plan_task_id TEXT');
+  ensureColumn(db, 'sessions', 'session_role', 'session_role TEXT');
   _db = db;
   return db;
 }

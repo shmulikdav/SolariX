@@ -762,6 +762,20 @@ export class EventRouter {
   broadcastGoalRemove(goalId: string): void {
     this.broadcaster.broadcast({ type: 'goal_remove', goalId });
   }
+  // v2 Maestro — broadcast helpers for plan/task CRUD driven by HTTP + the
+  // orchestrator.
+  broadcastPlanUpsert(plan: import('@solix/shared').Plan): void {
+    this.broadcaster.broadcast({ type: 'plan_upsert', plan });
+  }
+  broadcastPlanRemove(planId: string): void {
+    this.broadcaster.broadcast({ type: 'plan_remove', planId });
+  }
+  broadcastPlanTaskUpsert(task: import('@solix/shared').PlanTask): void {
+    this.broadcaster.broadcast({ type: 'plan_task_upsert', task });
+  }
+  broadcastPlanTaskRemove(taskId: string): void {
+    this.broadcaster.broadcast({ type: 'plan_task_remove', taskId });
+  }
 
   broadcastGalaxyImported(manifest: GalaxyManifest): void {
     this.broadcaster.broadcast({ type: 'galaxy_imported', manifest });

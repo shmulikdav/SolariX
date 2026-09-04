@@ -5,6 +5,8 @@ import type {
   ClientMessage,
   Goal,
   Mission,
+  Plan,
+  PlanTask,
   Project,
   ScheduledTask,
   ServerMessage,
@@ -184,6 +186,8 @@ interface SolixState {
   skills: Record<string, Skill>;
   schedules: Record<string, ScheduledTask>;
   goals: Record<string, Goal>;
+  plans: Record<string, Plan>;
+  planTasks: Record<string, PlanTask>;
   budgetAlerts: Record<string, BudgetAlert>;
   recentToolCalls: RecentToolCall[];
   pendingPermissions: Record<string, PendingPermission>;
@@ -296,6 +300,8 @@ export const useSolixStore = create<SolixState>((set, get) => ({
   skills: {},
   schedules: {},
   goals: {},
+  plans: {},
+  planTasks: {},
   budgetAlerts: {},
   chatBySessionId: {},
   recentToolCalls: [],
@@ -328,7 +334,21 @@ export const useSolixStore = create<SolixState>((set, get) => ({
         for (const sc of msg.schedules) schedules[sc.id] = sc;
         const goals: Record<string, Goal> = {};
         for (const g of msg.goals) goals[g.id] = g;
-        set({ projects, sessions, missions, advisors, skills, schedules, goals });
+        const plans: Record<string, Plan> = {};
+        for (const pl of msg.plans) plans[pl.id] = pl;
+        const planTasks: Record<string, PlanTask> = {};
+        for (const t of msg.planTasks) planTasks[t.id] = t;
+        set({
+          projects,
+          sessions,
+          missions,
+          advisors,
+          skills,
+          schedules,
+          goals,
+          plans,
+          planTasks,
+        });
         break;
       }
       case 'advisor_upsert': {
@@ -508,6 +528,37 @@ export const useSolixStore = create<SolixState>((set, get) => ({
           const next = { ...s.goals };
           delete next[msg.goalId];
           return { goals: next };
+        });
+        break;
+      }
+      case 'plan_upsert': {
+        set((s) => ({ plans: { ...s.plans, [msg.plan.id]: msg.plan } }));
+        break;
+      }
+      case 'plan_remove': {
+        set((s) => {
+          const nextPlans = { ...s.plans };
+          delete nextPlans[msg.planId];
+          // Drop the plan's tasks too so nothing dangles.
+          const nextTasks: Record<string, PlanTask> = {};
+          for (const [id, t] of Object.entries(s.planTasks)) {
+            if (t.planId !== msg.planId) nextTasks[id] = t;
+          }
+          return { plans: nextPlans, planTasks: nextTasks };
+        });
+        break;
+      }
+      case 'plan_task_upsert': {
+        set((s) => ({
+          planTasks: { ...s.planTasks, [msg.task.id]: msg.task },
+        }));
+        break;
+      }
+      case 'plan_task_remove': {
+        set((s) => {
+          const next = { ...s.planTasks };
+          delete next[msg.taskId];
+          return { planTasks: next };
         });
         break;
       }
@@ -909,6 +960,27 @@ export function selectEnabledSchedules(state: SolixState): ScheduledTask[] {
 
 export function selectGoalsArray(state: SolixState): Goal[] {
   return Object.values(state.goals);
+}
+
+// ── v2 Maestro selectors ───────────────────────────────────────────────
+export function selectPlansArray(state: SolixState): Plan[] {
+  return Object.values(state.plans).sort((a, b) => b.createdAt - a.createdAt);
+}
+
+/** Tasks for one plan, in display order. */
+export function selectPlanTasks(state: SolixState, planId: string): PlanTask[] {
+  return Object.values(state.planTasks)
+    .filter((t) => t.planId === planId)
+    .sort((a, b) => a.orderIndex - b.orderIndex || a.createdAt - b.createdAt);
+}
+
+/** The most recent plan that is still live (not completed/failed), if any. */
+export function selectActivePlan(state: SolixState): Plan | null {
+  return (
+    selectPlansArray(state).find(
+      (p) => p.status !== 'completed' && p.status !== 'failed',
+    ) ?? null
+  );
 }
 
 /**

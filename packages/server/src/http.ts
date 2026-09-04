@@ -56,6 +56,17 @@ import {
   setScheduleEnabled,
 } from './state/schedules.js';
 import { createGoal, deleteGoal, listGoals } from './state/goals.js';
+import {
+  createPlan,
+  createPlanTask,
+  deletePlan,
+  deletePlanTask,
+  getPlan,
+  listPlans,
+  listPlanTasks,
+  updatePlan,
+  updatePlanTask,
+} from './state/plans.js';
 import { buildContextEnvelope } from './state/context.js';
 import {
   getSkill,
@@ -543,6 +554,155 @@ export function createHttpApp(opts: {
     const id = c.req.param('id');
     const ok = deleteGoal(opts.db, id);
     if (ok) opts.router.broadcastGoalRemove(id);
+    return c.json({ ok });
+  });
+
+  // ──── v2 Maestro: plans + plan tasks ────────────────────────
+  app.get('/api/plans', (c) => c.json(listPlans(opts.db)));
+
+  app.get('/api/plans/:id', (c) => {
+    const plan = getPlan(opts.db, c.req.param('id'));
+    if (!plan) return c.json({ error: 'not found' }, 404);
+    return c.json({ plan, tasks: listPlanTasks(opts.db, plan.id) });
+  });
+
+  app.post('/api/plans', async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      name?: string;
+      goalPrompt?: string;
+      cwd?: string;
+      status?: import('@solix/shared').PlanStatus;
+      autoMode?: boolean;
+      goalId?: string;
+      budgetUsd?: number;
+      tasks?: Array<{
+        title?: string;
+        prompt?: string;
+        acceptanceCriteria?: string;
+        dependsOn?: string[];
+        assignedAdvisorRole?: string;
+        cwd?: string;
+        model?: string;
+        budgetUsd?: number;
+        orderIndex?: number;
+      }>;
+    };
+    if (!body.name || !body.goalPrompt || !body.cwd) {
+      return c.json({ error: 'name, goalPrompt, cwd required' }, 400);
+    }
+    const plan = createPlan(opts.db, {
+      name: body.name,
+      goalPrompt: body.goalPrompt,
+      cwd: body.cwd,
+      status: body.status,
+      autoMode: body.autoMode,
+      goalId: body.goalId,
+      budgetUsd: body.budgetUsd,
+    });
+    opts.router.broadcastPlanUpsert(plan);
+    const tasks = (body.tasks ?? [])
+      .filter((t) => t.title && t.prompt)
+      .map((t, i) => {
+        const task = createPlanTask(opts.db, {
+          planId: plan.id,
+          title: t.title!,
+          prompt: t.prompt!,
+          acceptanceCriteria: t.acceptanceCriteria,
+          dependsOn: t.dependsOn,
+          assignedAdvisorRole: t.assignedAdvisorRole,
+          cwd: t.cwd,
+          model: t.model,
+          budgetUsd: t.budgetUsd,
+          orderIndex: t.orderIndex ?? i,
+        });
+        opts.router.broadcastPlanTaskUpsert(task);
+        return task;
+      });
+    return c.json({ plan, tasks });
+  });
+
+  app.patch('/api/plans/:id', async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as Partial<{
+      name: string;
+      status: import('@solix/shared').PlanStatus;
+      autoMode: boolean;
+      goalId: string;
+      cwd: string;
+      budgetUsd: number;
+    }>;
+    const plan = updatePlan(opts.db, c.req.param('id'), body);
+    if (!plan) return c.json({ error: 'not found' }, 404);
+    opts.router.broadcastPlanUpsert(plan);
+    return c.json(plan);
+  });
+
+  app.delete('/api/plans/:id', (c) => {
+    const id = c.req.param('id');
+    const tasks = listPlanTasks(opts.db, id);
+    const ok = deletePlan(opts.db, id);
+    if (ok) {
+      for (const t of tasks) opts.router.broadcastPlanTaskRemove(t.id);
+      opts.router.broadcastPlanRemove(id);
+    }
+    return c.json({ ok });
+  });
+
+  app.post('/api/plans/:id/tasks', async (c) => {
+    const planId = c.req.param('id');
+    if (!getPlan(opts.db, planId)) return c.json({ error: 'not found' }, 404);
+    const body = (await c.req.json().catch(() => ({}))) as {
+      title?: string;
+      prompt?: string;
+      acceptanceCriteria?: string;
+      dependsOn?: string[];
+      assignedAdvisorRole?: string;
+      cwd?: string;
+      model?: string;
+      budgetUsd?: number;
+      orderIndex?: number;
+    };
+    if (!body.title || !body.prompt) {
+      return c.json({ error: 'title, prompt required' }, 400);
+    }
+    const task = createPlanTask(opts.db, {
+      planId,
+      title: body.title,
+      prompt: body.prompt,
+      acceptanceCriteria: body.acceptanceCriteria,
+      dependsOn: body.dependsOn,
+      assignedAdvisorRole: body.assignedAdvisorRole,
+      cwd: body.cwd,
+      model: body.model,
+      budgetUsd: body.budgetUsd,
+      orderIndex: body.orderIndex,
+    });
+    opts.router.broadcastPlanTaskUpsert(task);
+    return c.json(task);
+  });
+
+  app.patch('/api/plans/:planId/tasks/:taskId', async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as Partial<{
+      title: string;
+      prompt: string;
+      acceptanceCriteria: string;
+      status: import('@solix/shared').PlanTaskStatus;
+      dependsOn: string[];
+      assignedAdvisorRole: string;
+      cwd: string;
+      model: string;
+      budgetUsd: number;
+      orderIndex: number;
+    }>;
+    const task = updatePlanTask(opts.db, c.req.param('taskId'), body);
+    if (!task) return c.json({ error: 'not found' }, 404);
+    opts.router.broadcastPlanTaskUpsert(task);
+    return c.json(task);
+  });
+
+  app.delete('/api/plans/:planId/tasks/:taskId', (c) => {
+    const taskId = c.req.param('taskId');
+    const ok = deletePlanTask(opts.db, taskId);
+    if (ok) opts.router.broadcastPlanTaskRemove(taskId);
     return c.json({ ok });
   });
 

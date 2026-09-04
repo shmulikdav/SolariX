@@ -20,6 +20,10 @@ export type SessionOrigin = 'external' | 'internal' | 'agentview';
 
 export type SessionKind = 'user' | 'advisor';
 
+/** v2 Maestro — a session's role within an orchestration plan. Absent for
+ *  ordinary (non-plan) sessions. */
+export type SessionRole = 'worker' | 'verifier' | 'planner';
+
 export interface Session {
   id: string;
   pid: number;
@@ -69,6 +73,12 @@ export interface Session {
   /** Goal this session's current mission rolls up to (Sprint M). Drives the
    * constellation grouping in the galaxy view. */
   currentGoalId?: string;
+  /** v2 Maestro — when the orchestrator dispatched this session for a plan
+   * task, the plan + task it belongs to and its role within the plan. Absent
+   * for ordinary sessions. */
+  planId?: string;
+  planTaskId?: string;
+  sessionRole?: SessionRole;
 }
 
 export type MissionStatus = 'active' | 'completed' | 'failed' | 'cancelled';
@@ -113,6 +123,79 @@ export interface Goal {
   /** Hex color used for the constellation lines + chips. */
   color: string;
   createdAt: number;
+}
+
+// ── v2 Maestro orchestrator ────────────────────────────────────────────
+// A Plan is a high-level goal decomposed into a DAG of PlanTasks. The
+// server-side Orchestrator dispatches each ready task to its own worker
+// session (planet), verifies the result against acceptance criteria, and
+// drives the whole thing A-Z. Distinct from Goal (a flat constellation
+// label) and Mission (what one live session is doing right now).
+
+export type PlanStatus =
+  | 'draft' // planner is decomposing / not yet presented
+  | 'awaiting_approval' // shown to the human, waiting for one-click approve
+  | 'running' // approved; dispatching + verifying tasks
+  | 'paused' // human paused; no new dispatches
+  | 'completed' // every task completed
+  | 'failed'; // aborted or a task exhausted retries + escalation
+
+export type PlanTaskStatus =
+  | 'pending' // dependencies not yet satisfied
+  | 'ready' // dependencies met; eligible to dispatch
+  | 'dispatched' // a worker session is executing it
+  | 'verifying' // worker stopped; verifier is checking acceptance criteria
+  | 'completed' // verified done
+  | 'failed' // verification failed after retries / worker errored
+  | 'blocked' // an upstream dependency failed
+  | 'skipped'; // human skipped it
+
+export interface Plan {
+  id: string;
+  name: string;
+  /** The original high-level goal the user handed Maestro. */
+  goalPrompt: string;
+  status: PlanStatus;
+  /** When true, skip the plan-approval gate and dispatch immediately. */
+  autoMode: boolean;
+  /** Optional constellation grouping this plan's sessions join. */
+  goalId?: string;
+  /** Default working directory the plan's tasks run in. */
+  cwd: string;
+  /** Optional plan-wide budget cap (USD) across all tasks. */
+  budgetUsd?: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface PlanTask {
+  id: string;
+  planId: string;
+  title: string;
+  /** The prompt handed to the worker session. */
+  prompt: string;
+  /** Human-readable, checkable criteria the verifier accepts the task against. */
+  acceptanceCriteria: string;
+  status: PlanTaskStatus;
+  /** Task ids that must be `completed` before this one dispatches (DAG edges). */
+  dependsOn: string[];
+  /** Advisor role to dispatch this task as (e.g. 'code-reviewer'). */
+  assignedAdvisorRole?: string;
+  cwd?: string;
+  model?: Model;
+  budgetUsd?: number;
+  /** Set when dispatched — the worker session executing this task. */
+  sessionId?: string;
+  /** The worker's mission id. */
+  missionId?: string;
+  /** Set during verification — the verifier session. */
+  verifierSessionId?: string;
+  /** Times this task has been dispatched (for bounded retries). */
+  attempts: number;
+  /** Stable ordering for display. */
+  orderIndex: number;
+  createdAt: number;
+  updatedAt: number;
 }
 
 export type ToolCallStatus = 'running' | 'ok' | 'error';
