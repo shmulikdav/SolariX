@@ -146,8 +146,9 @@ export type PlanTaskStatus =
   | 'dispatched' // a worker session is executing it
   | 'verifying' // worker stopped; verifier is checking acceptance criteria
   | 'completed' // verified done
-  | 'failed' // verification failed after retries / worker errored
-  | 'blocked' // an upstream dependency failed
+  | 'failed' // this attempt failed; orchestrator may retry (attempts < maxAttempts)
+  | 'escalated' // failed and out of retries — needs a human (durable, survives restart)
+  | 'blocked' // an upstream dependency failed/escalated
   | 'skipped'; // human skipped it
 
 export interface Plan {
@@ -192,6 +193,9 @@ export interface PlanTask {
   verifierSessionId?: string;
   /** Times this task has been dispatched (for bounded retries). */
   attempts: number;
+  /** Hard retry ceiling — on the (maxAttempts)th failure the task goes
+   * `escalated` (needs a human) instead of retrying. */
+  maxAttempts: number;
   /** Stable ordering for display. */
   orderIndex: number;
   createdAt: number;

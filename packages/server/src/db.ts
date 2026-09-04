@@ -178,12 +178,19 @@ CREATE TABLE IF NOT EXISTS plan_tasks (
   mission_id TEXT,
   verifier_session_id TEXT,
   attempts INTEGER NOT NULL DEFAULT 0,
+  max_attempts INTEGER NOT NULL DEFAULT 3,
   order_index INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_plan_tasks_plan ON plan_tasks(plan_id);
 CREATE INDEX IF NOT EXISTS idx_plan_tasks_status ON plan_tasks(status);
+
+-- v2 Maestro — plan back-links + tool_calls hot paths (budget rollups, reaper).
+CREATE INDEX IF NOT EXISTS idx_sessions_plan ON sessions(plan_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_plan_task ON sessions(plan_task_id);
+CREATE INDEX IF NOT EXISTS idx_tool_calls_session ON tool_calls(session_id);
+CREATE INDEX IF NOT EXISTS idx_tool_calls_status ON tool_calls(status);
 `;
 
 export type DB = Database.Database;
@@ -325,6 +332,9 @@ export function getDb(): DB {
   ensureColumn(db, 'sessions', 'plan_id', 'plan_id TEXT');
   ensureColumn(db, 'sessions', 'plan_task_id', 'plan_task_id TEXT');
   ensureColumn(db, 'sessions', 'session_role', 'session_role TEXT');
+  // v2 Maestro — durable per-task retry ceiling (idempotent for DBs that
+  // created plan_tasks before this column existed).
+  ensureColumn(db, 'plan_tasks', 'max_attempts', 'max_attempts INTEGER NOT NULL DEFAULT 3');
   _db = db;
   return db;
 }

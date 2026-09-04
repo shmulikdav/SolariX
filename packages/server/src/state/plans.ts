@@ -145,6 +145,7 @@ interface PlanTaskRow {
   mission_id: string | null;
   verifier_session_id: string | null;
   attempts: number;
+  max_attempts: number;
   order_index: number;
   created_at: number;
   updated_at: number;
@@ -173,6 +174,7 @@ function rowToPlanTask(row: PlanTaskRow): PlanTask {
     missionId: row.mission_id ?? undefined,
     verifierSessionId: row.verifier_session_id ?? undefined,
     attempts: row.attempts,
+    maxAttempts: row.max_attempts,
     orderIndex: row.order_index,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -192,6 +194,7 @@ export function createPlanTask(
     cwd?: string;
     model?: Model;
     budgetUsd?: number;
+    maxAttempts?: number;
     orderIndex?: number;
   },
 ): PlanTask {
@@ -201,8 +204,8 @@ export function createPlanTask(
     `INSERT INTO plan_tasks
        (id, plan_id, title, prompt, acceptance_criteria, status, depends_on_json,
         assigned_advisor_role, cwd, model, budget_usd, session_id, mission_id,
-        verifier_session_id, attempts, order_index, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, 0, ?, ?, ?)`,
+        verifier_session_id, attempts, max_attempts, order_index, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, 0, ?, ?, ?, ?)`,
   ).run(
     id,
     input.planId,
@@ -215,6 +218,7 @@ export function createPlanTask(
     input.cwd ?? null,
     input.model ?? null,
     input.budgetUsd ?? null,
+    input.maxAttempts ?? 3,
     input.orderIndex ?? 0,
     ts,
     ts,
@@ -266,6 +270,7 @@ export function updatePlanTask(
       | 'missionId'
       | 'verifierSessionId'
       | 'attempts'
+      | 'maxAttempts'
       | 'orderIndex'
     >
   >,
@@ -293,6 +298,7 @@ export function updatePlanTask(
   if (patch.verifierSessionId !== undefined)
     put('verifier_session_id', patch.verifierSessionId ?? null);
   if (patch.attempts !== undefined) put('attempts', patch.attempts);
+  if (patch.maxAttempts !== undefined) put('max_attempts', patch.maxAttempts);
   if (patch.orderIndex !== undefined) put('order_index', patch.orderIndex);
   if (sets.length === 0) return getPlanTask(db, id);
   put('updated_at', now());
