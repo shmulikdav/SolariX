@@ -130,23 +130,18 @@ describe('evaluateContainment', () => {
   });
 });
 
-describe('fullAutoContainmentStatus', () => {
-  it('refuses when the gate is off', () => {
-    const s = fullAutoContainmentStatus({ SOLIX_GATE_POLICY: 'deny' });
-    expect(s.ok).toBe(false);
-    expect(s.reasons.join(' ')).toMatch(/gate is off/);
-  });
-  it('refuses when the gate is not fail-closed', () => {
-    const s = fullAutoContainmentStatus({ SOLIX_GATE_ENABLED: '1' });
-    expect(s.ok).toBe(false);
-    expect(s.reasons.join(' ')).toMatch(/fail-closed/);
-  });
-  it('allows when gate is enabled and fail-closed', () => {
-    const s = fullAutoContainmentStatus({
-      SOLIX_GATE_ENABLED: '1',
-      SOLIX_GATE_POLICY: 'deny',
-    });
+describe('fullAutoContainmentStatus (safe-by-default)', () => {
+  it('is OK by default — Solix injects the gate for its workers', () => {
+    const s = fullAutoContainmentStatus({});
     expect(s.ok).toBe(true);
     expect(s.reasons).toHaveLength(0);
+  });
+  it('refuses when the user opts out via SOLIX_CONTAINMENT=0', () => {
+    const s = fullAutoContainmentStatus({ SOLIX_CONTAINMENT: '0' });
+    expect(s.ok).toBe(false);
+    expect(s.reasons.join(' ')).toMatch(/containment is disabled/);
+  });
+  it('refuses when the gate is explicitly disabled', () => {
+    expect(fullAutoContainmentStatus({ SOLIX_GATE_ENABLED: '0' }).ok).toBe(false);
   });
 });

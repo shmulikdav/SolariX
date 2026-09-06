@@ -133,27 +133,24 @@ export function evaluateContainment(input: {
 }
 
 /**
- * Whether full-auto (no approval gate) is safe to run given the current process
- * environment. Refused unless the human gate is enabled AND fail-closed, so the
- * denylist above can actually intercept worker tool calls and unanswered ones
- * deny rather than auto-allow. An OS sandbox (SOLIX_SANDBOX_CMD) further hardens
- * it but isn't required for the denylist to hold.
+ * Whether autonomous execution (full-auto, or any dispatched worker) is safely
+ * contained. Containment is now SAFE-BY-DEFAULT: Solix injects the fail-closed
+ * gate into every worker/verifier it launches (launcher.buildSpawnEnv), so the
+ * command denylist governs them out of the box. It's refused only when the user
+ * explicitly opted OUT (SOLIX_CONTAINMENT=0 / SOLIX_GATE_ENABLED=0). An OS
+ * sandbox (SOLIX_SANDBOX_CMD) is the recommended hard-isolation layer on top.
  */
 export function fullAutoContainmentStatus(env: NodeJS.ProcessEnv = process.env): {
   ok: boolean;
   reasons: string[];
 } {
-  const reasons: string[] = [];
-  if (env.SOLIX_GATE_ENABLED !== '1') {
-    reasons.push(
-      'the tool-call gate is off (set SOLIX_GATE_ENABLED=1) — worker commands would run ungoverned',
-    );
+  if (env.SOLIX_CONTAINMENT === '0' || env.SOLIX_GATE_ENABLED === '0') {
+    return {
+      ok: false,
+      reasons: [
+        'worker containment is disabled (SOLIX_CONTAINMENT=0) — re-enable it to run autonomously',
+      ],
+    };
   }
-  const policy = (env.SOLIX_GATE_POLICY ?? '').toLowerCase();
-  if (policy !== 'deny' && policy !== 'closed' && policy !== 'fail-closed') {
-    reasons.push(
-      'the gate is not fail-closed (set SOLIX_GATE_POLICY=deny) — an unanswered prompt would auto-allow',
-    );
-  }
-  return { ok: reasons.length === 0, reasons };
+  return { ok: true, reasons: [] };
 }

@@ -58,14 +58,29 @@ describe('router containment gate', () => {
     ).toBe(true);
   });
 
-  it('does not auto-resolve a worker running a safe command (enters the gate)', async () => {
+  it('auto-allows a worker running a SAFE command (no human, no pending gate)', async () => {
     seedWorker('w2');
-    const perm = router.requestPermission(bashEvent('w2', 'npm test'));
-    await new Promise((r) => setImmediate(r)); // let the sync path run
+    const res = await router.requestPermission(bashEvent('w2', 'npm test'));
+    expect(res).toEqual({ approved: true, timedOut: false });
+    expect(router.pendingPermissions()).toHaveLength(0); // never entered the gate
+  });
+
+  it('still routes a NON-worker session to the human gate', async () => {
+    const project = ensureProject(db, '/srv/project');
+    upsertSession(db, {
+      id: 'u1',
+      pid: 0,
+      projectId: project.id,
+      cwd: '/srv/project',
+      origin: 'external',
+      model: 'default',
+      kind: 'user',
+      // no sessionRole → a normal session, human-gated
+    });
+    const perm = router.requestPermission(bashEvent('u1', 'npm test'));
+    await new Promise((r) => setImmediate(r));
     const pendings = router.pendingPermissions();
-    expect(pendings).toHaveLength(1); // a safe command awaits a human
-    expect(pendings[0]!.tool).toBe('Bash');
-    // Resolve it so the pending timer is cleared and nothing lingers.
+    expect(pendings).toHaveLength(1);
     router.resolvePermission(pendings[0]!.requestId, false);
     expect((await perm).approved).toBe(false);
   });

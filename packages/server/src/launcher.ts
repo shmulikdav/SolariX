@@ -108,17 +108,37 @@ function ensureWorktree(opts: {
 
 const FAKE_CLAUDE = process.env.SOLIX_FAKE_CLAUDE === '1';
 
+/** Safe-by-default containment opt-out: a user can turn OFF the auto-enabled
+ *  worker gate with SOLIX_CONTAINMENT=0 or an explicit SOLIX_GATE_ENABLED=0. */
+export function containmentOptedOut(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.SOLIX_CONTAINMENT === '0' || env.SOLIX_GATE_ENABLED === '0';
+}
+
+/** The gate env to inject into a contained worker: the fail-closed tool-call
+ *  gate, unless the user opted out. Pure (env injected) so it's unit-testable. */
+export function containmentGateEnv(env: NodeJS.ProcessEnv = process.env): {
+  SOLIX_GATE_ENABLED?: string;
+  SOLIX_GATE_POLICY?: string;
+} {
+  if (containmentOptedOut(env)) return {};
+  return {
+    SOLIX_GATE_ENABLED: '1',
+    SOLIX_GATE_POLICY: env.SOLIX_GATE_POLICY ?? 'deny',
+  };
+}
+
 /**
- * Opt-in process isolation for Solix-launched agents (not externally-run
- * `claude`). Off by default — returns `undefined` so spawn inherits the full
- * ambient env exactly as before. When `SOLIX_ENV_SCRUB=1` (implied when a
- * sandbox wrapper is set), pass only an allowlisted env so unrelated host
- * secrets don't leak into agent subprocesses. Auth + the gate vars are always
- * preserved so `claude` and the agent's own hooks still work.
+ * Process env for Solix-launched agents. For a **contained** worker/verifier
+ * (`contain`), scrub to an allowlist AND — safe-by-default — inject the
+ * tool-call gate (`SOLIX_GATE_ENABLED=1` + fail-closed `SOLIX_GATE_POLICY=deny`)
+ * so the command denylist governs it out of the box, unless the user opted out.
+ * For non-contained launches it returns `undefined` (inherit ambient env) unless
+ * the global `SOLIX_ENV_SCRUB`/sandbox flags ask for a scrub. Auth + gate vars
+ * are always preserved so `claude` and its hooks still work.
  */
-function buildSpawnEnv(forceScrub = false): NodeJS.ProcessEnv | undefined {
+function buildSpawnEnv(contain = false): NodeJS.ProcessEnv | undefined {
   const scrub =
-    forceScrub ||
+    contain ||
     process.env.SOLIX_ENV_SCRUB === '1' ||
     (process.env.SOLIX_SANDBOX_CMD ?? '').trim() !== '';
   if (!scrub) return undefined;
@@ -163,6 +183,10 @@ function buildSpawnEnv(forceScrub = false): NodeJS.ProcessEnv | undefined {
       env[k] = process.env[k];
     }
   }
+  // Safe-by-default: a Solix-launched worker/verifier gets the gate + a
+  // fail-closed policy so the denylist governs it with zero config, unless the
+  // user deliberately opted out.
+  if (contain) Object.assign(env, containmentGateEnv());
   return env;
 }
 

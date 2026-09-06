@@ -1,5 +1,27 @@
 import { describe, expect, it } from 'vitest';
-import { buildPrintArgs, parseClaudeJsonResult } from './launcher.js';
+import {
+  buildPrintArgs,
+  containmentGateEnv,
+  parseClaudeJsonResult,
+} from './launcher.js';
+
+describe('containmentGateEnv (safe-by-default)', () => {
+  it('injects the fail-closed gate by default', () => {
+    expect(containmentGateEnv({})).toEqual({
+      SOLIX_GATE_ENABLED: '1',
+      SOLIX_GATE_POLICY: 'deny',
+    });
+  });
+  it('preserves an explicit policy', () => {
+    expect(containmentGateEnv({ SOLIX_GATE_POLICY: 'closed' }).SOLIX_GATE_POLICY).toBe(
+      'closed',
+    );
+  });
+  it('injects nothing when the user opts out', () => {
+    expect(containmentGateEnv({ SOLIX_CONTAINMENT: '0' })).toEqual({});
+    expect(containmentGateEnv({ SOLIX_GATE_ENABLED: '0' })).toEqual({});
+  });
+});
 
 describe('buildPrintArgs', () => {
   const full = { sessionId: true, jsonOutput: true };

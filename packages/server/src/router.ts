@@ -476,6 +476,16 @@ export class EventRouter {
           this.broadcaster.broadcast({ type: 'session_upsert', session: active });
         return Promise.resolve({ approved: false, timedOut: false });
       }
+
+      // An autonomous worker/verifier has no human at the keyboard: a SAFE tool
+      // call (passed containment) auto-allows so the fleet can proceed. The
+      // denylist + cwd-confinement above is the boundary, not a per-step prompt.
+      if (
+        session.sessionRole === 'worker' ||
+        session.sessionRole === 'verifier'
+      ) {
+        return Promise.resolve({ approved: true, timedOut: false });
+      }
     }
 
     const requestId = nanoid();
