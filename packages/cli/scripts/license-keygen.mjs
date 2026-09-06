@@ -62,12 +62,19 @@ if (cmd === 'keygen') {
   const priv = createPrivateKey(readFileSync(keyFile, 'utf8'));
   const now = Date.now();
   const days = Number(opts.days ?? 365);
+  const kind = opts.kind === 'subscription' ? 'subscription' : 'perpetual';
   const payload = {
     licenseId: randomUUID(),
     product: 'solix',
     edition: 'pro',
+    kind,
     issuedAt: now,
     updatesUntil: now + days * 24 * 3600 * 1000,
+    // Subscriptions expire (enforced); perpetual keys never do.
+    ...(kind === 'subscription'
+      ? { expiresAt: now + days * 24 * 3600 * 1000 }
+      : {}),
+    ...(opts.order ? { orderId: opts.order } : {}),
     ...(opts.email || opts.name
       ? { purchaser: { email: opts.email, name: opts.name } }
       : {}),

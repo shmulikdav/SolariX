@@ -116,7 +116,8 @@ export function PlanPanel({ open, onClose }: PlanPanelProps): JSX.Element | null
     setBusy(true);
     setErrors([]);
     setWarnings([]);
-    const canAuto = autoMode && (containment?.ok ?? false);
+    const canAuto =
+      autoMode && (containment?.ok ?? false) && entitlement?.tier === 'pro';
     const res = await createPlanFromGoal(g, effectiveCwd.trim(), {
       autoMode: canAuto,
     });
@@ -282,39 +283,54 @@ export function PlanPanel({ open, onClose }: PlanPanelProps): JSX.Element | null
             </div>
           )}
 
-          {/* Full-auto toggle — gated on worker containment. */}
-          <label
-            className={`flex items-start gap-2 text-[11px] rounded px-2 py-1.5 border ${
-              containment?.ok
-                ? 'border-solix-border bg-black/20 cursor-pointer'
-                : 'border-solix-border/50 bg-black/10 opacity-70'
-            }`}
-            title={
-              containment?.ok
-                ? 'Skip the approval gate and dispatch immediately.'
-                : 'Full-auto needs worker containment enabled first.'
-            }
-          >
-            <input
-              type="checkbox"
-              checked={autoMode && (containment?.ok ?? false)}
-              disabled={!containment?.ok}
-              onChange={(e) => setAutoMode(e.target.checked)}
-              className="mt-0.5 accent-amber-400"
-            />
-            <span>
-              <span className="text-slate-200">⚡ Full-auto</span>
-              <span className="text-slate-500">
-                {' '}
-                — dispatch without approving the plan.
-              </span>
-              {containment && !containment.ok && (
-                <span className="block text-slate-500 mt-0.5">
-                  Unavailable: {containment.reasons.join('; ')}.
+          {/* Full-auto toggle — gated on worker containment AND a Pro license
+              (the server refuses it otherwise, so gate it here to avoid a wasted
+              planner run). */}
+          {(() => {
+            const isPro = entitlement?.tier === 'pro';
+            const canFullAuto = (containment?.ok ?? false) && isPro;
+            return (
+              <label
+                className={`flex items-start gap-2 text-[11px] rounded px-2 py-1.5 border ${
+                  canFullAuto
+                    ? 'border-solix-border bg-black/20 cursor-pointer'
+                    : 'border-solix-border/50 bg-black/10 opacity-70'
+                }`}
+                title={
+                  canFullAuto
+                    ? 'Skip the approval gate and dispatch immediately.'
+                    : !isPro
+                      ? 'Full-auto is a Pro feature.'
+                      : 'Full-auto needs worker containment enabled first.'
+                }
+              >
+                <input
+                  type="checkbox"
+                  checked={autoMode && canFullAuto}
+                  disabled={!canFullAuto}
+                  onChange={(e) => setAutoMode(e.target.checked)}
+                  className="mt-0.5 accent-amber-400"
+                />
+                <span>
+                  <span className="text-slate-200">⚡ Full-auto</span>
+                  <span className="text-slate-500">
+                    {' '}
+                    — dispatch without approving the plan.
+                  </span>
+                  {!isPro && (
+                    <span className="block text-slate-500 mt-0.5">
+                      Pro feature.
+                    </span>
+                  )}
+                  {isPro && containment && !containment.ok && (
+                    <span className="block text-slate-500 mt-0.5">
+                      Unavailable: {containment.reasons.join('; ')}.
+                    </span>
+                  )}
                 </span>
-              )}
-            </span>
-          </label>
+              </label>
+            );
+          })()}
 
           <button
             onClick={() => void onPlan()}
@@ -362,12 +378,14 @@ function PlanCard({ plan }: { plan: Plan }): JSX.Element {
   const tasks = useSolixStore((s) => selectPlanTasks(s, plan.id));
   const approvePlan = useSolixStore((s) => s.approvePlan);
   const abortPlan = useSolixStore((s) => s.abortPlan);
+  const resumePlan = useSolixStore((s) => s.resumePlan);
   const createPlanFromGoal = useSolixStore((s) => s.createPlanFromGoal);
   const activateLicense = useSolixStore((s) => s.activateLicense);
   const [busy, setBusy] = useState(false);
   const [refine, setRefine] = useState('');
   const [refining, setRefining] = useState(false);
-  const [upsell, setUpsell] = useState<string | null>(null);
+  const [runError, setRunError] = useState<string | null>(null);
+  const [showActivate, setShowActivate] = useState(false);
   const [licenseKey, setLicenseKey] = useState('');
   const [activateError, setActivateError] = useState<string | null>(null);
 
@@ -378,10 +396,26 @@ function PlanCard({ plan }: { plan: Plan }): JSX.Element {
 
   const onApprove = async (): Promise<void> => {
     setBusy(true);
-    setUpsell(null);
+    setRunError(null);
+    setShowActivate(false);
     const res = await approvePlan(plan.id);
     setBusy(false);
-    if (!res.ok && res.upsell) setUpsell(res.error ?? 'This run requires Pro.');
+    if (!res.ok) {
+      setRunError(res.error ?? 'Could not run the plan.');
+      setShowActivate(Boolean(res.upsell)); // only Pro-gated failures offer a key
+    }
+  };
+
+  const onResume = async (): Promise<void> => {
+    setBusy(true);
+    setRunError(null);
+    setShowActivate(false);
+    const res = await resumePlan(plan.id);
+    setBusy(false);
+    if (!res.ok) {
+      setRunError(res.error ?? 'Could not resume the plan.');
+      setShowActivate(Boolean(res.upsell));
+    }
   };
 
   const onActivate = async (): Promise<void> => {
@@ -390,7 +424,8 @@ function PlanCard({ plan }: { plan: Plan }): JSX.Element {
     setActivateError(null);
     const res = await activateLicense(key);
     if (res.ok) {
-      setUpsell(null);
+      setRunError(null);
+      setShowActivate(false);
       setLicenseKey('');
       await onApprove(); // retry the run now that we're Pro
     } else {
@@ -450,26 +485,50 @@ function PlanCard({ plan }: { plan: Plan }): JSX.Element {
         </button>
       )}
 
-      {upsell && (
-        <div className="mt-2 rounded border border-amber-400/50 bg-amber-500/10 p-2 space-y-2">
-          <div className="text-[11px] text-amber-200">{upsell}</div>
-          <div className="flex gap-2">
-            <input
-              value={licenseKey}
-              onChange={(e) => setLicenseKey(e.target.value)}
-              placeholder="Paste your Pro license key"
-              className="flex-1 text-[11px] font-mono bg-black/40 border border-solix-border rounded p-1.5 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-400"
-            />
-            <button
-              onClick={() => void onActivate()}
-              disabled={!licenseKey.trim()}
-              className="px-3 rounded bg-amber-500/20 border border-amber-400/60 text-amber-100 text-[11px] hover:bg-amber-500/30 disabled:opacity-40"
-            >
-              Activate
-            </button>
+      {plan.status === 'paused' && (
+        <button
+          onClick={() => void onResume()}
+          disabled={busy}
+          className="mt-3 w-full py-1.5 rounded bg-solix-accent/15 border border-solix-accent/60 text-solix-accent text-xs hover:bg-solix-accent/25 disabled:opacity-40"
+        >
+          {busy ? 'Resuming…' : 'Resume run'}
+        </button>
+      )}
+
+      {runError && (
+        <div
+          className={`mt-2 rounded border p-2 space-y-2 ${
+            showActivate
+              ? 'border-amber-400/50 bg-amber-500/10'
+              : 'border-solix-danger/40 bg-solix-danger/10'
+          }`}
+        >
+          <div
+            className={`text-[11px] ${showActivate ? 'text-amber-200' : 'text-solix-danger'}`}
+          >
+            {runError}
           </div>
-          {activateError && (
-            <div className="text-[10px] text-solix-danger">{activateError}</div>
+          {showActivate && (
+            <>
+              <div className="flex gap-2">
+                <input
+                  value={licenseKey}
+                  onChange={(e) => setLicenseKey(e.target.value)}
+                  placeholder="Paste your Pro license key"
+                  className="flex-1 text-[11px] font-mono bg-black/40 border border-solix-border rounded p-1.5 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-400"
+                />
+                <button
+                  onClick={() => void onActivate()}
+                  disabled={!licenseKey.trim()}
+                  className="px-3 rounded bg-amber-500/20 border border-amber-400/60 text-amber-100 text-[11px] hover:bg-amber-500/30 disabled:opacity-40"
+                >
+                  Activate
+                </button>
+              </div>
+              {activateError && (
+                <div className="text-[10px] text-solix-danger">{activateError}</div>
+              )}
+            </>
           )}
         </div>
       )}

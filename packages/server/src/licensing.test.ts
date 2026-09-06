@@ -97,6 +97,20 @@ describe('resolveEntitlement', () => {
     const e = resolveEntitlement({ enforced: true, license: null });
     expect(e.tier).toBe('community');
   });
+
+  it('drops an expired subscription to Community', () => {
+    const expired: License = { ...license, kind: 'subscription', expiresAt: 1000 };
+    const e = resolveEntitlement({ enforced: true, license: expired, now: 5000 });
+    expect(e.tier).toBe('community');
+    expect(e.reason).toMatch(/expired/);
+  });
+
+  it('honors a not-yet-expired subscription', () => {
+    const active: License = { ...license, kind: 'subscription', expiresAt: 9000 };
+    expect(
+      resolveEntitlement({ enforced: true, license: active, now: 5000 }).tier,
+    ).toBe('pro');
+  });
 });
 
 describe('evaluateRunGate', () => {

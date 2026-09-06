@@ -148,8 +148,11 @@ export async function createSolixServer(
 
   // Boot-time recovery: resume any plan left mid-run by a previous process,
   // re-dispatching tasks whose worker sessions died with it. Fire-and-forget so
-  // startup isn't blocked; broadcasts reconcile connected clients.
-  void orchestrator.reconcile();
+  // startup isn't blocked; broadcasts reconcile connected clients. Never let the
+  // detached promise reject unhandled.
+  void orchestrator
+    .reconcile()
+    .catch((err) => console.error('[orchestrator] reconcile failed', err));
 
   // Sprint L: bridge to Anthropic's Agent View. Reads ~/.claude/daemon
   // + ~/.claude/jobs to mirror background sessions managed by the

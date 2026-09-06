@@ -233,6 +233,9 @@ interface SolixState {
     planId: string,
   ) => Promise<{ ok: boolean; error?: string; upsell?: boolean }>;
   abortPlan: (planId: string) => Promise<void>;
+  resumePlan: (
+    planId: string,
+  ) => Promise<{ ok: boolean; error?: string; upsell?: boolean }>;
   activateLicense: (
     key: string,
   ) => Promise<{ ok: boolean; error?: string }>;
@@ -713,6 +716,23 @@ export const useSolixStore = create<SolixState>((set, get) => ({
     try {
       const res = await fetch(
         `/api/plans/${encodeURIComponent(planId)}/approve`,
+        { method: 'POST' },
+      );
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        upsell?: boolean;
+      };
+      return { ok: Boolean(data.ok), error: data.error, upsell: data.upsell };
+    } catch {
+      return { ok: false, error: 'Could not reach the server.' };
+    }
+  },
+
+  resumePlan: async (planId) => {
+    try {
+      const res = await fetch(
+        `/api/plans/${encodeURIComponent(planId)}/resume`,
         { method: 'POST' },
       );
       const data = (await res.json().catch(() => ({}))) as {

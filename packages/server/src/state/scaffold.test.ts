@@ -58,6 +58,27 @@ describe('scaffoldProject', () => {
     expect(readFileSync(join(cwd, 'package.json'), 'utf8')).toContain('"app"');
   });
 
+  it('escapes an untrusted project name (no HTML/JS injection)', () => {
+    const evil = `<script>alert(1)</script> Bob's "Blog"`;
+    const cwd = join(root, 'evil');
+    expect(scaffoldProject({ cwd, name: evil, template: 'web' }).ok).toBe(true);
+    const html = readFileSync(join(cwd, 'index.html'), 'utf8');
+    expect(html).not.toContain('<script>alert(1)</script>');
+    expect(html).toContain('&lt;script&gt;');
+
+    const nodeCwd = join(root, 'evilnode');
+    expect(scaffoldProject({ cwd: nodeCwd, name: evil, template: 'node' }).ok).toBe(
+      true,
+    );
+    const js = readFileSync(join(nodeCwd, 'index.js'), 'utf8');
+    // The name is a single JSON string literal argument — the double quote in
+    // the name is escaped, so it can't break out of `console.log(...)` and
+    // inject code. (`</script>` as inert text inside a .js string is harmless.)
+    expect(js).toMatch(/^console\.log\(".*"\);\n$/s);
+    expect(js).toContain('\\"Blog\\"'); // the quote was escaped, not raw
+    expect(js).not.toMatch(/"\)\s*;.*;/); // no second statement after the call
+  });
+
   it('writes only a README for the empty template', () => {
     const cwd = join(root, 'empty');
     const res = scaffoldProject({ cwd, name: 'empty', template: 'empty' });

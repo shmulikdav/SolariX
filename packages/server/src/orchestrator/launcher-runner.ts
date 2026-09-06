@@ -24,12 +24,16 @@ export class LauncherSessionRunner implements SessionRunner {
       signal: opts.signal,
       // Workers/verifiers run autonomously → contained (env-scrubbed) by default.
       contain: opts.role === 'worker' || opts.role === 'verifier',
+      // Deterministic id → claude runs under it, so its hooks enrich the
+      // pre-created plan-linked row (containment role lookup + visualization).
+      sessionId: opts.sessionId,
     });
     return {
       ok: res.ok,
       output: res.output,
       sessionId: opts.sessionId,
       error: res.error,
+      costUsd: res.costUsd,
     };
   }
 }
@@ -79,11 +83,13 @@ function fakeRunOnce(opts: RunOnceOpts): RunOnceResult {
       ok: true,
       output: JSON.stringify({ pass: true, reason: 'looks good (synthetic)' }),
       sessionId: opts.sessionId,
+      costUsd: 0.001,
     };
   }
   return {
     ok: true,
     output: '(synthetic worker output)',
     sessionId: opts.sessionId,
+    costUsd: 0.01,
   };
 }

@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -22,6 +22,16 @@ export const PROJECT_TEMPLATES: ProjectTemplate[] = [
 
 function isTemplate(v: string): v is ProjectTemplate {
   return (PROJECT_TEMPLATES as string[]).includes(v);
+}
+
+/** Escape a string for safe interpolation into HTML text/attribute context. */
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 /** Where user projects are created when no explicit path is given. */
@@ -58,16 +68,20 @@ function templateFiles(
         },
         {
           path: 'index.js',
-          content: `console.log('Hello from ${name}');\n`,
+          // The name is UNTRUSTED (from POST /api/projects) — embed it as a JSON
+          // string literal so a name like `Bob's Blog` or code can't break out.
+          content: `console.log(${JSON.stringify(`Hello from ${name}`)});\n`,
         },
         { path: '.gitignore', content: 'node_modules\n' },
       ];
     case 'web':
+      // HTML-escape the name — this file is served by the preview endpoint on the
+      // control-plane origin, so a raw name would be stored XSS.
       return [
         readme,
         {
           path: 'index.html',
-          content: `<!doctype html>\n<html lang="en">\n  <head>\n    <meta charset="utf-8" />\n    <meta name="viewport" content="width=device-width, initial-scale=1" />\n    <title>${name}</title>\n    <link rel="stylesheet" href="styles.css" />\n  </head>\n  <body>\n    <h1>${name}</h1>\n    <p>Built with Solix.</p>\n  </body>\n</html>\n`,
+          content: `<!doctype html>\n<html lang="en">\n  <head>\n    <meta charset="utf-8" />\n    <meta name="viewport" content="width=device-width, initial-scale=1" />\n    <title>${escapeHtml(name)}</title>\n    <link rel="stylesheet" href="styles.css" />\n  </head>\n  <body>\n    <h1>${escapeHtml(name)}</h1>\n    <p>Built with Solix.</p>\n  </body>\n</html>\n`,
         },
         {
           path: 'styles.css',
@@ -77,7 +91,7 @@ function templateFiles(
     case 'python':
       return [
         readme,
-        { path: 'main.py', content: `print("Hello from ${name}")\n` },
+        { path: 'main.py', content: `print(${JSON.stringify(`Hello from ${name}`)})\n` },
         { path: '.gitignore', content: '__pycache__/\n*.pyc\n' },
       ];
     case 'empty':
@@ -108,8 +122,8 @@ export function scaffoldProject(input: {
   const template: ProjectTemplate =
     input.template && isTemplate(input.template) ? input.template : 'empty';
 
+  const preexisting = existsSync(cwd);
   try {
-    const preexisting = existsSync(cwd);
     const alreadyRepo = preexisting && existsSync(join(cwd, '.git'));
     if (preexisting && !alreadyRepo && readdirSync(cwd).length > 0) {
       return {
@@ -152,6 +166,16 @@ export function scaffoldProject(input: {
 
     return { ok: true, cwd };
   } catch (err) {
+    // Roll back a directory WE created (e.g. git failed mid-scaffold) so the
+    // name isn't permanently wedged by the non-empty-dir guard on retry. Never
+    // touch a directory that already existed.
+    if (!preexisting) {
+      try {
+        rmSync(cwd, { recursive: true, force: true });
+      } catch {
+        /* best effort */
+      }
+    }
     return { ok: false, cwd, error: (err as Error).message };
   }
 }

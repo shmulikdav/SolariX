@@ -184,6 +184,76 @@ function sandboxWrap(
   return { file: bin, args: [...parts.slice(1), file, ...args] };
 }
 
+/**
+ * Probe (once, cached) which flags the installed `claude` supports, so `runOnce`
+ * degrades gracefully on older versions. `--session-id` (deterministic worker
+ * correlation → containment) and `--output-format` (accurate per-run cost) are
+ * both long-standing Claude Code flags, but we don't assume.
+ */
+let claudeCapsCache: { sessionId: boolean; jsonOutput: boolean } | null = null;
+function claudeCaps(): { sessionId: boolean; jsonOutput: boolean } {
+  if (claudeCapsCache) return claudeCapsCache;
+  let help = '';
+  try {
+    const r = spawnSync('claude', ['--help'], {
+      encoding: 'utf8',
+      timeout: 5000,
+    });
+    help = `${r.stdout ?? ''}${r.stderr ?? ''}`;
+  } catch {
+    /* claude missing → both false; runOnce falls back to plain --print */
+  }
+  claudeCapsCache = {
+    sessionId: help.includes('--session-id'),
+    jsonOutput: help.includes('--output-format'),
+  };
+  return claudeCapsCache;
+}
+
+/** Build the `claude` argv for a one-shot run. Pure (caps injected) so the
+ *  correlation/cost wiring — `--session-id`, `--output-format json` — is
+ *  unit-testable without spawning. Flags are gated on the probed capabilities. */
+export function buildPrintArgs(
+  opts: { model?: string; sessionId?: string; prompt: string },
+  caps: { sessionId: boolean; jsonOutput: boolean },
+): string[] {
+  const args = ['--print'];
+  if (caps.jsonOutput) args.push('--output-format', 'json');
+  if (opts.model && opts.model !== 'default') args.push('--model', opts.model);
+  if (opts.sessionId && caps.sessionId) {
+    args.push('--session-id', opts.sessionId);
+  }
+  args.push(opts.prompt);
+  return args;
+}
+
+/** Parse `claude -p --output-format json` stdout → the assistant text + cost.
+ *  Returns null if it isn't the single-object result envelope we expect. */
+export function parseClaudeJsonResult(
+  stdout: string,
+): { result: string; isError: boolean; costUsd?: number } | null {
+  const trimmed = stdout.trim();
+  if (!trimmed.startsWith('{')) return null;
+  try {
+    const obj = JSON.parse(trimmed) as Record<string, unknown>;
+    if (typeof obj !== 'object' || obj === null) return null;
+    const result =
+      typeof obj.result === 'string'
+        ? obj.result
+        : typeof obj.text === 'string'
+          ? obj.text
+          : '';
+    return {
+      result,
+      isError: obj.is_error === true,
+      costUsd:
+        typeof obj.total_cost_usd === 'number' ? obj.total_cost_usd : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export class Launcher {
   private byPid = new Map<number, PinnedProcess>();
   private byAdvisor = new Map<string, PinnedProcess>();
@@ -709,18 +779,25 @@ export class Launcher {
     /** Force env-scrub (Maestro workers/verifiers run contained by default,
      *  not only when the global SOLIX_ENV_SCRUB/sandbox flags are set). */
     contain?: boolean;
-  }): Promise<{ ok: boolean; output: string; error?: string }> {
+    /** Deterministic session id → `claude --session-id <uuid>`, so the worker's
+     *  hooks/tool-calls land on the pre-created plan-linked planet row (enabling
+     *  containment + the fleet visualization). Must be a UUID. */
+    sessionId?: string;
+  }): Promise<{ ok: boolean; output: string; error?: string; costUsd?: number }> {
     return new Promise((resolve) => {
       // Honor an already-aborted signal before spawning anything.
       if (opts.signal?.aborted) {
         resolve({ ok: false, output: '', error: 'aborted' });
         return;
       }
-      const args = ['--print'];
-      if (opts.model && opts.model !== 'default') {
-        args.push('--model', opts.model);
-      }
-      args.push(opts.prompt);
+      const caps = claudeCaps();
+      // Structured output → an accurate per-run cost (total_cost_usd) the
+      // orchestrator can tally BEFORE the next budget check (no watcher lag).
+      const args = buildPrintArgs(
+        { model: opts.model, sessionId: opts.sessionId, prompt: opts.prompt },
+        caps,
+      );
+      const useJson = caps.jsonOutput;
       let child: ChildProcess;
       try {
         const spec = sandboxWrap('claude', args);
@@ -774,7 +851,24 @@ export class Launcher {
         cleanup();
         if (aborted) {
           resolve({ ok: false, output: stdout, error: 'aborted' });
-        } else if (code === 0) {
+          return;
+        }
+        // With --output-format json, stdout is a result envelope carrying the
+        // assistant text + total_cost_usd. Parse it; fall back to raw stdout if
+        // the shape isn't what we expect (older CC / --verbose array form).
+        if (useJson) {
+          const parsed = parseClaudeJsonResult(stdout);
+          if (parsed) {
+            resolve({
+              ok: code === 0 && !parsed.isError,
+              output: parsed.result,
+              costUsd: parsed.costUsd,
+              error: parsed.isError ? 'claude reported an error' : undefined,
+            });
+            return;
+          }
+        }
+        if (code === 0) {
           resolve({ ok: true, output: stdout });
         } else {
           resolve({

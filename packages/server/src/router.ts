@@ -174,8 +174,15 @@ export class EventRouter {
     }
     this.broadcaster.broadcast({ type: 'session_upsert', session: enriched });
     // Start tailing the session's transcript so the Chat tab streams in real
-    // time. Skipped for moons (subagents) — they share the parent's transcript.
-    if (!session.parentSessionId) {
+    // time. Skipped for moons (subagents) — they share the parent's transcript —
+    // and for Maestro workers/verifiers, whose cost the orchestrator records
+    // directly from the run result (avoids a double-count + a watcher leak).
+    const role = enriched.sessionRole;
+    if (
+      !session.parentSessionId &&
+      role !== 'worker' &&
+      role !== 'verifier'
+    ) {
       this.transcripts?.startWatching(sessionId, event.cwd);
     }
   }
@@ -215,6 +222,13 @@ export class EventRouter {
     const sessionId = this.extractSessionId(event);
     const session = getSession(this.db, sessionId);
     if (!session) return;
+
+    // Maestro workers/verifiers are owned by the orchestrator, which drives their
+    // lifecycle off the launcher process exit. Don't let the stop hook flip their
+    // status/mission (it would race terminateRow and leave planets stuck idle).
+    if (session.sessionRole === 'worker' || session.sessionRole === 'verifier') {
+      return;
+    }
 
     if (session.currentMissionId) {
       const mission = completeMission(

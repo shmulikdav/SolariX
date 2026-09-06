@@ -38,6 +38,13 @@ export interface License {
   /** Epoch ms until which this license covers NEW releases (perpetual + 1yr
    *  updates). Stored now; version-window enforcement is deferred. */
   updatesUntil?: number;
+  /** 'perpetual' (one-time, never expires) or 'subscription' (must carry
+   *  `expiresAt`). Defaults to perpetual when absent. */
+  kind?: 'perpetual' | 'subscription';
+  /** Epoch ms this entitlement lapses — ENFORCED for subscriptions. */
+  expiresAt?: number;
+  /** Payment-provider order/transaction id (e.g. Paddle) — for support/audit. */
+  orderId?: string;
   purchaser?: { email?: string; name?: string };
   meta?: Record<string, unknown>;
 }
@@ -133,14 +140,20 @@ export function clearLicenseCache(): void {
   cache = null;
 }
 
-/** Pure entitlement decision — testable without env or disk. */
+/** Pure entitlement decision — testable without env or disk. Enforces
+ *  `expiresAt` (subscriptions), so a lapsed key drops to Community. */
 export function resolveEntitlement(opts: {
   enforced: boolean;
   license: License | null;
+  now?: number;
 }): Entitlement {
   if (!opts.enforced) return { tier: 'pro', reason: 'beta' };
-  if (opts.license) return { tier: 'pro', reason: 'licensed', license: opts.license };
-  return { tier: 'community', reason: 'no valid license' };
+  const lic = opts.license;
+  if (!lic) return { tier: 'community', reason: 'no valid license' };
+  if (lic.expiresAt != null && lic.expiresAt < (opts.now ?? Date.now())) {
+    return { tier: 'community', reason: 'license expired' };
+  }
+  return { tier: 'pro', reason: 'licensed', license: lic };
 }
 
 /** The live entitlement: enforcement flag × on-disk license. */

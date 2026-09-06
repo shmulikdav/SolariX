@@ -1,4 +1,4 @@
-import { nanoid } from 'nanoid';
+import { randomUUID } from 'node:crypto';
 import type { Plan, PlanTask, ServerMessage } from '@solix/shared';
 import type { DB } from '../db.js';
 import {
@@ -14,7 +14,11 @@ import {
 } from '../state/plans.js';
 import { ensureProject } from '../state/projects.js';
 import { gitHead } from '../state/git.js';
-import { setSessionStatus, upsertSession } from '../state/sessions.js';
+import {
+  setSessionCost,
+  setSessionStatus,
+  upsertSession,
+} from '../state/sessions.js';
 import { fullAutoContainmentStatus } from '../containment.js';
 import {
   evaluateRunGate,
@@ -310,6 +314,12 @@ export class Orchestrator {
     this.inFlight.add(planId);
     try {
       await this.dispatchTask(plan, next, signal);
+    } catch (err) {
+      // A transient error inside dispatch (a DB call, a runner throw) must not
+      // strand the task as `dispatched` or crash the loop — treat it as a task
+      // failure so it retries/escalates like any other.
+      console.error('[orchestrator] dispatch error', err);
+      this.handleTaskFailure(next.id, `dispatch error: ${(err as Error).message}`);
     } finally {
       this.inFlight.delete(planId);
     }
@@ -331,6 +341,31 @@ export class Orchestrator {
       const paused = updatePlan(this.deps.db, planId, { status: 'paused' });
       if (paused) this.emitPlan(paused);
     }
+    return { ok: true };
+  }
+
+  /**
+   * Resume a paused plan (from a budget pause or an abort). Re-runs the Pro gate
+   * (task count / full-auto) so a resume can't bypass entitlement, flips it back
+   * to `running`, and kicks the loop. A still-over-budget plan will simply pause
+   * again on the next dispatch. Returns `upsell` when the gate refuses.
+   */
+  resumePlan(planId: string): { ok: boolean; error?: string; upsell?: boolean } {
+    const plan = getPlan(this.deps.db, planId);
+    if (!plan) return { ok: false, error: 'plan not found' };
+    if (plan.status !== 'paused') {
+      return { ok: false, error: `plan is ${plan.status}, not paused` };
+    }
+    const ent = (this.deps.getEntitlement ?? getEntitlement)();
+    const taskCount = listPlanTasks(this.deps.db, planId).length;
+    const gate = evaluateRunGate({
+      tier: ent.tier,
+      taskCount,
+      autoMode: plan.autoMode,
+    });
+    if (!gate.allowed) return { ok: false, error: gate.reason, upsell: true };
+    const updated = updatePlan(this.deps.db, planId, { status: 'running' });
+    if (updated) this.emitPlan(updated);
     return { ok: true };
   }
 
@@ -357,8 +392,25 @@ export class Orchestrator {
         if (reset) this.emitTask(reset);
       }
     }
+    // Defense in depth: a plan was gated when it reached `running`, but the
+    // license may have lapsed while the server was down. Re-check before
+    // resuming; if no longer entitled, pause instead of dispatching.
+    const ent = (this.deps.getEntitlement ?? getEntitlement)();
     for (const plan of running) {
-      await this.advance(plan.id);
+      const taskCount = listPlanTasks(db, plan.id).length;
+      const gate = evaluateRunGate({
+        tier: ent.tier,
+        taskCount,
+        autoMode: plan.autoMode,
+      });
+      if (!gate.allowed) {
+        const paused = updatePlan(db, plan.id, { status: 'paused' });
+        if (paused) this.emitPlan(paused);
+        continue;
+      }
+      await this.advance(plan.id).catch((err) => {
+        console.error('[orchestrator] reconcile advance failed', err);
+      });
     }
   }
 
@@ -371,11 +423,12 @@ export class Orchestrator {
     const cwd = task.cwd ?? plan.cwd;
     const attempts = task.attempts + 1;
 
-    // Pre-create the worker planet row with a deterministic id (Spire R1) so it
-    // appears in the galaxy and is correlated to the task without cwd guessing.
+    // Pre-create the worker planet row with a UUID id (Spire R1). The UUID is
+    // passed to `claude --session-id`, so the worker's hooks enrich THIS row
+    // (containment role lookup + tool/cost/visualization), not a rogue one.
     let t = updatePlanTask(db, task.id, { status: 'dispatched', attempts });
     if (t) this.emitTask(t);
-    const workerId = `plan-${task.id}-w${attempts}-${nanoid(6)}`;
+    const workerId = randomUUID();
     this.spawnPlanetRow(plan, task, workerId, 'worker', task.model);
     t = updatePlanTask(db, task.id, { sessionId: workerId });
     if (t) this.emitTask(t);
@@ -395,6 +448,9 @@ export class Orchestrator {
       sessionId: workerId,
       signal,
     });
+    // Record the run's cost on the plan-linked row BEFORE the next budget check
+    // (avoids the transcript-watcher lag → no overshoot).
+    if (run.costUsd != null) setSessionCost(db, workerId, run.costUsd);
     this.terminateRow(workerId);
     // An aborted run is a deliberate human stop, not a task failure — return the
     // task to `pending` (a clean, re-dispatchable state) and never escalate.
@@ -411,7 +467,7 @@ export class Orchestrator {
     // untrusted → delimited; the verdict is strict (ambiguous never passes).
     t = updatePlanTask(db, task.id, { status: 'verifying' });
     if (t) this.emitTask(t);
-    const verifierId = `plan-${task.id}-v${attempts}-${nanoid(6)}`;
+    const verifierId = randomUUID();
     this.spawnPlanetRow(plan, task, verifierId, 'verifier', 'haiku');
     t = updatePlanTask(db, task.id, { verifierSessionId: verifierId });
     if (t) this.emitTask(t);
@@ -431,6 +487,7 @@ export class Orchestrator {
       sessionId: verifierId,
       signal,
     });
+    if (vRun.costUsd != null) setSessionCost(db, verifierId, vRun.costUsd);
     this.terminateRow(verifierId);
     if (signal.aborted) {
       this.parkAborted(task.id);
@@ -468,10 +525,16 @@ export class Orchestrator {
     if (updated) this.emitTask(updated);
   }
 
-  /** An aborted attempt (kill-switch) returns the task to `pending` without
-   *  counting as a failure, so a later resume re-dispatches it cleanly. */
+  /** An aborted attempt (kill-switch) returns the task to `pending` WITHOUT
+   *  counting as a failure — refund the attempt bumped at dispatch (mirrors
+   *  reconcile) so a later resume re-dispatches with its full retry budget. */
   private parkAborted(taskId: string): void {
-    const updated = updatePlanTask(this.deps.db, taskId, { status: 'pending' });
+    const t = getPlanTask(this.deps.db, taskId);
+    if (!t) return;
+    const updated = updatePlanTask(this.deps.db, taskId, {
+      status: 'pending',
+      attempts: Math.max(0, t.attempts - 1),
+    });
     if (updated) this.emitTask(updated);
   }
 

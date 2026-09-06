@@ -1,5 +1,5 @@
-import { existsSync, readFileSync, statSync } from 'node:fs';
-import { dirname, extname, join, resolve } from 'node:path';
+import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { dirname, extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
@@ -229,7 +229,16 @@ export function createHttpApp(opts: {
       return c.json({ ok: false, error: 'key is required' }, 400);
     }
     const res = activateLicense(body.key);
-    return c.json(res, res.ok ? 200 : 422);
+    // Trim the response — don't echo purchaser PII back to the browser (mirrors
+    // the /entitlement endpoint).
+    if (res.ok && res.license) {
+      const { licenseId, edition, kind, expiresAt, updatesUntil } = res.license;
+      return c.json({
+        ok: true,
+        license: { licenseId, edition, kind, expiresAt, updatesUntil },
+      });
+    }
+    return c.json({ ok: false, error: res.error }, 422);
   });
 
   app.get('/api/projects', (c) => c.json(listProjects(opts.db)));
@@ -625,6 +634,14 @@ export function createHttpApp(opts: {
   });
 
   // ──── v2 Maestro: plans + plan tasks ────────────────────────
+  // Kick the dispatch loop in the background, swallowing (but logging) any
+  // rejection so a fire-and-forget advance can never become an unhandled
+  // rejection (process-fatal on modern Node).
+  const kickAdvance = (id: string): void => {
+    void opts.orchestrator
+      .advance(id)
+      .catch((err) => console.error('[orchestrator] advance failed', err));
+  };
   app.get('/api/plans', (c) => c.json(listPlans(opts.db)));
 
   app.get('/api/plans/:id', (c) => {
@@ -656,6 +673,14 @@ export function createHttpApp(opts: {
     };
     if (!body.name || !body.goalPrompt || !body.cwd) {
       return c.json({ error: 'name, goalPrompt, cwd required' }, 400);
+    }
+    // Running is reachable ONLY through the gated approve/resume/autoMode paths —
+    // never by creating a plan already `running` (that would skip evaluateRunGate).
+    if (body.status && body.status !== 'draft' && body.status !== 'awaiting_approval') {
+      return c.json(
+        { error: 'a plan can only be created as draft/awaiting_approval; use /approve to run it' },
+        400,
+      );
     }
     const plan = createPlan(opts.db, {
       name: body.name,
@@ -697,7 +722,11 @@ export function createHttpApp(opts: {
       cwd: string;
       budgetUsd: number;
     }>;
-    const plan = updatePlan(opts.db, c.req.param('id'), body);
+    // `status`/`autoMode` are lifecycle-controlled by the gated endpoints
+    // (approve/resume/abort/from-goal) — a generic PATCH must not flip a plan to
+    // `running` and bypass evaluateRunGate. Strip them here.
+    const { status: _s, autoMode: _a, ...safe } = body;
+    const plan = updatePlan(opts.db, c.req.param('id'), safe);
     if (!plan) return c.json({ error: 'not found' }, 404);
     opts.router.broadcastPlanUpsert(plan);
     return c.json(plan);
@@ -798,10 +827,11 @@ export function createHttpApp(opts: {
       goalId: body.goalId,
       budgetUsd: body.budgetUsd,
     });
-    // Full-auto skips the approval gate → start dispatching in the background.
-    if (res.ok && body.autoMode && res.planId) {
-      void opts.orchestrator.advance(res.planId);
-    }
+    // A run only actually dispatches when the plan reached `running` (autoMode
+    // that survived the Pro + containment gates); advance() no-ops otherwise, so
+    // kicking it whenever the request succeeded is safe. Never let the
+    // fire-and-forget promise reject unhandled.
+    if (res.ok && res.planId) kickAdvance(res.planId);
     return c.json(res, res.ok ? 200 : 422);
   });
 
@@ -809,7 +839,7 @@ export function createHttpApp(opts: {
     const id = c.req.param('id');
     const res = opts.orchestrator.approvePlan(id);
     // Approved → run the dispatch loop in the background (request returns now).
-    if (res.ok) void opts.orchestrator.advance(id);
+    if (res.ok) kickAdvance(id);
     // 402 when the run needs Pro (upsell), else 409 for a plain state conflict.
     const status = res.ok ? 200 : res.upsell ? 402 : 409;
     return c.json(res, status);
@@ -819,6 +849,15 @@ export function createHttpApp(opts: {
   app.post('/api/plans/:id/abort', (c) => {
     const res = opts.orchestrator.abortPlan(c.req.param('id'));
     return c.json(res, res.ok ? 200 : 404);
+  });
+
+  // Resume a paused plan (budget pause / abort). Re-gated in the orchestrator.
+  app.post('/api/plans/:id/resume', (c) => {
+    const id = c.req.param('id');
+    const res = opts.orchestrator.resumePlan(id);
+    if (res.ok) kickAdvance(id);
+    const status = res.ok ? 200 : res.upsell ? 402 : 409;
+    return c.json(res, status);
   });
 
   // Build-studio review surface: what the fleet changed on disk since the plan
@@ -854,6 +893,18 @@ export function createHttpApp(opts: {
         `<!doctype html><meta charset="utf-8"><body style="font-family:system-ui;background:#0b0e17;color:#cbd5e1;padding:3rem"><h2>Nothing to preview yet</h2><p>This project has no <code>index.html</code>. Preview supports static sites; run other stacks from a terminal.</p></body>`,
         { headers: { 'Content-Type': 'text/html; charset=utf-8' } },
       );
+    }
+    // Defense in depth: the lexical guard above can be defeated by an in-tree
+    // symlink (a worker could create `cwd/link -> /`), so resolve symlinks and
+    // re-check that the REAL target is still inside the REAL project root.
+    try {
+      const realRoot = realpathSync(resolve(plan.cwd));
+      const realTarget = realpathSync(target);
+      if (realTarget !== realRoot && !realTarget.startsWith(realRoot + sep)) {
+        return new Response('forbidden', { status: 403 });
+      }
+    } catch {
+      return new Response('forbidden', { status: 403 });
     }
     // Cap the served file size to keep the local server responsive.
     if (statSync(target).size > 25 * 1024 * 1024) {

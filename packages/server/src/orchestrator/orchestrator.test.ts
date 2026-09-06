@@ -2,7 +2,12 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import type { ServerMessage } from '@solix/shared';
 import { resetDbForTests, type DB } from '../db.js';
 import { ensureProject } from '../state/projects.js';
-import { updatePlanTask } from '../state/plans.js';
+import {
+  createPlan,
+  createPlanTask,
+  updatePlan,
+  updatePlanTask,
+} from '../state/plans.js';
 import {
   getSession,
   setSessionCost,
@@ -318,6 +323,7 @@ describe('Orchestrator abort (kill-switch)', () => {
     expect(b.plan.status).toBe('paused');
     const t1 = b.tasks.find((t) => t.title === 'Build form')!;
     expect(t1.status).toBe('pending'); // parked, not escalated
+    expect(t1.attempts).toBe(0); // the aborted attempt is refunded
   });
 
   it('errors on an unknown plan id', () => {
@@ -515,5 +521,86 @@ describe('Orchestrator Pro gate (approvePlan)', () => {
     expect(b.plan.status).toBe('awaiting_approval');
     expect(b.plan.autoMode).toBe(false);
     expect(res.warnings?.some((w) => w.includes('Pro feature'))).toBe(true);
+  });
+});
+
+describe('Orchestrator gate — reconcile + resume (defense in depth)', () => {
+  let db: DB;
+  beforeEach(() => {
+    db = resetDbForTests();
+  });
+
+  function orchWith(tier: 'pro' | 'community') {
+    return new Orchestrator({
+      db,
+      runner: new RoleFakeRunner({ plan: PLAN_JSON, verifierPass: true }),
+      broadcast: () => {},
+      getKnownAdvisorRoles: () => ['forge', 'argus', 'mira'],
+      knownModels: ['opus', 'sonnet', 'haiku', 'default'],
+      getMaestroPrompt: () => 'MAESTRO PROMPT',
+      fullAutoStatus: () => ({ ok: true, reasons: [] }),
+      getEntitlement: () => ({ tier, reason: 'test' }),
+    });
+  }
+
+  // Seed a plan already at `running` with N pending tasks (simulating a state a
+  // pre-fix client could reach, or a license that lapsed while stopped).
+  function seedRunningPlan(taskCount: number): string {
+    const plan = createPlan(db, {
+      name: 'seeded',
+      goalPrompt: 'g',
+      cwd: '/tmp/p',
+      status: 'running',
+    });
+    for (let i = 0; i < taskCount; i++) {
+      createPlanTask(db, {
+        planId: plan.id,
+        title: `t${i}`,
+        prompt: 'p',
+        acceptanceCriteria: 'c',
+        orderIndex: i,
+      });
+    }
+    return plan.id;
+  }
+
+  it('reconcile pauses a running plan that is no longer entitled', async () => {
+    const planId = seedRunningPlan(4); // >3 tasks, Community
+    await orchWith('community').reconcile();
+    expect(db.prepare('SELECT status FROM plans WHERE id=?').get(planId)).toEqual(
+      { status: 'paused' },
+    );
+  });
+
+  it('reconcile resumes a running plan that is still entitled (Pro)', async () => {
+    const planId = seedRunningPlan(4);
+    const orch = orchWith('pro');
+    await orch.reconcile();
+    expect(orch.getPlanWithTasks(planId)!.plan.status).toBe('completed');
+  });
+
+  it('resumePlan re-gates: Community is upsold on a large paused plan', () => {
+    const planId = seedRunningPlan(4);
+    updatePlan(db, planId, { status: 'paused' });
+    const res = orchWith('community').resumePlan(planId);
+    expect(res.ok).toBe(false);
+    expect(res.upsell).toBe(true);
+    expect(orchWith('community').getPlanWithTasks(planId)!.plan.status).toBe(
+      'paused',
+    );
+  });
+
+  it('resumePlan flips a paused plan back to running for Pro', () => {
+    const planId = seedRunningPlan(4);
+    updatePlan(db, planId, { status: 'paused' });
+    expect(orchWith('pro').resumePlan(planId)).toEqual({ ok: true });
+    expect(orchWith('pro').getPlanWithTasks(planId)!.plan.status).toBe('running');
+  });
+
+  it('resumePlan errors on a non-paused plan', () => {
+    const planId = seedRunningPlan(1);
+    const r = orchWith('pro').resumePlan(planId);
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/not paused/);
   });
 });

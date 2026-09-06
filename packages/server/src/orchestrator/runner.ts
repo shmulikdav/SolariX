@@ -24,10 +24,13 @@ export interface RunOnceOpts {
 
 export interface RunOnceResult {
   ok: boolean;
-  /** The session's captured stdout (e.g. the planner's JSON, a worker's diff). */
+  /** The session's captured output (e.g. the planner's JSON, a worker's summary). */
   output: string;
   sessionId?: string;
   error?: string;
+  /** Accurate cost for this run (from `--output-format json` total_cost_usd), so
+   *  the orchestrator can tally spend before the next budget check. */
+  costUsd?: number;
 }
 
 export interface SessionRunner {
